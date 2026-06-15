@@ -91,8 +91,8 @@ function endOfWord(lines: string[], row: number, col: number) {
 }
 
 // ---- state ----------------------------------------------------------
-export function initVim(text: string): VimState {
-  const lines = String(text).split("\n");
+export function initVim(source: string): VimState {
+  const lines = String(source).split("\n");
   return {
     lines: lines.length ? lines : [""],
     row: 0,
@@ -251,8 +251,8 @@ function paste(s: VimState, after: boolean) {
   const reg = s.register;
   if (!reg.text) return;
   if (reg.linewise) {
-    const text = reg.text.replace(/\n$/, "");
-    const newLines = text.split("\n");
+    const payload = reg.text.replace(/\n$/, "");
+    const newLines = payload.split("\n");
     const at = after ? s.row + 1 : s.row;
     s.lines.splice(at, 0, ...newLines);
     s.row = at;
@@ -303,12 +303,15 @@ function deleteSelection(s: VimState) {
   } else {
     const first = s.lines[r.s.row],
       last = s.lines[r.e.row];
-    const grabbed = [first.slice(r.s.col)].concat(
-      s.lines.slice(r.s.row + 1, r.e.row),
-      [last.slice(0, r.e.col + 1)],
-    );
+    const grabbed = [first.slice(r.s.col)].concat(s.lines.slice(r.s.row + 1, r.e.row), [
+      last.slice(0, r.e.col + 1),
+    ]);
     s.register = { text: grabbed.join("\n"), linewise: false };
-    s.lines.splice(r.s.row, r.e.row - r.s.row + 1, first.slice(0, r.s.col) + last.slice(r.e.col + 1));
+    s.lines.splice(
+      r.s.row,
+      r.e.row - r.s.row + 1,
+      first.slice(0, r.s.col) + last.slice(r.e.col + 1),
+    );
   }
   s.row = r.s.row;
   s.col = clamp(r.s.col, 0, normMax(s));
@@ -377,9 +380,7 @@ function runSearch(s: VimState, raw: string, dir: number) {
     const r = (((dir > 0 ? s.row + i : s.row - i) % N) + N) % N;
     const hay = s.lines[r];
     const idx =
-      dir > 0
-        ? hay.indexOf(needle, r === s.row ? s.col + 1 : 0)
-        : hay.lastIndexOf(needle);
+      dir > 0 ? hay.indexOf(needle, r === s.row ? s.col + 1 : 0) : hay.lastIndexOf(needle);
     if (idx >= 0) {
       s.row = r;
       s.col = idx;

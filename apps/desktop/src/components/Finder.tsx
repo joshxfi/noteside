@@ -138,7 +138,7 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    inputRef.current && inputRef.current.focus();
+    inputRef.current?.focus();
   }, [mode]);
 
   const result = useMemo(() => {
@@ -205,7 +205,9 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
             value={query}
             spellCheck={false}
             placeholder={
-              mode === "files" ? "fuzzy path…  (try  git:modified  or  *.md)" : "search note contents…"
+              mode === "files"
+                ? "fuzzy path…  (try  git:modified  or  *.md)"
+                : "search note contents…"
             }
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -283,7 +285,8 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
           </span>
           <span className="fnd-count">
             {items.length}
-            {result.total_matched > items.length ? "+" : ""} {mode === "files" ? "files" : "matches"}
+            {result.total_matched > items.length ? "+" : ""}{" "}
+            {mode === "files" ? "files" : "matches"}
           </span>
         </div>
       </div>

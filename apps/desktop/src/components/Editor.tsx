@@ -158,36 +158,35 @@ export function Editor({
 
   // focus the surface on mount + when asked to refocus (e.g. settings panel closed)
   useEffect(() => {
-    hostRef.current && hostRef.current.focus();
+    hostRef.current?.focus();
   }, [note.id, refocusToken]);
 
   // report meta + working text upward, and flush any save/quit action
   useEffect(() => {
     const t = V.text(vs);
-    onMeta &&
-      onMeta({
-        mode: vs.mode,
-        row: vs.row,
-        col: vs.col,
-        words: V.wordCount(vs),
-        lines: vs.lines.length,
-        dirty: t !== savedText,
-        cmd: vs.cmd,
-        message: vs.message,
-        cmdActive: vs.mode === "command" || vs.mode === "search",
-        prompt: vs.mode === "search" ? "/" : ":",
-      });
-    onText && onText(note.id, t);
+    onMeta?.({
+      mode: vs.mode,
+      row: vs.row,
+      col: vs.col,
+      words: V.wordCount(vs),
+      lines: vs.lines.length,
+      dirty: t !== savedText,
+      cmd: vs.cmd,
+      message: vs.message,
+      cmdActive: vs.mode === "command" || vs.mode === "search",
+      prompt: vs.mode === "search" ? "/" : ":",
+    });
+    onText?.(note.id, t);
     const pa = pendingAction.current;
     if (pa) {
       pendingAction.current = null;
-      if (pa.action === "save" || pa.action === "savequit") onSaveText && onSaveText(note.id, pa.text);
-      if (pa.action === "quit" || pa.action === "savequit") onQuit && onQuit(note.id);
-      if (pa.action === "settings") onOpenSettings && onOpenSettings();
-      if (pa.action === "config") onOpenConfig && onOpenConfig();
-      if (pa.action === "nav") onToggleNav && onToggleNav();
-      if (pa.action === "find") onOpenFinder && onOpenFinder("files");
-      if (pa.action === "grep") onOpenFinder && onOpenFinder("content");
+      if (pa.action === "save" || pa.action === "savequit") onSaveText?.(note.id, pa.text);
+      if (pa.action === "quit" || pa.action === "savequit") onQuit?.(note.id);
+      if (pa.action === "settings") onOpenSettings?.();
+      if (pa.action === "config") onOpenConfig?.();
+      if (pa.action === "nav") onToggleNav?.();
+      if (pa.action === "find") onOpenFinder?.("files");
+      if (pa.action === "grep") onOpenFinder?.("content");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vs]);
@@ -203,7 +202,8 @@ export function Editor({
     const top = el.offsetTop,
       bottom = top + el.offsetHeight;
     if (top < sc.scrollTop + pad) sc.scrollTop = Math.max(0, top - pad);
-    else if (bottom > sc.scrollTop + sc.clientHeight - pad) sc.scrollTop = bottom - sc.clientHeight + pad;
+    else if (bottom > sc.scrollTop + sc.clientHeight - pad)
+      sc.scrollTop = bottom - sc.clientHeight + pad;
   }, [vs.row, vs.col]);
 
   const pokeHud = useCallback(() => {
@@ -217,7 +217,7 @@ export function Editor({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")) {
         e.preventDefault();
-        onSaveText && onSaveText(note.id, V.text(vsRef.current));
+        onSaveText?.(note.id, V.text(vsRef.current));
         return;
       }
       if (e.metaKey || e.ctrlKey) return; // let other browser/system shortcuts through
@@ -242,7 +242,8 @@ export function Editor({
   const prompt = vs.mode === "search" ? "/" : ":";
   const modeKey = vs.mode;
   const hasKeys = vs.keylog.length > 0;
-  const showHud = hud === "always" || (hud === "auto" && hudOn && (hasKeys || !!vs.pending || !!vs.count));
+  const showHud =
+    hud === "always" || (hud === "auto" && hudOn && (hasKeys || !!vs.pending || !!vs.count));
 
   return (
     <div
@@ -252,7 +253,7 @@ export function Editor({
       ref={hostRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      onMouseDown={() => hostRef.current && hostRef.current.focus()}
+      onMouseDown={() => hostRef.current?.focus()}
     >
       <div className="av-scroller" ref={scrollerRef}>
         <div className="av-page">
@@ -285,7 +286,9 @@ export function Editor({
               </span>
             );
           })}
-          {!hasKeys && !vs.pending && !vs.count ? <span className="av-key av-key-rest">·</span> : null}
+          {!hasKeys && !vs.pending && !vs.count ? (
+            <span className="av-key av-key-rest">·</span>
+          ) : null}
         </div>
       )}
 

@@ -39,8 +39,18 @@ export const ACCENTS: AccentOption[] = [
 export const EDITOR_FONTS: FontOption[] = [
   { id: "newsreader", label: "Newsreader", stack: '"Newsreader", Georgia, serif', kind: "serif" },
   { id: "spectral", label: "Spectral", stack: '"Spectral", Georgia, serif', kind: "serif" },
-  { id: "plex-mono", label: "IBM Plex Mono", stack: '"IBM Plex Mono", ui-monospace, monospace', kind: "mono" },
-  { id: "jetbrains", label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace', kind: "mono" },
+  {
+    id: "plex-mono",
+    label: "IBM Plex Mono",
+    stack: '"IBM Plex Mono", ui-monospace, monospace',
+    kind: "mono",
+  },
+  {
+    id: "jetbrains",
+    label: "JetBrains Mono",
+    stack: '"JetBrains Mono", ui-monospace, monospace',
+    kind: "mono",
+  },
 ];
 
 export const UI_FONTS: FontOption[] = [

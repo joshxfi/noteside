@@ -17,17 +17,73 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { caps: [["i", true]], cap: <>press <span className="k">i</span> to start writing</> },
-  { caps: [["j", true], ["j", true]], cap: <><span className="k">jj</span> slips back to normal mode</> },
-  { caps: [["d", true], ["d", true]], cap: <><span className="k">dd</span> deletes the whole line</> },
-  { caps: [[":", true], ["w", false]], cap: <><span className="k">:w</span> writes the file to disk</> },
   {
-    caps: [[":", true], ["f", false], ["i", false], ["n", false], ["d", false]],
-    cap: <><span className="k">:find</span> jumps to any note</>,
+    caps: [["i", true]],
+    cap: (
+      <>
+        press <span className="k">i</span> to start writing
+      </>
+    ),
   },
   {
-    caps: [["/", true], ["f", false], ["i", false], ["g", false]],
-    cap: <><span className="k">/</span> searches inside the page</>,
+    caps: [
+      ["j", true],
+      ["j", true],
+    ],
+    cap: (
+      <>
+        <span className="k">jj</span> slips back to normal mode
+      </>
+    ),
+  },
+  {
+    caps: [
+      ["d", true],
+      ["d", true],
+    ],
+    cap: (
+      <>
+        <span className="k">dd</span> deletes the whole line
+      </>
+    ),
+  },
+  {
+    caps: [
+      [":", true],
+      ["w", false],
+    ],
+    cap: (
+      <>
+        <span className="k">:w</span> writes the file to disk
+      </>
+    ),
+  },
+  {
+    caps: [
+      [":", true],
+      ["f", false],
+      ["i", false],
+      ["n", false],
+      ["d", false],
+    ],
+    cap: (
+      <>
+        <span className="k">:find</span> jumps to any note
+      </>
+    ),
+  },
+  {
+    caps: [
+      ["/", true],
+      ["f", false],
+      ["i", false],
+      ["g", false],
+    ],
+    cap: (
+      <>
+        <span className="k">/</span> searches inside the page
+      </>
+    ),
   },
 ];
 
@@ -196,7 +252,12 @@ export function App() {
             </div>
           </div>
           <div className="keys-cta reveal">
-            <a className="btn btn-ghost" href="https://www.vim-hero.com/" target="_blank" rel="noopener">
+            <a
+              className="btn btn-ghost"
+              href="https://www.vim-hero.com/"
+              target="_blank"
+              rel="noopener"
+            >
               New to vim? Learn the keybindings →
             </a>
           </div>

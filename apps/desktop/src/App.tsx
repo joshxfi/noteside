@@ -259,7 +259,16 @@ export function App() {
             aria-label="toggle sidebar"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <rect x="1" y="2.5" width="13" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              <rect
+                x="1"
+                y="2.5"
+                width="13"
+                height="10"
+                rx="2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
               <line x1="5.6" y1="2.5" x2="5.6" y2="12.5" stroke="currentColor" strokeWidth="1.3" />
             </svg>
           </button>
@@ -270,8 +279,23 @@ export function App() {
             aria-label="find files"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <circle cx="6.4" cy="6.4" r="4.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
-              <line x1="9.5" y1="9.5" x2="13" y2="13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <circle
+                cx="6.4"
+                cy="6.4"
+                r="4.2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+              <line
+                x1="9.5"
+                y1="9.5"
+                x2="13"
+                y2="13"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
           <div className="av-title" data-tauri-drag-region>
@@ -299,7 +323,7 @@ export function App() {
               <Editor
                 key={isConfig ? "config-" + configKey : activeNote.id + ":" + gotoRow}
                 note={activeNote}
-                savedText={isConfig ? configSaved : saved[activeNote.id] ?? activeNote.body}
+                savedText={isConfig ? configSaved : (saved[activeNote.id] ?? activeNote.body)}
                 ext={isConfig ? "" : ".md"}
                 initialRow={isConfig ? 0 : gotoRow}
                 relativeNumbers={t.relNumbers}
@@ -325,10 +349,20 @@ export function App() {
         </div>
 
         {settingsOpen && (
-          <SettingsPanel cfg={cfg} setCfg={setCfgPatch} onClose={closeSettings} onEditFile={openConfig} />
+          <SettingsPanel
+            cfg={cfg}
+            setCfg={setCfgPatch}
+            onClose={closeSettings}
+            onEditFile={openConfig}
+          />
         )}
         {finder && (
-          <Finder notes={notes} initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
+          <Finder
+            notes={notes}
+            initialMode={finder.mode}
+            onClose={closeFinder}
+            onOpen={openFromFinder}
+          />
         )}
       </div>
     </div>

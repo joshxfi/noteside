@@ -81,7 +81,7 @@ export function fuzzyMatch(query: string, target: string): FuzzyResult | null {
         streak = 0;
         score += 5;
       }
-      if (ti === 0 || /[\/\s_\-.]/.test(t[ti - 1])) score += 10; // start-of-segment bonus
+      if (ti === 0 || /[/\s_\-.]/.test(t[ti - 1])) score += 10; // start-of-segment bonus
       prev = ti;
       qi++;
     }

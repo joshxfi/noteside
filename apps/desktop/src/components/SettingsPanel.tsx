@@ -78,7 +78,7 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
   );
 
   useEffect(() => {
-    panelRef.current && panelRef.current.focus();
+    panelRef.current?.focus();
   }, []);
 
   // each row knows how to cycle its value with the keyboard
@@ -106,7 +106,10 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
     {
       cycle: (d) =>
         setCfg({
-          lineHeight: Math.max(1.4, Math.min(2.1, Math.round((cfg.lineHeight + d * 0.05) * 100) / 100)),
+          lineHeight: Math.max(
+            1.4,
+            Math.min(2.1, Math.round((cfg.lineHeight + d * 0.05) * 100) / 100),
+          ),
         }),
     },
     {
@@ -115,7 +118,7 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
     },
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
-    { cycle: () => setCfg({ escMap: cfg.escMap ? "" : (customEsc || "jj") }) },
+    { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
   ];
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -156,7 +159,9 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
         <header className="set-head">
           <div>
             <h2>Settings</h2>
-            <p>j/k to move · ←/→ to change · esc to close — tuned live, not saved between reloads</p>
+            <p>
+              j/k to move · ←/→ to change · esc to close — tuned live, not saved between reloads
+            </p>
           </div>
           <button className="set-x" onClick={onClose} aria-label="close">
             ×
@@ -232,11 +237,17 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
           </Row>
           <Row idx={4} focus={focus} setFocus={setFocus} label="Font size">
             <div className="set-stepper">
-              <button tabIndex={-1} onClick={() => setCfg({ fontSize: Math.max(14, cfg.fontSize - 1) })}>
+              <button
+                tabIndex={-1}
+                onClick={() => setCfg({ fontSize: Math.max(14, cfg.fontSize - 1) })}
+              >
                 −
               </button>
               <span>{cfg.fontSize}px</span>
-              <button tabIndex={-1} onClick={() => setCfg({ fontSize: Math.min(28, cfg.fontSize + 1) })}>
+              <button
+                tabIndex={-1}
+                onClick={() => setCfg({ fontSize: Math.min(28, cfg.fontSize + 1) })}
+              >
                 +
               </button>
             </div>
@@ -246,7 +257,9 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
               <button
                 tabIndex={-1}
                 onClick={() =>
-                  setCfg({ lineHeight: Math.max(1.4, Math.round((cfg.lineHeight - 0.05) * 100) / 100) })
+                  setCfg({
+                    lineHeight: Math.max(1.4, Math.round((cfg.lineHeight - 0.05) * 100) / 100),
+                  })
                 }
               >
                 −
@@ -255,7 +268,9 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
               <button
                 tabIndex={-1}
                 onClick={() =>
-                  setCfg({ lineHeight: Math.min(2.1, Math.round((cfg.lineHeight + 0.05) * 100) / 100) })
+                  setCfg({
+                    lineHeight: Math.min(2.1, Math.round((cfg.lineHeight + 0.05) * 100) / 100),
+                  })
                 }
               >
                 +
@@ -289,7 +304,13 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
           </Row>
 
           <div className="set-sec">Keys</div>
-          <Row idx={8} focus={focus} setFocus={setFocus} label="Vim mode" hint="off = type like a normal editor">
+          <Row
+            idx={8}
+            focus={focus}
+            setFocus={setFocus}
+            label="Vim mode"
+            hint="off = type like a normal editor"
+          >
             <button
               type="button"
               tabIndex={-1}
@@ -299,7 +320,13 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
               <span className="set-knob" />
             </button>
           </Row>
-          <Row idx={9} focus={focus} setFocus={setFocus} label="Leave insert with" hint={"like  inoremap jj <Esc>"}>
+          <Row
+            idx={9}
+            focus={focus}
+            setFocus={setFocus}
+            label="Leave insert with"
+            hint={"like  inoremap jj <Esc>"}
+          >
             <div className="set-escwrap">
               <Pill
                 active={!cfg.escMap}
@@ -325,8 +352,8 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
             </div>
           </Row>
           <p className="set-note">
-            Type the sequence in insert mode to drop back to normal — the keys are removed as you go,
-            just like a real <code>jj</code> mapping.
+            Type the sequence in insert mode to drop back to normal — the keys are removed as you
+            go, just like a real <code>jj</code> mapping.
           </p>
         </div>
 
