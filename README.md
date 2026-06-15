@@ -28,6 +28,9 @@ pnpm dev:landing    # just the landing site
 pnpm dev:desktop    # just the desktop app (launches the Tauri window)
 
 pnpm typecheck      # tsc across the workspace
+pnpm test           # Vitest unit tests (frontend)
+pnpm test:rust      # cargo test (Rust backend)
+pnpm lint           # oxlint        (pnpm format = oxfmt)
 pnpm build          # web builds for both apps
 ```
 
