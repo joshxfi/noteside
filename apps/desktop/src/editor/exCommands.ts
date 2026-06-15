@@ -12,7 +12,8 @@ export type AppCommand =
   | "config"
   | "new"
   | "delete"
-  | "palette";
+  | "palette"
+  | "togglePreview";
 
 export interface EditorHandlers {
   view: EditorView;
@@ -102,6 +103,7 @@ export function defineExCommands() {
   Vim.defineEx("new", "new", () => active?.command("new"));
   Vim.defineEx("rm", "rm", () => active?.command("delete"));
   Vim.defineEx("palette", "palette", () => active?.command("palette"));
+  Vim.defineEx("preview", "preview", () => active?.command("togglePreview"));
 
   // Leader: <Space> opens the command palette (which-key style).
   Vim.map("<Space>", ":palette<CR>", "normal");

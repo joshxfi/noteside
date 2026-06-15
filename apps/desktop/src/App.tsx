@@ -411,6 +411,10 @@ export function App() {
     setNavOpen((v) => !v);
     setRefocus((r) => r + 1);
   };
+  const togglePreview = () => {
+    setCfgPatch({ livePreview: !cfg.livePreview });
+    flash(cfg.livePreview ? "live preview off" : "live preview on");
+  };
 
   const createNote = async () => {
     try {
@@ -456,6 +460,7 @@ export function App() {
     else if (c === "palette") setPaletteOpen(true);
     else if (c === "new") void createNote();
     else if (c === "delete") void deleteActive();
+    else if (c === "togglePreview") togglePreview();
   };
 
   const paletteActions: PaletteAction[] = [
@@ -463,6 +468,12 @@ export function App() {
     { key: "f", label: "Find", hint: "files + content", run: () => openFinder("all") },
     { key: "g", label: "Search content", run: () => openFinder("content") },
     { key: "b", label: "Toggle sidebar", run: toggleNav },
+    {
+      key: "p",
+      label: "Toggle live preview",
+      hint: cfg.livePreview ? "on" : "off",
+      run: togglePreview,
+    },
     { key: ",", label: "Settings", run: openSettings },
     { key: "c", label: "Edit ~/.notesiderc", run: openConfig },
     { key: "q", label: "Close note", hint: ":q", run: onEditorQuit },
@@ -472,6 +483,7 @@ export function App() {
   const titleText = isConfig ? "~/.notesiderc" : (openDoc?.title ?? null);
   const showEditor = isConfig || (!!activeId && !!openDoc && openDoc.path === activeId);
   const vimSuffix = cfg.vimMode ? "v" : "t";
+  const previewOn = !isConfig && cfg.livePreview;
 
   return (
     <div className="av-desktop">
@@ -559,7 +571,7 @@ export function App() {
               <Editor
                 key={
                   (isConfig ? `config-${configKey}` : `${activeId}:${gotoLine}:${reloadNonce}`) +
-                  `:${vimSuffix}`
+                  `:${vimSuffix}:${previewOn ? "p" : "s"}`
                 }
                 notePath={isConfig ? CONFIG_ID : (activeId as string)}
                 fileLabel={isConfig ? "~/.notesiderc" : (openDoc?.title ?? "")}
@@ -568,6 +580,7 @@ export function App() {
                 vimMode={cfg.vimMode}
                 cursorBlink={cfg.cursorBlink}
                 relativeNumbers={RELATIVE_NUMBERS}
+                preview={previewOn}
                 gotoLine={isConfig ? 0 : gotoLine}
                 refocusToken={refocus}
                 onChange={onEditorChange}

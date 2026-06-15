@@ -23,6 +23,8 @@ export interface Config {
   lineHeight: number;
   cursor: "block" | "bar" | "underline";
   cursorBlink: boolean;
+  /** Render markdown inline (Obsidian-style), hiding markup off the cursor line. */
+  livePreview: boolean;
   vimMode: boolean;
   escMap: string;
   /** Raw vim map lines (e.g. "nmap <Space>w :w<CR>"), applied via Vim.map. */
@@ -72,6 +74,7 @@ export const CONFIG_DEFAULTS: Config = {
   lineHeight: 1.75,
   cursor: "block",
   cursorBlink: true,
+  livePreview: true,
   vimMode: true,
   escMap: "",
   keymaps: [],
@@ -106,6 +109,9 @@ export function serializeConfig(c: Config): string {
   L.push('" cursor');
   L.push(`set cursor       = ${c.cursor}`);
   L.push(`set cursor-blink = ${c.cursorBlink ? "on" : "off"}`);
+  L.push("");
+  L.push('" editor');
+  L.push(`set live-preview = ${c.livePreview ? "on" : "off"}`);
   L.push("");
   L.push('" keys');
   L.push(`set vim          = ${c.vimMode ? "on" : "off"}`);
@@ -162,6 +168,8 @@ export function parseConfig(text: string, base: Config): Config {
         const nv = norm(val);
         if (nv === "block" || nv === "bar" || nv === "underline") c.cursor = nv;
       } else if (key === "cursor-blink") c.cursorBlink = /^(on|true|yes|1)$/i.test(val);
+      else if (key === "live-preview" || key === "preview")
+        c.livePreview = /^(on|true|yes|1)$/i.test(val);
       else if (key === "vim" || key === "vim-mode") c.vimMode = /^(on|true|yes|1)$/i.test(val);
     }
   }

@@ -13,6 +13,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { type AppCommand, defineExCommands, setActiveHandlers } from "./exCommands";
+import { livePreview } from "./livePreview";
 import { noteHighlight, nsTheme } from "./theme";
 
 const MODE_LABEL: Record<string, string> = {
@@ -33,6 +34,8 @@ export interface EditorProps {
   vimMode: boolean;
   cursorBlink: boolean;
   relativeNumbers: boolean;
+  /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
+  preview: boolean;
   /** 1-based line to place the cursor on at mount (e.g. opening a grep hit). */
   gotoLine?: number;
   refocusToken: number;
@@ -48,7 +51,7 @@ function relFmt(n: number, state: EditorState): string {
 }
 
 export function Editor(props: EditorProps) {
-  const { initialText, vimMode, cursorBlink, relativeNumbers, refocusToken } = props;
+  const { initialText, vimMode, cursorBlink, relativeNumbers, preview, refocusToken } = props;
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const propsRef = useRef(props);
@@ -93,6 +96,7 @@ export function Editor(props: EditorProps) {
       history(),
       markdown({ addKeymap: false }),
       syntaxHighlighting(noteHighlight),
+      ...(preview ? [livePreview] : []),
       EditorView.lineWrapping,
       nsTheme,
       keymap.of([
