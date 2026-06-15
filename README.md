@@ -18,6 +18,10 @@
   <img alt="Node 24 · pnpm 11" src="https://img.shields.io/badge/Node-24%20%C2%B7%20pnpm%2011-3c873a?logo=node.js&logoColor=white">
 </p>
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="Noteside — the editor in NORMAL mode, with the note sidebar and live status bar" width="840" />
+</p>
+
 ---
 
 Noteside is a desktop notebook for people who'd rather keep their hands on home
