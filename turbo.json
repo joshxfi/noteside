@@ -16,6 +16,12 @@
     },
     "typecheck": {
       "dependsOn": ["^build"]
+    },
+    "test": {
+      "outputs": []
+    },
+    "test:rust": {
+      "cache": false
     }
   }
 }

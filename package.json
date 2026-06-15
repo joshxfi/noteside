@@ -9,6 +9,8 @@
     "dev:landing": "turbo run dev --filter=@noteside/landing",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:rust": "turbo run test:rust",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",

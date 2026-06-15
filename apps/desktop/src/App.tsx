@@ -1,6 +1,7 @@
 // App.tsx — window chrome, vault sidebar, editor + finder + settings orchestration.
 import { useEffect, useRef, useState } from "react";
 import { backend, type NoteDoc, type NoteMeta } from "./backend";
+import { createAutosave } from "./autosave";
 import { Editor } from "./editor/Editor";
 import type { AppCommand } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
@@ -184,8 +185,6 @@ export function App() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
-  const pending = useRef<{ id: string; text: string } | null>(null);
-  const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const configLoaded = useRef(false);
 
   const isConfig = activeId === CONFIG_ID;
@@ -329,18 +328,14 @@ export function App() {
     }
   };
 
-  // Flush a queued autosave immediately to its own note (e.g. before switching).
-  const flushPending = () => {
-    if (autosave.current) {
-      clearTimeout(autosave.current);
-      autosave.current = null;
-    }
-    const p = pending.current;
-    if (p) {
-      pending.current = null;
-      void doSaveNote(p.id, p.text);
-    }
-  };
+  // Debounced autosave coordinator, created once. It always calls the latest
+  // doSaveNote via a ref, and each queued save carries its own note id.
+  const doSaveRef = useRef(doSaveNote);
+  doSaveRef.current = doSaveNote;
+  const [autosaver] = useState(() =>
+    createAutosave((id, text) => void doSaveRef.current(id, text), AUTOSAVE_MS),
+  );
+  const flushPending = () => autosaver.flush();
 
   const onConfigSave = (text: string) => {
     const next = parseConfig(text, cfg);
@@ -351,22 +346,11 @@ export function App() {
 
   const onEditorChange = (text: string) => {
     if (isConfig || !activeId) return;
-    pending.current = { id: activeId, text };
+    autosaver.schedule(activeId, text);
     setActiveDirty(text !== savedText);
-    if (autosave.current) clearTimeout(autosave.current);
-    autosave.current = setTimeout(() => {
-      autosave.current = null;
-      const p = pending.current;
-      pending.current = null;
-      if (p) void doSaveNote(p.id, p.text);
-    }, AUTOSAVE_MS);
   };
   const onEditorSave = (text: string) => {
-    if (autosave.current) {
-      clearTimeout(autosave.current);
-      autosave.current = null;
-    }
-    pending.current = null;
+    autosaver.cancel();
     if (isConfig) onConfigSave(text);
     else if (activeId) void doSaveNote(activeId, text);
   };
