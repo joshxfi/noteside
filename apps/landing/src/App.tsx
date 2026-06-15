@@ -88,14 +88,6 @@ const STEPS: Step[] = [
   },
 ];
 
-function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
-  return [theme, () => setTheme((t) => (t === "light" ? "dark" : "light"))] as const;
-}
-
 // Adds `.in` to every `.reveal` element as it scrolls into view.
 function useScrollReveal() {
   useEffect(() => {
@@ -148,7 +140,6 @@ const FEATURES = [
 ];
 
 export function App() {
-  const [theme, toggleTheme] = useTheme();
   const step = useKeycast();
   useScrollReveal();
 
@@ -166,14 +157,6 @@ export function App() {
             <a href={GITHUB}>GitHub ↗</a>
           </nav>
           <div className="nav-right">
-            <button
-              className="theme-btn"
-              onClick={toggleTheme}
-              aria-label="toggle theme"
-              title="toggle theme"
-            >
-              {theme === "light" ? "◐" : "◑"}
-            </button>
             <a className="btn btn-primary" href="#download">
               Download
             </a>
