@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 import { App } from "./App";
+import "./fonts";
 import "./styles.css";
 
 // Mirror the head-script guard in case Tauri internals weren't ready then.
