@@ -133,7 +133,10 @@ function Sidebar({
 function VaultPicker({ onPick }: { onPick: () => void }) {
   return (
     <div className="av-empty">
-      <div className="av-empty-glyph">▌</div>
+      <div className="av-splash" aria-label="Noteside">
+        Noteside
+        <span className="av-splash-cur" />
+      </div>
       <div className="av-empty-title">Open a vault</div>
       <div className="av-empty-sub">
         Choose a folder of Markdown files — your notes stay as plain files on your disk.

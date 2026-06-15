@@ -603,6 +603,27 @@ body {
   color: var(--accent);
   animation: av-blink 1.15s steps(1) infinite;
 }
+/* brand wordmark splash on the vault picker (Noteside + blinking caret) */
+.av-splash {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--serif);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--ink);
+}
+.av-splash-cur {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.82em;
+  margin-left: 0.08em;
+  border-radius: 0.05em;
+  background: var(--accent);
+  transform: translateY(0.04em);
+  animation: av-blink 1.15s steps(1) infinite;
+}
 .av-empty-title {
   font-family: var(--serif);
   font-size: 24px;
