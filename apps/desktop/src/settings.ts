@@ -25,6 +25,8 @@ export interface Config {
   cursorBlink: boolean;
   vimMode: boolean;
   escMap: string;
+  /** Raw vim map lines (e.g. "nmap <Space>w :w<CR>"), applied via Vim.map. */
+  keymaps: string[];
 }
 
 // ---- option metadata ------------------------------------------------
@@ -72,6 +74,7 @@ export const CONFIG_DEFAULTS: Config = {
   cursorBlink: true,
   vimMode: true,
   escMap: "",
+  keymaps: [],
 };
 
 const byId = <T extends { id: string }>(list: T[], id: string): T =>
@@ -108,6 +111,8 @@ export function serializeConfig(c: Config): string {
   L.push(`set vim          = ${c.vimMode ? "on" : "off"}`);
   if (c.escMap) L.push(`imap ${c.escMap} <Esc>`);
   else L.push('" imap jj <Esc>          (no insert-mode escape mapping set)');
+  if (c.keymaps.length) for (const km of c.keymaps) L.push(km);
+  else L.push('" nmap <Space>w :w<CR>   (custom key mappings go here)');
   L.push("");
   return L.join("\n");
 }
@@ -115,6 +120,7 @@ export function serializeConfig(c: Config): string {
 export function parseConfig(text: string, base: Config): Config {
   const c: Config = { ...base };
   c.escMap = ""; // an imap line re-enables it
+  c.keymaps = []; // collected fresh from the map lines below
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
   const matchFont = (list: FontOption[], val: string): string | null => {
     const n = norm(val);
@@ -127,6 +133,10 @@ export function parseConfig(text: string, base: Config): Config {
     let m: RegExpMatchArray | null;
     if ((m = line.match(/^imap\s+(\S+)\s+<esc>/i))) {
       c.escMap = m[1];
+      continue;
+    }
+    if (/^(n|v|i|o)?(nore)?map\s+\S+\s+.+$/i.test(line)) {
+      c.keymaps.push(line);
       continue;
     }
     if ((m = line.match(/^set\s+([\w-]+)\s*=?\s*(.+?)\s*$/i))) {

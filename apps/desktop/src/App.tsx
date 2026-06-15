@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { backend, type NoteDoc, type NoteMeta } from "./backend";
 import { createAutosave } from "./autosave";
 import { Editor } from "./editor/Editor";
-import { type AppCommand, setInsertEscape } from "./editor/exCommands";
+import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
@@ -220,6 +220,11 @@ export function App() {
   useEffect(() => {
     setInsertEscape(cfg.escMap);
   }, [cfg.escMap]);
+
+  // apply user keymaps from ~/.notesiderc (nmap/imap/vmap lines)
+  useEffect(() => {
+    setUserKeymaps(cfg.keymaps);
+  }, [cfg.keymaps]);
 
   const openVault = async (path: string) => {
     const metas = await backend.openVault(path);

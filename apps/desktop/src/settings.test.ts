@@ -19,8 +19,15 @@ describe("config serialize/parse round-trip", () => {
       cursorBlink: false,
       vimMode: false,
       escMap: "jj",
+      keymaps: ["nmap <Space>w :w<CR>", "vmap > >gv"],
     };
     expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual(cfg);
+  });
+
+  it("collects nmap/vmap lines into keymaps (not the escMap imap)", () => {
+    const parsed = parseConfig("imap jj <Esc>\nnmap <Space>w :w<CR>\nvmap > >gv", CONFIG_DEFAULTS);
+    expect(parsed.escMap).toBe("jj");
+    expect(parsed.keymaps).toEqual(["nmap <Space>w :w<CR>", "vmap > >gv"]);
   });
 
   it("parses an imap line into escMap and clears it when absent", () => {

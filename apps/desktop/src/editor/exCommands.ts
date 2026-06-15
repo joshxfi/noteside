@@ -49,6 +49,38 @@ export function setInsertEscape(seq: string) {
   }
 }
 
+// User keymaps from ~/.notesiderc (e.g. "nmap <Space>w :w<CR>"), applied via Vim.
+let appliedKeymaps: { lhs: string; ctx: string }[] = [];
+function keymapCtx(cmd: string): string {
+  const c = cmd.toLowerCase();
+  if (c.startsWith("v")) return "visual";
+  if (c.startsWith("i")) return "insert";
+  return "normal";
+}
+export function setUserKeymaps(lines: string[]) {
+  for (const { lhs, ctx } of appliedKeymaps) {
+    try {
+      Vim.unmap(lhs, ctx);
+    } catch {
+      /* ignore */
+    }
+  }
+  appliedKeymaps = [];
+  for (const raw of lines) {
+    const m = raw.trim().match(/^(\w+)\s+(\S+)\s+(.+)$/);
+    if (!m) continue;
+    const [, cmd, lhs, rhs] = m;
+    const ctx = keymapCtx(cmd);
+    try {
+      if (cmd.toLowerCase().includes("noremap")) Vim.noremap(lhs, rhs, ctx);
+      else Vim.map(lhs, rhs, ctx);
+      appliedKeymaps.push({ lhs, ctx });
+    } catch {
+      /* ignore invalid mapping */
+    }
+  }
+}
+
 let defined = false;
 export function defineExCommands() {
   if (defined) return;
