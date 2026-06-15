@@ -1,5 +1,9 @@
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+
+use notify::RecommendedWatcher;
+use notify_debouncer_full::{Debouncer, FileIdMap};
 
 use crate::vault::NoteRecord;
 
@@ -11,9 +15,22 @@ use crate::vault::NoteRecord;
 pub struct VaultState {
     pub root: Option<PathBuf>,
     pub records: Vec<NoteRecord>,
+    /// While set in the future, watcher events are ignored — this suppresses the
+    /// echo from our own atomic writes so they don't trigger a redundant reindex.
+    pub suppress_until: Option<Instant>,
 }
 
-#[derive(Default)]
 pub struct AppState {
-    pub vault: Mutex<VaultState>,
+    pub vault: Arc<Mutex<VaultState>>,
+    /// Kept alive so the watcher thread keeps running; replaced on vault switch.
+    pub watcher: Mutex<Option<Debouncer<RecommendedWatcher, FileIdMap>>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            vault: Arc::new(Mutex::new(VaultState::default())),
+            watcher: Mutex::new(None),
+        }
+    }
 }

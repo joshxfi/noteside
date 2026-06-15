@@ -13,6 +13,7 @@ mod models;
 mod search;
 mod state;
 mod vault;
+mod watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

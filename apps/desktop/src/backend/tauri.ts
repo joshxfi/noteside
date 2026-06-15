@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Config } from "../settings";
@@ -34,5 +35,8 @@ export const tauriBackend: Backend = {
   },
   async setLastVault(path) {
     await (await store()).set("lastVault", path);
+  },
+  async watchVault(onChange) {
+    return await listen("vault:changed", () => onChange());
   },
 };

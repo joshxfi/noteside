@@ -54,4 +54,6 @@ export interface Backend {
   setConfig(cfg: Config): Promise<void>;
   getLastVault(): Promise<string | null>;
   setLastVault(path: string): Promise<void>;
+  /** Subscribe to external vault changes (watcher); resolves to an unsubscribe fn. */
+  watchVault(onChange: () => void): Promise<() => void>;
 }

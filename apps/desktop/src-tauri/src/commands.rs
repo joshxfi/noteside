@@ -1,12 +1,17 @@
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::{AppError, Result};
 use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
+use crate::search;
 use crate::state::AppState;
 use crate::vault::{self, NoteRecord};
-use crate::search;
+use crate::watcher;
+
+/// After our own write, ignore watcher echoes for a short window.
+const SUPPRESS_MS: u64 = 700;
 
 fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
     let mut metas: Vec<NoteMeta> = records.iter().map(|r| r.meta.clone()).collect();
@@ -15,18 +20,25 @@ fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
 }
 
 /// Open (or switch to) a vault folder: scan all Markdown files into the in-memory
-/// index and return the note list.
+/// index, start the file watcher, and return the note list.
 #[tauri::command]
-pub fn open_vault(path: String, state: State<AppState>) -> Result<Vec<NoteMeta>> {
+pub fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> Result<Vec<NoteMeta>> {
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err(AppError::Msg(format!("not a directory: {path}")));
     }
     let records = vault::scan_vault(&root);
     let metas = sorted_metas(&records);
-    let mut g = state.vault.lock().unwrap();
-    g.root = Some(root);
-    g.records = records;
+    {
+        let mut g = state.vault.lock().unwrap();
+        g.root = Some(root.clone());
+        g.records = records;
+        g.suppress_until = None;
+    }
+    match watcher::start_watcher(app, state.vault.clone(), root) {
+        Ok(d) => *state.watcher.lock().unwrap() = Some(d),
+        Err(e) => eprintln!("noteside: file watcher failed to start: {e}"),
+    }
     Ok(metas)
 }
 
@@ -74,6 +86,7 @@ pub fn save_note(path: String, body: String, state: State<AppState>) -> Result<N
             body,
         });
     }
+    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
     Ok(meta)
 }
 
@@ -96,18 +109,20 @@ pub fn create_note(title: Option<String>, state: State<AppState>) -> Result<Note
         meta: meta.clone(),
         body: initial,
     });
+    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
     Ok(meta)
 }
 
 #[tauri::command]
 pub fn delete_note(path: String, state: State<AppState>) -> Result<()> {
     let mut g = state.vault.lock().unwrap();
-    let _root = g.root.clone().ok_or(AppError::NoVault)?;
-    let abs = _root.join(&path);
+    let root = g.root.clone().ok_or(AppError::NoVault)?;
+    let abs = root.join(&path);
     if abs.exists() {
         std::fs::remove_file(&abs)?;
     }
     g.records.retain(|r| r.meta.path != path);
+    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
     Ok(())
 }
 

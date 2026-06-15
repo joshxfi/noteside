@@ -239,4 +239,7 @@ export const mockBackend: Backend = {
       /* ignore */
     }
   },
+  async watchVault() {
+    return () => {};
+  },
 };

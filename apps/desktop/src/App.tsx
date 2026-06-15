@@ -181,6 +181,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [refocus, setRefocus] = useState(0);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   const latest = useRef("");
@@ -237,6 +238,51 @@ export function App() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // react to external vault changes (other editors, git, sync)
+  const onVaultChanged = async () => {
+    let list: NoteMeta[];
+    try {
+      list = await backend.listNotes();
+    } catch {
+      return;
+    }
+    setNotes(list);
+    if (!activeId || activeId === CONFIG_ID) return;
+    if (!list.some((n) => n.id === activeId)) {
+      setActiveId(null);
+      setOpenDoc(null);
+      return;
+    }
+    if (activeDirty) return; // don't clobber unsaved edits
+    try {
+      const doc = await backend.readNote(activeId);
+      if (doc.body !== savedText) {
+        setOpenDoc(doc);
+        setSavedText(doc.body);
+        setReloadNonce((n) => n + 1);
+        flash("reloaded from disk");
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+  const changedRef = useRef(onVaultChanged);
+  changedRef.current = onVaultChanged;
+  useEffect(() => {
+    let un: (() => void) | null = null;
+    let cancelled = false;
+    void backend
+      .watchVault(() => void changedRef.current())
+      .then((u) => {
+        if (cancelled) u();
+        else un = u;
+      });
+    return () => {
+      cancelled = true;
+      un?.();
+    };
   }, []);
 
   const pickVault = async () => {
@@ -439,7 +485,8 @@ export function App() {
             ) : showEditor ? (
               <Editor
                 key={
-                  (isConfig ? `config-${configKey}` : `${activeId}:${gotoLine}`) + `:${vimSuffix}`
+                  (isConfig ? `config-${configKey}` : `${activeId}:${gotoLine}:${reloadNonce}`) +
+                  `:${vimSuffix}`
                 }
                 notePath={isConfig ? CONFIG_ID : (activeId as string)}
                 fileLabel={isConfig ? "~/.notesiderc" : (openDoc?.title ?? "")}
