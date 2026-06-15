@@ -12,7 +12,7 @@ const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults
 export const tauriBackend: Backend = {
   live: true,
   async pickVault() {
-    const res = await openDialog({ directory: true, multiple: false, title: "Open vault folder" });
+    const res = await openDialog({ directory: true, multiple: false, title: "Open a notebook" });
     return typeof res === "string" ? res : null;
   },
   openVault: (path) => invoke<NoteMeta[]>("open_vault", { path }),

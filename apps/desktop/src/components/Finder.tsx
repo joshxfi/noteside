@@ -277,7 +277,9 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
         <div className="fnd-body">
           <div className="fnd-list" ref={listRef}>
             {items.length === 0 ? (
-              <div className="fnd-empty">{query ? "no matches" : "type to search the vault"}</div>
+              <div className="fnd-empty">
+                {query ? "no matches" : "type to search your notebook"}
+              </div>
             ) : (
               items.map((item, i) => (
                 <div

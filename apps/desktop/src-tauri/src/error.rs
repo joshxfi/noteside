@@ -8,7 +8,7 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("invalid pattern: {0}")]
     Regex(#[from] regex::Error),
-    #[error("no vault is open")]
+    #[error("no notebook is open")]
     NoVault,
     #[error("{0}")]
     Msg(String),

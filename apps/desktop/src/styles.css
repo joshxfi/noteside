@@ -603,25 +603,32 @@ body {
   color: var(--accent);
   animation: av-blink 1.15s steps(1) infinite;
 }
-/* brand wordmark splash on the vault picker (Noteside + blinking caret) */
-.av-splash {
+/* brand mark (logo tile) on the notebook picker — serif N + blinking plum caret */
+.av-mark {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow:
+    inset 0 0 0 1px var(--rule),
+    0 14px 32px -18px rgba(60, 30, 55, 0.35);
+}
+.av-mark .n {
   font-family: var(--serif);
-  font-size: 40px;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  font-size: 37px;
   line-height: 1;
   color: var(--ink);
 }
-.av-splash-cur {
-  display: inline-block;
-  width: 0.42em;
-  height: 0.82em;
-  margin-left: 0.08em;
-  border-radius: 0.05em;
+.av-mark .cur {
+  width: 8px;
+  height: 30px;
+  border-radius: 2px;
   background: var(--accent);
-  transform: translateY(0.04em);
   animation: av-blink 1.15s steps(1) infinite;
 }
 .av-empty-title {
