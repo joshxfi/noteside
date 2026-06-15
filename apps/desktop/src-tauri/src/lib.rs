@@ -1,16 +1,36 @@
 // Noteside desktop backend.
 //
-// The window is decorationless (`decorations: false`); the custom titlebar in
-// the React UI drives close/minimize/maximize through the core window APIs,
-// authorized in `capabilities/default.json`.
+// Files-as-truth: notes are plain Markdown files in a user-chosen vault folder.
+// A rebuildable in-memory index (see `state`/`vault`) powers listing + search;
+// FTS5/SQLite is the documented upgrade path for very large vaults.
 //
-// Future work (see repo README build plan): vault scanning + atomic Markdown
-// writes, a `notify` file watcher, SQLite/FTS5 via rusqlite, and the fff-search
-// fuzzy palette — all exposed here as `#[tauri::command]`s.
+// The window is decorationless; the React titlebar drives close/minimize/maximize
+// through the core window APIs authorized in `capabilities/default.json`.
+
+mod commands;
+mod error;
+mod models;
+mod search;
+mod state;
+mod vault;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .manage(state::AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            commands::open_vault,
+            commands::current_vault,
+            commands::list_notes,
+            commands::read_note,
+            commands::save_note,
+            commands::create_note,
+            commands::delete_note,
+            commands::search_files,
+            commands::search_content,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
