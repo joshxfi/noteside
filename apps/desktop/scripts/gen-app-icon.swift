@@ -47,6 +47,27 @@ func squircle(center c: CGPoint, half a: CGFloat, n: CGFloat = 5) -> CGPath {
   return p
 }
 
+// Serialize a CGPath (CoreGraphics y-up) as SVG path data (y-down), for the
+// Liquid Glass / Icon Composer layer art — vector, font-independent, crisp.
+func f(_ v: CGFloat) -> String { String(format: "%.2f", v) }
+func svgPathData(_ path: CGPath, h: CGFloat) -> String {
+  var d = ""
+  path.applyWithBlock { ep in
+    let e = ep.pointee
+    let p = e.points
+    switch e.type {
+    case .moveToPoint: d += "M\(f(p[0].x)) \(f(h - p[0].y)) "
+    case .addLineToPoint: d += "L\(f(p[0].x)) \(f(h - p[0].y)) "
+    case .addQuadCurveToPoint: d += "Q\(f(p[0].x)) \(f(h - p[0].y)) \(f(p[1].x)) \(f(h - p[1].y)) "
+    case .addCurveToPoint:
+      d += "C\(f(p[0].x)) \(f(h - p[0].y)) \(f(p[1].x)) \(f(h - p[1].y)) \(f(p[2].x)) \(f(h - p[2].y)) "
+    case .closeSubpath: d += "Z "
+    @unknown default: break
+    }
+  }
+  return d
+}
+
 let cs = CGColorSpace(name: CGColorSpace.sRGB)!
 let ctx = CGContext(
   data: nil, width: Int(CANVAS), height: Int(CANVAS), bitsPerComponent: 8,
@@ -109,3 +130,30 @@ let png = rep.representation(using: .png, properties: [:])!
 let out = URL(fileURLWithPath: "apps/desktop/src-tauri/app-icon.png")
 try! png.write(to: out)
 print("wrote \(out.path) (\(Int(CANVAS))×\(Int(CANVAS)))")
+
+// ── Liquid Glass layers (macOS 26 / Icon Composer) ──────────────────────
+// The system draws the squircle tile + glass edge from icon.json's `fill`, so
+// these layers carry ONLY the foreground art on a transparent 1024² canvas, at
+// the exact same placement as the flat mark above. Colors are overridden per
+// layer/appearance in icon.json; the baked fills here just make the SVGs
+// preview correctly on their own.
+func svg(_ inner: String) -> String {
+  """
+  <svg xmlns="http://www.w3.org/2000/svg" width="\(Int(CANVAS))" height="\(Int(CANVAS))" \
+  viewBox="0 0 \(Int(CANVAS)) \(Int(CANVAS))">
+  \(inner)
+  </svg>
+  """
+}
+let nSVG = svg("<path d=\"\(svgPathData(placedN, h: CANVAS))\" fill=\"#3b2f27\"/>")
+let cursorTop = CANVAS - (center.y + cursorH / 2) // CG y-up rect → SVG y-down
+let cursorSVG = svg(
+  "<rect x=\"\(f(cursorRect.minX))\" y=\"\(f(cursorTop))\" width=\"\(f(cursorW))\" "
+    + "height=\"\(f(cursorH))\" rx=\"\(f(cursorW * 0.12))\" ry=\"\(f(cursorW * 0.12))\" "
+    + "fill=\"#a05e7e\"/>")
+
+let assets = "apps/desktop/src-tauri/Noteside.icon/Assets"
+try! FileManager.default.createDirectory(atPath: assets, withIntermediateDirectories: true)
+try! nSVG.write(toFile: "\(assets)/n.svg", atomically: true, encoding: .utf8)
+try! cursorSVG.write(toFile: "\(assets)/cursor.svg", atomically: true, encoding: .utf8)
+print("wrote \(assets)/{n,cursor}.svg")
