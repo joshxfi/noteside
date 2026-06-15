@@ -7,6 +7,8 @@ import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/exCom
 import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
+import { Backlinks } from "./components/Backlinks";
+import { type Backlink, computeBacklinks, resolveLink } from "./links";
 import {
   accentValue,
   CONFIG_DEFAULTS,
@@ -191,7 +193,9 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [navSeq, setNavSeq] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
 
   const configLoaded = useRef(false);
 
@@ -319,13 +323,22 @@ export function App() {
 
   const openNote = async (path: string, line = 0) => {
     flushPending(); // persist the outgoing note's queued edits before switching
-    const doc = await backend.readNote(path);
+    let doc: NoteDoc;
+    try {
+      doc = await backend.readNote(path);
+    } catch (e) {
+      flash(`couldn't open note: ${e}`); // e.g. a note deleted out from under us
+      return;
+    }
     setOpenDoc(doc);
     setSavedText(doc.body);
     setActiveDirty(false);
     setActiveId(path);
     setLastId(path);
     setGotoLine(line);
+    // bump every nav so re-opening the SAME note at the SAME line still remounts
+    // the editor (the goto-line jump only runs on mount) — e.g. self [[links]].
+    setNavSeq((n) => n + 1);
   };
 
   // Save is always bound to an explicit note id (never the live activeId), so a
@@ -390,6 +403,32 @@ export function App() {
   const openFromFinder = async (path: string, line: number) => {
     setFinder(null);
     await openNote(path, line && line > 0 ? line : 0);
+    setRefocus((r) => r + 1);
+  };
+
+  // follow a [[wikilink]] (gf / :follow): resolve to a note and open it
+  const onFollowLink = (target: string) => {
+    const hit = resolveLink(target, notes);
+    if (hit) void openNote(hit.id);
+    else flash(`no note: ${target}`);
+  };
+  const openBacklinks = async () => {
+    if (!activeId || isConfig) {
+      flash("open a note first");
+      return;
+    }
+    try {
+      const docs = await backend.readAllNotes();
+      setBacklinks({
+        title: openDoc?.title ?? activeId,
+        refs: computeBacklinks(activeId, docs, notes),
+      });
+    } catch (e) {
+      flash(`backlinks failed: ${e}`);
+    }
+  };
+  const closeBacklinks = () => {
+    setBacklinks(null);
     setRefocus((r) => r + 1);
   };
 
@@ -461,12 +500,14 @@ export function App() {
     else if (c === "new") void createNote();
     else if (c === "delete") void deleteActive();
     else if (c === "togglePreview") togglePreview();
+    else if (c === "backlinks") void openBacklinks();
   };
 
   const paletteActions: PaletteAction[] = [
     { key: "n", label: "New note", run: () => void createNote() },
     { key: "f", label: "Find", hint: "files + content", run: () => openFinder("all") },
     { key: "g", label: "Search content", run: () => openFinder("content") },
+    { key: "l", label: "Backlinks", hint: "links here", run: () => void openBacklinks() },
     { key: "b", label: "Toggle sidebar", run: toggleNav },
     {
       key: "p",
@@ -570,7 +611,9 @@ export function App() {
             ) : showEditor ? (
               <Editor
                 key={
-                  (isConfig ? `config-${configKey}` : `${activeId}:${gotoLine}:${reloadNonce}`) +
+                  (isConfig
+                    ? `config-${configKey}`
+                    : `${activeId}:${gotoLine}:${reloadNonce}:${navSeq}`) +
                   `:${vimSuffix}:${previewOn ? "p" : "s"}`
                 }
                 notePath={isConfig ? CONFIG_ID : (activeId as string)}
@@ -581,12 +624,14 @@ export function App() {
                 cursorBlink={cfg.cursorBlink}
                 relativeNumbers={RELATIVE_NUMBERS}
                 preview={previewOn}
+                linkTargets={[...new Set(notes.map((n) => n.title))]}
                 gotoLine={isConfig ? 0 : gotoLine}
                 refocusToken={refocus}
                 onChange={onEditorChange}
                 onSave={onEditorSave}
                 onQuit={onEditorQuit}
                 onCommand={onCommand}
+                onFollowLink={onFollowLink}
               />
             ) : (
               <EmptyState hasClosed={!!lastId} onReopen={() => lastId && void openNote(lastId)} />
@@ -607,6 +652,17 @@ export function App() {
           <Finder initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
         )}
         {paletteOpen && <CommandPalette actions={paletteActions} onClose={closePalette} />}
+        {backlinks && (
+          <Backlinks
+            title={backlinks.title}
+            refs={backlinks.refs}
+            onOpen={(id, line) => {
+              closeBacklinks();
+              void openNote(id, line);
+            }}
+            onClose={closeBacklinks}
+          />
+        )}
       </div>
     </div>
   );

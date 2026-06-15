@@ -16,8 +16,9 @@ import {
 const hide = Decoration.replace({});
 
 // Lines touched by any selection range stay in "source" form so editing — and
-// vim column math — always sees the literal characters.
-function activeLines(view: EditorView): Set<number> {
+// vim column math — always sees the literal characters. Shared with the
+// wikilink decorations (same reveal-on-cursor-line behaviour).
+export function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
   const { doc } = view.state;
   for (const r of view.state.selection.ranges) {

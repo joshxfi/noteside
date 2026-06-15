@@ -30,8 +30,9 @@ and a quiet command line appears at the foot of the page.
 Everything lives on this machine. Nothing leaves it. Close the lid and
 your words are still here, exactly where the cursor left them.
 
-Press j to read on, or open the Keymap note in the sidebar for the
-full set of motions Noteside understands.`,
+Press j to read on, or open [[Keymap]] for the full set of motions.
+Notes link to each other: type [[ to autocomplete a note's name, and
+press gf on a link like [[Roadmap — Q3]] to follow it.`,
   },
   {
     id: "keymap",

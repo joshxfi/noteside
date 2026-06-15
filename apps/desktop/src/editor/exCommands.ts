@@ -3,6 +3,7 @@
 // editor is currently mounted via a module-level handler registry.
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
+import { wikilinkAt } from "../links";
 
 export type AppCommand =
   | "find"
@@ -13,7 +14,8 @@ export type AppCommand =
   | "new"
   | "delete"
   | "palette"
-  | "togglePreview";
+  | "togglePreview"
+  | "backlinks";
 
 export interface EditorHandlers {
   view: EditorView;
@@ -21,6 +23,7 @@ export interface EditorHandlers {
   quit: () => void;
   saveQuit: () => void;
   command: (c: AppCommand) => void;
+  followLink: (target: string) => void;
 }
 
 let active: EditorHandlers | null = null;
@@ -104,6 +107,19 @@ export function defineExCommands() {
   Vim.defineEx("rm", "rm", () => active?.command("delete"));
   Vim.defineEx("palette", "palette", () => active?.command("palette"));
   Vim.defineEx("preview", "preview", () => active?.command("togglePreview"));
+  Vim.defineEx("backlinks", "back", () => active?.command("backlinks"));
+
+  // `:follow` (and `gf`) jumps to the note named by the [[wikilink]] under the
+  // cursor. Reads the raw line/column, so it works regardless of live-preview.
+  Vim.defineEx("follow", "follow", () => {
+    const v = active?.view;
+    if (!active || !v) return;
+    const head = v.state.selection.main.head;
+    const ln = v.state.doc.lineAt(head);
+    const target = wikilinkAt(ln.text, head - ln.from);
+    if (target) active.followLink(target);
+  });
+  Vim.map("gf", ":follow<CR>", "normal");
 
   // Leader: <Space> opens the command palette (which-key style).
   Vim.map("<Space>", ":palette<CR>", "normal");

@@ -53,6 +53,14 @@ export const nsTheme = EditorView.theme({
   ".cm-searchMatch-selected": {
     backgroundColor: "color-mix(in oklab, var(--accent), transparent 35%)",
   },
+  // [[wikilinks]]
+  ".cm-wikilink": {
+    color: "var(--accent)",
+    textDecoration: "underline",
+    textDecorationColor: "color-mix(in oklab, var(--accent), transparent 55%)",
+    textUnderlineOffset: "3px",
+    cursor: "pointer",
+  },
   // vim command line (the transient `:` / `/` panel)
   ".cm-panels": {
     backgroundColor: "var(--paper-2)",

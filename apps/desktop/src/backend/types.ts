@@ -45,6 +45,8 @@ export interface Backend {
   currentNotebook(): Promise<string | null>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
+  /** Every note with its body — backs link resolution / the backlinks panel. */
+  readAllNotes(): Promise<NoteDoc[]>;
   saveNote(path: string, body: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
   deleteNote(path: string): Promise<void>;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState, type Extension } from "@codemirror/state";
+import { EditorState, type Extension, Prec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -8,12 +8,14 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
+import { completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { type AppCommand, defineExCommands, setActiveHandlers } from "./exCommands";
 import { livePreview } from "./livePreview";
+import { wikilinkComplete, wikilinks } from "./wikilinks";
 import { noteHighlight, nsTheme } from "./theme";
 
 const MODE_LABEL: Record<string, string> = {
@@ -36,6 +38,8 @@ export interface EditorProps {
   relativeNumbers: boolean;
   /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
   preview: boolean;
+  /** Note titles offered as `[[ ]]` autocompletion targets. */
+  linkTargets: string[];
   /** 1-based line to place the cursor on at mount (e.g. opening a grep hit). */
   gotoLine?: number;
   refocusToken: number;
@@ -43,6 +47,8 @@ export interface EditorProps {
   onSave: (text: string) => void;
   onQuit: () => void;
   onCommand: (c: AppCommand) => void;
+  /** Follow the wikilink target under the cursor (`gf` / `:follow`). */
+  onFollowLink: (target: string) => void;
 }
 
 function relFmt(n: number, state: EditorState): string {
@@ -97,6 +103,10 @@ export function Editor(props: EditorProps) {
       markdown({ addKeymap: false }),
       syntaxHighlighting(noteHighlight),
       ...(preview ? [livePreview] : []),
+      wikilinks(preview),
+      wikilinkComplete(() => propsRef.current.linkTargets),
+      // high precedence so the completion popup wins Enter/Tab/Esc over vim
+      Prec.high(keymap.of(completionKeymap)),
       EditorView.lineWrapping,
       nsTheme,
       keymap.of([
@@ -140,6 +150,7 @@ export function Editor(props: EditorProps) {
         propsRef.current.onQuit();
       },
       command: (c) => propsRef.current.onCommand(c),
+      followLink: (t) => propsRef.current.onFollowLink(t),
     });
 
     const cm = getCM(view);

@@ -169,6 +169,9 @@ export const mockBackend: Backend = {
     if (!r) throw new Error(`no such note: ${path}`);
     return { ...r.meta, body: r.body };
   },
+  async readAllNotes(): Promise<NoteDoc[]> {
+    return metas().map((m) => ({ ...m, body: recs.get(m.path)?.body ?? "" }));
+  },
   async saveNote(path, body) {
     const existing = recs.get(path);
     const title = titleFromBody(body) ?? path;
