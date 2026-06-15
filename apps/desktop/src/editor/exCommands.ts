@@ -4,7 +4,15 @@
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
 
-export type AppCommand = "find" | "grep" | "nav" | "settings" | "config";
+export type AppCommand =
+  | "find"
+  | "grep"
+  | "nav"
+  | "settings"
+  | "config"
+  | "new"
+  | "delete"
+  | "palette";
 
 export interface EditorHandlers {
   view: EditorView;
@@ -59,4 +67,17 @@ export function defineExCommands() {
   Vim.defineEx("settings", "settings", () => active?.command("settings"));
   Vim.defineEx("prefs", "prefs", () => active?.command("settings"));
   Vim.defineEx("config", "config", () => active?.command("config"));
+  Vim.defineEx("new", "new", () => active?.command("new"));
+  Vim.defineEx("rm", "rm", () => active?.command("delete"));
+  Vim.defineEx("palette", "palette", () => active?.command("palette"));
+
+  // Leader: <Space> opens the command palette (which-key style).
+  Vim.map("<Space>", ":palette<CR>", "normal");
+
+  // Highlight all matches of the last search (vim :set hlsearch); :noh clears.
+  try {
+    Vim.setOption("hlsearch", true);
+  } catch {
+    /* option may be unavailable; ignore */
+  }
 }

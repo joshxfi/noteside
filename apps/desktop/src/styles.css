@@ -1355,3 +1355,137 @@ html.embed .av-window {
 .av-brandsub {
   font-size: 11px;
 }
+
+/* ── command palette (leader / which-key) ── */
+.pal-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  background: color-mix(in oklab, var(--paper), transparent 30%);
+  backdrop-filter: blur(3px);
+  animation: set-fade 0.13s ease-out;
+}
+.pal-panel {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--win-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  outline: none;
+  overflow: hidden;
+  animation: set-rise 0.15s ease-out;
+}
+.pal-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.pal-leader {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.pal-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.pal-row:hover {
+  background: var(--active-line);
+}
+.pal-row.danger:hover {
+  background: color-mix(in oklab, var(--paper), oklch(0.56 0.13 26) 12%);
+}
+.pal-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 1px 0 var(--rule);
+}
+.pal-row.danger .pal-key {
+  color: oklch(0.56 0.13 26);
+  border-color: color-mix(in oklab, var(--rule), oklch(0.56 0.13 26) 40%);
+}
+.pal-label {
+  font-size: 13.5px;
+}
+.pal-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.pal-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 22px 16px;
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--ink);
+}
+.pal-confirm .pal-keys {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.pal-confirm kbd {
+  font-family: var(--mono);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--ink-soft);
+}
+.pal-foot {
+  display: flex;
+  gap: 16px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--rule-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.pal-foot b {
+  color: var(--ink-soft);
+  font-weight: 600;
+}

@@ -6,6 +6,7 @@ import { Editor } from "./editor/Editor";
 import { type AppCommand, setInsertEscape } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
 import {
   accentValue,
   CONFIG_DEFAULTS,
@@ -187,6 +188,7 @@ export function App() {
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -415,13 +417,52 @@ export function App() {
     }
   };
 
+  const deleteActive = async () => {
+    if (!activeId || activeId === CONFIG_ID) return;
+    const path = activeId;
+    autosaver.cancel(); // drop any queued save so it can't resurrect the file
+    try {
+      await backend.deleteNote(path);
+      const list = await backend.listNotes();
+      setNotes(list);
+      const next = list[0]?.id ?? null;
+      if (next) await openNote(next);
+      else {
+        setActiveId(null);
+        setOpenDoc(null);
+      }
+      flash("note deleted");
+    } catch (e) {
+      flash(`delete failed: ${e}`);
+    }
+  };
+
+  const closePalette = () => {
+    setPaletteOpen(false);
+    setRefocus((r) => r + 1);
+  };
+
   const onCommand = (c: AppCommand) => {
     if (c === "find") openFinder("all");
     else if (c === "grep") openFinder("content");
     else if (c === "nav") toggleNav();
     else if (c === "settings") openSettings();
     else if (c === "config") openConfig();
+    else if (c === "palette") setPaletteOpen(true);
+    else if (c === "new") void createNote();
+    else if (c === "delete") void deleteActive();
   };
+
+  const paletteActions: PaletteAction[] = [
+    { key: "n", label: "New note", run: () => void createNote() },
+    { key: "f", label: "Find", hint: "files + content", run: () => openFinder("all") },
+    { key: "g", label: "Search content", run: () => openFinder("content") },
+    { key: "b", label: "Toggle sidebar", run: toggleNav },
+    { key: ",", label: "Settings", run: openSettings },
+    { key: "c", label: "Edit ~/.notesiderc", run: openConfig },
+    { key: "q", label: "Close note", hint: ":q", run: onEditorQuit },
+    { key: "d", label: "Delete note", danger: true, run: () => void deleteActive() },
+  ];
 
   const titleText = isConfig ? "~/.notesiderc" : (openDoc?.title ?? null);
   const showEditor = isConfig || (!!activeId && !!openDoc && openDoc.path === activeId);
@@ -547,6 +588,7 @@ export function App() {
         {finder && (
           <Finder initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
         )}
+        {paletteOpen && <CommandPalette actions={paletteActions} onClose={closePalette} />}
       </div>
     </div>
   );

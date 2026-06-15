@@ -45,7 +45,15 @@ export const nsTheme = EditorView.theme({
     backgroundColor: "var(--sel)",
   },
   ".cm-content ::selection": { backgroundColor: "var(--sel)" },
-  // vim command line + search (the `vim({ status: true })` panel)
+  // vim hlsearch matches
+  ".cm-searchMatch": {
+    backgroundColor: "color-mix(in oklab, var(--accent), transparent 62%)",
+    borderRadius: "2px",
+  },
+  ".cm-searchMatch-selected": {
+    backgroundColor: "color-mix(in oklab, var(--accent), transparent 35%)",
+  },
+  // vim command line (the transient `:` / `/` panel)
   ".cm-panels": {
     backgroundColor: "var(--paper-2)",
     color: "var(--ink-soft)",
