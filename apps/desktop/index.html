@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Noteside</title>
+    <!--
+      Fonts are loaded from Google Fonts to match the design exactly. For a fully
+      OFFLINE build, vendor these locally (e.g. the @fontsource packages) so the
+      app needs no network — see README. The CSS font stacks fall back to system
+      serif/mono if the fonts are unavailable.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Fill the frame edge-to-edge when embedded in the landing demo, or when
+      // running inside the Tauri window (the OS provides the window frame).
+      if (location.search.indexOf("embed") > -1 || "__TAURI_INTERNALS__" in window)
+        document.documentElement.classList.add("embed");
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
