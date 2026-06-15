@@ -97,6 +97,12 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   let configText = "";
   let configSaved = "";
   let configKey = 0;
+  // Monotonic navigation guard. Every user navigation (open/openConfig/quit/close)
+  // bumps this; an in-flight open()/reconcile() captures it and bails if it changed,
+  // so a slow readNote can't resolve late and clobber a buffer the user has since
+  // switched away from. (The mock backend resolves in order; the real IPC backend
+  // can resolve out of order.)
+  let loadToken = 0;
 
   const listeners = new Set<() => void>();
 
@@ -177,13 +183,15 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
 
   async function open(id: string, line = 0): Promise<void> {
     autosaver.flush(); // land the outgoing buffer's queued save BEFORE reading the next
+    const token = ++loadToken;
     let doc: NoteDoc;
     try {
       doc = await backend.readNote(id);
     } catch (e) {
-      notify(`couldn't open note: ${e}`); // e.g. deleted out from under us — prior buffer intact
+      if (token === loadToken) notify(`couldn't open note: ${e}`); // deleted under us — prior buffer intact
       return;
     }
+    if (token !== loadToken) return; // a newer navigation superseded this open
     noteInitial = doc.body;
     noteSaved = doc.body;
     noteDirty = false;
@@ -217,6 +225,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
 
   function quit(): void {
     autosaver.flush(); // land queued edits of the buffer being abandoned
+    loadToken += 1; // a pending open resolving after :q must not re-open
     if (activeId === CONFIG_ID) {
       activeId = lastNoteId && lastNoteId !== CONFIG_ID ? lastNoteId : null;
       commit();
@@ -227,6 +236,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   function openConfig(text: string): void {
+    loadToken += 1; // supersede any in-flight open
     configText = text;
     configSaved = text;
     configKey += 1;
@@ -235,22 +245,29 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   async function reconcile(): Promise<void> {
+    const token = loadToken; // reactive: bail if the user navigates mid-scan
     let list: NoteMeta[];
     try {
       list = await backend.listNotes();
     } catch {
       return;
     }
-    onNotesChanged(list);
+    onNotesChanged(list); // sidebar refresh is independent of the active buffer
+    if (token !== loadToken) return; // user navigated during the scan
     if (activeId === null || activeId === CONFIG_ID) return;
-    if (!list.some((n) => n.id === activeId)) {
+    const id = activeId; // pin the note we're reconciling across the read
+    if (!list.some((n) => n.id === id)) {
       clearNoteBuffer(); // the active note vanished out from under us
       commit();
       return;
     }
     if (noteDirty) return; // never clobber unsaved edits
     try {
-      const doc = await backend.readNote(activeId);
+      const doc = await backend.readNote(id);
+      // Bail if the user navigated (token) OR the active buffer changed (id) during
+      // the read — otherwise a late resolve would seed the wrong buffer with this
+      // note's body, and the next keystroke would autosave it into the wrong file.
+      if (token !== loadToken || activeId !== id) return;
       if (doc.body !== noteSaved) {
         noteInitial = doc.body;
         noteSaved = doc.body;
@@ -269,6 +286,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   function close(): void {
+    loadToken += 1; // supersede any in-flight open
     clearNoteBuffer();
     commit();
   }

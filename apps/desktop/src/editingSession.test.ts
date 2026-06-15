@@ -5,7 +5,7 @@ import type { Backend, NoteDoc, NoteMeta } from "./backend/types";
 // A Map-backed fake of the consumed backend slice. Records the exact call order
 // (so flush-before-switch is assertable) and lets a test mutate bodies to
 // simulate an external "disk" edit.
-function fakeBackend(seed: Record<string, string> = {}) {
+function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, number> = {}) {
   const bodies = new Map<string, string>(Object.entries(seed));
   const calls: string[] = [];
   const metaOf = (id: string): NoteMeta => ({
@@ -19,7 +19,9 @@ function fakeBackend(seed: Record<string, string> = {}) {
   });
   const backend: Pick<Backend, "readNote" | "saveNote" | "listNotes"> = {
     async readNote(id: string): Promise<NoteDoc> {
-      calls.push(`read:${id}`);
+      calls.push(`read:${id}`); // recorded at call time, before any delay (call-order stays stable)
+      const d = delays[id] ?? 0;
+      if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
       if (!bodies.has(id)) throw new Error(`not found: ${id}`);
       return { ...metaOf(id), body: bodies.get(id) as string };
     },
@@ -36,8 +38,12 @@ function fakeBackend(seed: Record<string, string> = {}) {
   return { backend, bodies, calls, metaOf };
 }
 
-function makeSession(seed: Record<string, string> = {}, over: Partial<EditingSessionDeps> = {}) {
-  const fb = fakeBackend(seed);
+function makeSession(
+  seed: Record<string, string> = {},
+  over: Partial<EditingSessionDeps> = {},
+  delays: Record<string, number> = {},
+) {
+  const fb = fakeBackend(seed, delays);
   const notices: string[] = [];
   const configApplied: string[] = [];
   const savedMetas: NoteMeta[] = [];
@@ -129,6 +135,50 @@ describe("editingSession", () => {
     await vi.advanceTimersByTimeAsync(800);
     expect(bodies.get("a.md")).toBe("content A");
     expect(bodies.get("b.md")).toBe("content B");
+  });
+
+  it("out-of-order open(): a slow earlier open does not clobber the latest", async () => {
+    // a.md reads slower than b.md, so a.md resolves AFTER b.md despite being opened first.
+    const { session } = makeSession({ "a.md": "A", "b.md": "B" }, {}, { "a.md": 50, "b.md": 10 });
+    const pa = session.open("a.md"); // token 1, resolves at ~50ms
+    const pb = session.open("b.md"); // token 2, resolves at ~10ms
+    await vi.advanceTimersByTimeAsync(60);
+    await Promise.all([pa, pb]);
+    // The later navigation wins; the stale a.md resolution is dropped.
+    expect(session.getSnapshot().activeId).toBe("b.md");
+    expect(session.getSnapshot().initialText).toBe("B");
+  });
+
+  it("quit() during an in-flight open() drops the stale open (no resurrection)", async () => {
+    const { session } = makeSession({ "a.md": "A" }, {}, { "a.md": 30 });
+    const p = session.open("a.md"); // in flight
+    session.quit(); // user bails before it resolves
+    await vi.advanceTimersByTimeAsync(40);
+    await p;
+    expect(session.getSnapshot().status).toBe("empty"); // the late open did not re-open
+  });
+
+  // The audit's confirmed regression: reconcile() had already issued readNote(A)
+  // when the user opened B; its late resolve must NOT seed buffer B with A's body
+  // (which the next keystroke would then autosave into file B).
+  it("reconcile() that already issued its read does not clobber a buffer switched mid-read", async () => {
+    const delays: Record<string, number> = { "a.md": 50 }; // a.md reads slowly; b.md is instant
+    const { session, bodies } = makeSession({ "a.md": "A v1", "b.md": "B" }, {}, delays);
+    const openA = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await openA; // on A, clean
+
+    bodies.set("a.md", "A v2"); // A changed on disk → reconcile WOULD reload it
+    const rp = session.reconcile(); // listNotes resolves, then it parks on readNote("a.md") (50ms)
+    await vi.advanceTimersByTimeAsync(0); // let reconcile pass its guards and issue readNote("a.md")
+    const op = session.open("b.md"); // user switches to B while A's read is in flight
+    await vi.advanceTimersByTimeAsync(60); // both reads resolve
+    await Promise.all([rp, op]);
+
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("b.md");
+    expect(s.initialText).toBe("B"); // NOT "A v2" — the stale reconcile read was dropped
+    expect(s.savedText).toBe("B");
   });
 
   it("C2: editorKey changes when re-opening the SAME note at the SAME line", async () => {
