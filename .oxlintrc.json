@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "import"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/iframe-missing-sandbox": "off",
+    "import/no-unassigned-import": "off",
+    "no-underscore-dangle": "off"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/src-tauri/target/**",
+    "**/src-tauri/gen/**",
+    "apps/landing/public/demo/**"
+  ]
+}

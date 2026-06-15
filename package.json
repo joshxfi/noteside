@@ -1,24 +1,29 @@
 {
   "name": "noteside",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "description": "Noteside — notes for keyboard people. Offline, local-first, vim-first notes.",
-  "packageManager": "pnpm@10.27.0",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "dev": "turbo run dev",
     "dev:desktop": "turbo run dev --filter=@noteside/desktop",
     "dev:landing": "turbo run dev --filter=@noteside/landing",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "tauri": "pnpm --filter @noteside/desktop tauri",
     "demo:build": "pnpm --filter @noteside/desktop build:web && rm -rf apps/landing/public/demo && cp -r apps/desktop/dist apps/landing/public/demo"
   },
   "devDependencies": {
+    "oxfmt": "0.54.0",
+    "oxlint": "^1.69.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.27.0"
 }
