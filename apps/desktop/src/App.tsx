@@ -90,7 +90,10 @@ function Sidebar({
     <aside className={"av-sidebar" + (open ? "" : " is-collapsed")}>
       <div className="av-sidebar-inner">
         <div className="av-brand">
-          <div className="av-brandmark">Noteside</div>
+          <div className="av-brandmark">
+            Noteside
+            <span className="av-brandcur" />
+          </div>
           <div className="av-brandsub">notes for keyboard people</div>
         </div>
         <nav className="av-list">

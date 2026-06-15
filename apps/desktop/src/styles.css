@@ -203,6 +203,17 @@ body {
   color: var(--ink);
   line-height: 1;
 }
+/* brand wordmark: trailing plum block cursor (see brand guide) */
+.av-brandcur {
+  display: inline-block;
+  width: 0.44em;
+  height: 0.8em;
+  margin-left: 0.08em;
+  border-radius: 0.05em;
+  background: var(--accent);
+  vertical-align: baseline;
+  transform: translateY(0.06em);
+}
 .av-brandsub {
   margin-top: 6px;
   font-size: 10.5px;
