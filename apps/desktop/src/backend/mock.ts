@@ -1,6 +1,6 @@
 // In-memory backend for browser dev and the landing demo (no Tauri). Seeded
-// from the sample vault; search mirrors the Rust behaviour closely enough for
-// the demo. Config/last-vault persist to localStorage.
+// from the sample notebook; search mirrors the Rust behaviour closely enough for
+// the demo. Config/last-notebook persist to localStorage.
 import { NOTES } from "../data";
 import type { Config } from "../settings";
 import type { Backend, ContentHit, FileHit, GrepMode, NoteDoc, NoteMeta } from "./types";
@@ -152,14 +152,14 @@ function contentSearch(query: string, mode: GrepMode): ContentHit[] {
 
 export const mockBackend: Backend = {
   live: false,
-  async pickVault() {
-    return "/demo-vault";
+  async pickNotebook() {
+    return "/demo-notebook";
   },
-  async openVault() {
+  async openNotebook() {
     return metas();
   },
-  async currentVault() {
-    return "/demo-vault";
+  async currentNotebook() {
+    return "/demo-notebook";
   },
   async listNotes() {
     return metas();
@@ -225,21 +225,21 @@ export const mockBackend: Backend = {
       /* ignore */
     }
   },
-  async getLastVault() {
+  async getLastNotebook() {
     try {
-      return localStorage.getItem(LS("lastVault"));
+      return localStorage.getItem(LS("lastNotebook"));
     } catch {
       return null;
     }
   },
-  async setLastVault(path) {
+  async setLastNotebook(path) {
     try {
-      localStorage.setItem(LS("lastVault"), path);
+      localStorage.setItem(LS("lastNotebook"), path);
     } catch {
       /* ignore */
     }
   },
-  async watchVault() {
+  async watchNotebook() {
     return () => {};
   },
 };

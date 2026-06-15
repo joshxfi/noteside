@@ -6,16 +6,16 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
 use tauri::{AppHandle, Emitter};
 
-use crate::state::VaultState;
-use crate::vault;
+use crate::state::NotebookState;
+use crate::notebook;
 
-/// Watch the vault folder for external changes (other editors, git, sync). On a
+/// Watch the notebook folder for external changes (other editors, git, sync). On a
 /// debounced change to any `.md` file, rebuild the in-memory index and notify
-/// the frontend via the `vault:changed` event. Our own writes are skipped via
+/// the frontend via the `notebook:changed` event. Our own writes are skipped via
 /// `suppress_until`.
 pub fn start_watcher(
     app: AppHandle,
-    vault: Arc<Mutex<VaultState>>,
+    notebook: Arc<Mutex<NotebookState>>,
     root: PathBuf,
 ) -> notify::Result<Debouncer<RecommendedWatcher, FileIdMap>> {
     let mut debouncer = new_debouncer(
@@ -31,7 +31,7 @@ pub fn start_watcher(
             if !touches_md {
                 return;
             }
-            let mut g = match vault.lock() {
+            let mut g = match notebook.lock() {
                 Ok(g) => g,
                 Err(_) => return,
             };
@@ -41,9 +41,9 @@ pub fn start_watcher(
                 }
             }
             let Some(r) = g.root.clone() else { return };
-            g.records = vault::scan_vault(&r);
+            g.records = notebook::scan_notebook(&r);
             drop(g);
-            let _ = app.emit("vault:changed", ());
+            let _ = app.emit("notebook:changed", ());
         },
     )?;
     debouncer.watcher().watch(&root, RecursiveMode::Recursive)?;

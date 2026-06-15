@@ -9,7 +9,7 @@ pub enum AppError {
     #[error("invalid pattern: {0}")]
     Regex(#[from] regex::Error),
     #[error("no notebook is open")]
-    NoVault,
+    NoNotebook,
     #[error("{0}")]
     Msg(String),
 }

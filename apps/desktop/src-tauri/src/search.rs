@@ -2,7 +2,7 @@ use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 
 use crate::models::{ContentHit, FileHit};
-use crate::vault::NoteRecord;
+use crate::notebook::NoteRecord;
 
 fn file_hit(r: &NoteRecord, score: u32, positions: Vec<u32>) -> FileHit {
     FileHit {

@@ -69,7 +69,7 @@ Override the embed target any time with `VITE_DEMO_URL`.
 
 ## How it works
 
-- **Files-as-truth vault.** Notes are plain Markdown files in a folder you pick.
+- **Files-as-truth notebook.** Notes are plain Markdown files in a folder you pick.
   The Rust backend (`src-tauri/src/`) scans them into a rebuildable in-memory
   index, writes atomically (temp + fsync + rename), and watches the folder so
   external edits (other editors, git, sync) reload live. Nothing leaves your disk.

@@ -7,7 +7,7 @@ use crate::error::{AppError, Result};
 use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::search;
 use crate::state::AppState;
-use crate::vault::{self, NoteRecord};
+use crate::notebook::{self, NoteRecord};
 use crate::watcher;
 
 /// After our own write, ignore watcher echoes for a short window.
@@ -19,23 +19,23 @@ fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
     metas
 }
 
-/// Open (or switch to) a vault folder: scan all Markdown files into the in-memory
+/// Open (or switch to) a notebook folder: scan all Markdown files into the in-memory
 /// index, start the file watcher, and return the note list.
 #[tauri::command]
-pub fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> Result<Vec<NoteMeta>> {
+pub fn open_notebook(path: String, app: AppHandle, state: State<AppState>) -> Result<Vec<NoteMeta>> {
     let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err(AppError::Msg(format!("not a directory: {path}")));
     }
-    let records = vault::scan_vault(&root);
+    let records = notebook::scan_notebook(&root);
     let metas = sorted_metas(&records);
     {
-        let mut g = state.vault.lock().unwrap();
+        let mut g = state.notebook.lock().unwrap();
         g.root = Some(root.clone());
         g.records = records;
         g.suppress_until = None;
     }
-    match watcher::start_watcher(app, state.vault.clone(), root) {
+    match watcher::start_watcher(app, state.notebook.clone(), root) {
         Ok(d) => *state.watcher.lock().unwrap() = Some(d),
         Err(e) => eprintln!("noteside: file watcher failed to start: {e}"),
     }
@@ -43,14 +43,14 @@ pub fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> Resul
 }
 
 #[tauri::command]
-pub fn current_vault(state: State<AppState>) -> Option<String> {
-    let g = state.vault.lock().unwrap();
+pub fn current_notebook(state: State<AppState>) -> Option<String> {
+    let g = state.notebook.lock().unwrap();
     g.root.as_ref().map(|p| p.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn list_notes(state: State<AppState>) -> Vec<NoteMeta> {
-    let g = state.vault.lock().unwrap();
+    let g = state.notebook.lock().unwrap();
     sorted_metas(&g.records)
 }
 
@@ -58,11 +58,11 @@ pub fn list_notes(state: State<AppState>) -> Vec<NoteMeta> {
 #[tauri::command]
 pub fn read_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
     let root = {
-        let g = state.vault.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoVault)?
+        let g = state.notebook.lock().unwrap();
+        g.root.clone().ok_or(AppError::NoNotebook)?
     };
-    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
-    let rec = vault::read_record(&root, &abs)?;
+    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
+    let rec = notebook::read_record(&root, &abs)?;
     Ok(NoteDoc {
         meta: rec.meta,
         body: rec.body,
@@ -72,11 +72,11 @@ pub fn read_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
 /// Atomically write the note and refresh its cached record. Returns fresh meta.
 #[tauri::command]
 pub fn save_note(path: String, body: String, state: State<AppState>) -> Result<NoteMeta> {
-    let mut g = state.vault.lock().unwrap();
-    let root = g.root.clone().ok_or(AppError::NoVault)?;
-    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
-    vault::atomic_write(&abs, &body)?;
-    let meta = vault::parse_meta(path.clone(), &body, vault::mtime_millis(&abs));
+    let mut g = state.notebook.lock().unwrap();
+    let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
+    notebook::atomic_write(&abs, &body)?;
+    let meta = notebook::parse_meta(path.clone(), &body, notebook::mtime_millis(&abs));
     if let Some(rec) = g.records.iter_mut().find(|r| r.meta.path == path) {
         rec.meta = meta.clone();
         rec.body = body;
@@ -92,19 +92,19 @@ pub fn save_note(path: String, body: String, state: State<AppState>) -> Result<N
 
 #[tauri::command]
 pub fn create_note(title: Option<String>, state: State<AppState>) -> Result<NoteMeta> {
-    let mut g = state.vault.lock().unwrap();
-    let root = g.root.clone().ok_or(AppError::NoVault)?;
+    let mut g = state.notebook.lock().unwrap();
+    let root = g.root.clone().ok_or(AppError::NoNotebook)?;
     let raw = title.unwrap_or_default();
     let display = if raw.trim().is_empty() {
         "Untitled".to_string()
     } else {
         raw.trim().to_string()
     };
-    let abs = vault::unique_note_path(&root, &vault::slugify(&display));
+    let abs = notebook::unique_note_path(&root, &notebook::slugify(&display));
     let initial = format!("# {display}\n\n");
-    vault::atomic_write(&abs, &initial)?;
-    let rel = vault::rel_path(&root, &abs);
-    let meta = vault::parse_meta(rel, &initial, vault::mtime_millis(&abs));
+    notebook::atomic_write(&abs, &initial)?;
+    let rel = notebook::rel_path(&root, &abs);
+    let meta = notebook::parse_meta(rel, &initial, notebook::mtime_millis(&abs));
     g.records.push(NoteRecord {
         meta: meta.clone(),
         body: initial,
@@ -115,9 +115,9 @@ pub fn create_note(title: Option<String>, state: State<AppState>) -> Result<Note
 
 #[tauri::command]
 pub fn delete_note(path: String, state: State<AppState>) -> Result<()> {
-    let mut g = state.vault.lock().unwrap();
-    let root = g.root.clone().ok_or(AppError::NoVault)?;
-    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
+    let mut g = state.notebook.lock().unwrap();
+    let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
     if abs.exists() {
         std::fs::remove_file(&abs)?;
     }
@@ -128,7 +128,7 @@ pub fn delete_note(path: String, state: State<AppState>) -> Result<()> {
 
 #[tauri::command]
 pub fn search_files(query: String, state: State<AppState>) -> Vec<FileHit> {
-    let g = state.vault.lock().unwrap();
+    let g = state.notebook.lock().unwrap();
     search::fuzzy_files(&g.records, &query, 200)
 }
 
@@ -138,6 +138,6 @@ pub fn search_content(
     mode: String,
     state: State<AppState>,
 ) -> Result<Vec<ContentHit>> {
-    let g = state.vault.lock().unwrap();
+    let g = state.notebook.lock().unwrap();
     Ok(search::content_search(&g.records, &query, &mode, 200)?)
 }

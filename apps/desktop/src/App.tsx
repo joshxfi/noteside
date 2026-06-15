@@ -1,4 +1,4 @@
-// App.tsx — window chrome, vault sidebar, editor + finder + settings orchestration.
+// App.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
 import { useEffect, useRef, useState } from "react";
 import { backend, type NoteDoc, type NoteMeta } from "./backend";
 import { createAutosave } from "./autosave";
@@ -21,7 +21,7 @@ const RELATIVE_NUMBERS = true;
 const CONFIG_ID = "config";
 const AUTOSAVE_MS = 800;
 
-type Status = "boot" | "no-vault" | "ready";
+type Status = "boot" | "no-notebook" | "ready";
 type FinderMode = "all" | "files" | "content";
 
 function relTime(ms: number): string {
@@ -131,7 +131,7 @@ function Sidebar({
   );
 }
 
-function VaultPicker({ onPick }: { onPick: () => void }) {
+function NotebookPicker({ onPick }: { onPick: () => void }) {
   return (
     <div className="av-empty">
       <div className="av-mark" aria-label="Noteside">
@@ -226,10 +226,10 @@ export function App() {
     setUserKeymaps(cfg.keymaps);
   }, [cfg.keymaps]);
 
-  const openVault = async (path: string) => {
-    const metas = await backend.openVault(path);
+  const openNotebook = async (path: string) => {
+    const metas = await backend.openNotebook(path);
     setNotes(metas);
-    void backend.setLastVault(path);
+    void backend.setLastNotebook(path);
     setStatus("ready");
     if (metas.length) await openNote(metas[0].id);
     else {
@@ -238,7 +238,7 @@ export function App() {
     }
   };
 
-  // boot: load config, then last vault
+  // boot: load config, then last notebook
   useEffect(() => {
     (async () => {
       try {
@@ -249,18 +249,18 @@ export function App() {
       }
       configLoaded.current = true;
       try {
-        const last = await backend.getLastVault();
-        if (last) await openVault(last);
-        else setStatus("no-vault");
+        const last = await backend.getLastNotebook();
+        if (last) await openNotebook(last);
+        else setStatus("no-notebook");
       } catch {
-        setStatus("no-vault");
+        setStatus("no-notebook");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // react to external vault changes (other editors, git, sync)
-  const onVaultChanged = async () => {
+  // react to external notebook changes (other editors, git, sync)
+  const onNotebookChanged = async () => {
     let list: NoteMeta[];
     try {
       list = await backend.listNotes();
@@ -287,13 +287,13 @@ export function App() {
       /* ignore */
     }
   };
-  const changedRef = useRef(onVaultChanged);
-  changedRef.current = onVaultChanged;
+  const changedRef = useRef(onNotebookChanged);
+  changedRef.current = onNotebookChanged;
   useEffect(() => {
     let un: (() => void) | null = null;
     let cancelled = false;
     backend
-      .watchVault(() => void changedRef.current())
+      .watchNotebook(() => void changedRef.current())
       .then((u) => {
         if (cancelled) u();
         else un = u;
@@ -305,14 +305,14 @@ export function App() {
     };
   }, []);
 
-  const pickVault = async () => {
-    const path = await backend.pickVault();
+  const pickNotebook = async () => {
+    const path = await backend.pickNotebook();
     if (path) {
       setStatus("boot");
       try {
-        await openVault(path);
+        await openNotebook(path);
       } catch {
-        setStatus("no-vault");
+        setStatus("no-notebook");
       }
     }
   };
@@ -565,8 +565,8 @@ export function App() {
               <div className="av-empty">
                 <div className="av-empty-glyph">▌</div>
               </div>
-            ) : status === "no-vault" ? (
-              <VaultPicker onPick={() => void pickVault()} />
+            ) : status === "no-notebook" ? (
+              <NotebookPicker onPick={() => void pickNotebook()} />
             ) : showEditor ? (
               <Editor
                 key={

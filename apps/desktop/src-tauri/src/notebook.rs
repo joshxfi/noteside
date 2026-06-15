@@ -14,9 +14,9 @@ pub struct NoteRecord {
     pub body: String,
 }
 
-/// Walk a vault folder and read every Markdown file into a record. Hidden
+/// Walk a notebook folder and read every Markdown file into a record. Hidden
 /// directories (including `.noteside/` and `.git/`) are skipped.
-pub fn scan_vault(root: &Path) -> Vec<NoteRecord> {
+pub fn scan_notebook(root: &Path) -> Vec<NoteRecord> {
     let mut out = Vec::new();
     for entry in WalkDir::new(root)
         .into_iter()
@@ -44,8 +44,8 @@ fn is_hidden(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Join a client-supplied relative note path onto the vault root, rejecting any
-/// path that is absolute or contains `..` so it can't escape the vault.
+/// Join a client-supplied relative note path onto the notebook root, rejecting any
+/// path that is absolute or contains `..` so it can't escape the notebook.
 pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
     let p = Path::new(rel);
     if p.is_absolute() {
@@ -218,7 +218,7 @@ pub fn slugify(title: &str) -> String {
     }
 }
 
-/// Pick a unique `<slug>.md` (or `<slug>-N.md`) path within the vault root.
+/// Pick a unique `<slug>.md` (or `<slug>-N.md`) path within the notebook root.
 pub fn unique_note_path(root: &Path, slug: &str) -> PathBuf {
     let first = root.join(format!("{slug}.md"));
     if !first.exists() {
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn safe_join_rejects_traversal_and_absolute() {
-        let root = Path::new("/vault");
+        let root = Path::new("/notebook");
         assert!(safe_join(root, "a.md").is_some());
         assert!(safe_join(root, "notes/a.md").is_some());
         assert!(safe_join(root, "./a.md").is_some());

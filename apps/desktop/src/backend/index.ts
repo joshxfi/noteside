@@ -5,5 +5,5 @@ import type { Backend } from "./types";
 
 export * from "./types";
 
-/** The active backend: real Rust vault inside Tauri, in-memory mock in a browser. */
+/** The active backend: real Rust notebook inside Tauri, in-memory mock in a browser. */
 export const backend: Backend = isTauri() ? tauriBackend : mockBackend;

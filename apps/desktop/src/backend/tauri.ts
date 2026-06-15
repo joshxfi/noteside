@@ -8,15 +8,15 @@ import type { Backend, ContentHit, FileHit, NoteDoc, NoteMeta } from "./types";
 let storeP: Promise<Store> | null = null;
 const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults: {} }));
 
-/** Real backend: talks to the Rust vault over Tauri IPC; settings via the store plugin. */
+/** Real backend: talks to the Rust notebook over Tauri IPC; settings via the store plugin. */
 export const tauriBackend: Backend = {
   live: true,
-  async pickVault() {
+  async pickNotebook() {
     const res = await openDialog({ directory: true, multiple: false, title: "Open a notebook" });
     return typeof res === "string" ? res : null;
   },
-  openVault: (path) => invoke<NoteMeta[]>("open_vault", { path }),
-  currentVault: () => invoke<string | null>("current_vault"),
+  openNotebook: (path) => invoke<NoteMeta[]>("open_notebook", { path }),
+  currentNotebook: () => invoke<string | null>("current_notebook"),
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
   saveNote: (path, body) => invoke<NoteMeta>("save_note", { path, body }),
@@ -30,13 +30,13 @@ export const tauriBackend: Backend = {
   async setConfig(cfg) {
     await (await store()).set("config", cfg);
   },
-  async getLastVault() {
-    return (await (await store()).get<string>("lastVault")) ?? null;
+  async getLastNotebook() {
+    return (await (await store()).get<string>("lastNotebook")) ?? null;
   },
-  async setLastVault(path) {
-    await (await store()).set("lastVault", path);
+  async setLastNotebook(path) {
+    await (await store()).set("lastNotebook", path);
   },
-  async watchVault(onChange) {
-    return await listen("vault:changed", () => onChange());
+  async watchNotebook(onChange) {
+    return await listen("notebook:changed", () => onChange());
   },
 };

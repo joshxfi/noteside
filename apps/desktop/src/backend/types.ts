@@ -1,5 +1,5 @@
 // The backend contract. Two adapters implement it: `tauri` (real IPC to the
-// Rust vault) and `mock` (in-memory, for browser dev + the landing demo).
+// Rust notebook) and `mock` (in-memory, for browser dev + the landing demo).
 import type { Config } from "../settings";
 
 export type GrepMode = "plain" | "regex" | "fuzzy";
@@ -38,11 +38,11 @@ export interface ContentHit {
 }
 
 export interface Backend {
-  /** true when backed by the real Rust vault (vs the in-memory mock). */
+  /** true when backed by the real Rust notebook (vs the in-memory mock). */
   readonly live: boolean;
-  pickVault(): Promise<string | null>;
-  openVault(path: string): Promise<NoteMeta[]>;
-  currentVault(): Promise<string | null>;
+  pickNotebook(): Promise<string | null>;
+  openNotebook(path: string): Promise<NoteMeta[]>;
+  currentNotebook(): Promise<string | null>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
   saveNote(path: string, body: string): Promise<NoteMeta>;
@@ -52,8 +52,8 @@ export interface Backend {
   searchContent(query: string, mode: GrepMode): Promise<ContentHit[]>;
   getConfig(): Promise<Partial<Config> | null>;
   setConfig(cfg: Config): Promise<void>;
-  getLastVault(): Promise<string | null>;
-  setLastVault(path: string): Promise<void>;
-  /** Subscribe to external vault changes (watcher); resolves to an unsubscribe fn. */
-  watchVault(onChange: () => void): Promise<() => void>;
+  getLastNotebook(): Promise<string | null>;
+  setLastNotebook(path: string): Promise<void>;
+  /** Subscribe to external notebook changes (watcher); resolves to an unsubscribe fn. */
+  watchNotebook(onChange: () => void): Promise<() => void>;
 }

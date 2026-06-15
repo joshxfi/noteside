@@ -1,8 +1,8 @@
-// data.ts — the note "vault". Each note carries a path, git status and a
+// data.ts — the note "notebook". Each note carries a path, git status and a
 // frecency score so the fuzzy finder has something real to rank and annotate.
 //
 // This is the in-memory seed used by the prototype/demo. When the Rust backend
-// lands, these come from scanning the user's vault folder (Markdown files +
+// lands, these come from scanning the user's notebook folder (Markdown files +
 // frontmatter) and git status; the shape stays the same.
 
 import type { Note } from "./types";
@@ -160,7 +160,7 @@ Follow up
     git: "staged",
     frecency: 51,
     body: `Now
-  - Fuzzy file finder over the vault (this).
+  - Fuzzy file finder over the notebook (this).
   - Plain-text mode for people who don't know vim.
 
 Next

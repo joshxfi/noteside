@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Note metadata for the sidebar/list and search results. `id` is the
-/// vault-relative path (stable enough for v1; renames produce a new id).
+/// notebook-relative path (stable enough for v1; renames produce a new id).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteMeta {

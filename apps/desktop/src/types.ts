@@ -1,4 +1,4 @@
-// Shared domain types for the seed/mock vault (see data.ts). The live backend
+// Shared domain types for the seed/mock notebook (see data.ts). The live backend
 // uses the richer shapes in backend/types.ts.
 
 export type GitStatus = "modified" | "untracked" | "staged" | "deleted" | "renamed" | null;
