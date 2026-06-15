@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest bench --run",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri"
   },

@@ -9,10 +9,10 @@
 
 mod commands;
 mod error;
-mod models;
-mod search;
+pub mod models;
+pub mod search;
 mod state;
-mod notebook;
+pub mod notebook;
 mod watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
