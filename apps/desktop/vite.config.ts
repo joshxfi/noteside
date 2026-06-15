@@ -10,6 +10,25 @@ export default defineConfig({
   // Relative base so the same build can be served standalone AND embedded
   // in the landing page's <iframe> from /demo/.
   base: "./",
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // Split the heavy editor + react vendors so they cache independently
+        // (mainly helps the landing demo, which loads over the network).
+        manualChunks(id) {
+          if (
+            id.includes("@codemirror") ||
+            id.includes("@replit/codemirror-vim") ||
+            id.includes("@lezer")
+          )
+            return "editor";
+          if (id.includes("/react-dom/") || id.includes("/react/")) return "react";
+          return undefined;
+        },
+      },
+    },
+  },
   clearScreen: false,
   server: {
     port: 1420,
