@@ -64,25 +64,40 @@ pnpm --filter @noteside/landing build
 
 Override the embed target any time with `VITE_DEMO_URL`.
 
-## Implemented from the design
+## How it works
 
-- **Vim engine** (`apps/desktop/src/vim.ts`): modes (normal/insert/visual/command/
-  search), motions (`h j k l w b e 0 ^ $ gg G`), operators (`dd dw d$ d0 x D C r`),
-  counts, registers, `p`/`P`, `u`, visual select/yank/delete, `:` commands
-  (`:w :q :wq :42 :set :nav :find :grep …`), `/` search + `n`/`N`, and a
-  configurable insert-escape mapping (e.g. `jj`).
-- **Vault sidebar**, status bar, command line, and the keystroke **HUD**.
-- **Settings panel** + the live `~/.notesiderc` **config buffer** (edit & `:w` to apply).
-- **Fuzzy finder** (`fff.ts`) — Files + Content (plain/regex/fuzzy) with a preview
-  pane, git status, frecency, and constraint syntax (`git:modified`, `*.md`, `!dir/`).
-  Its result shapes mirror the [`fff-search`](https://github.com/dmtrKovalenko/fff)
-  crate so the JS seam can be swapped for the real Rust backend.
+- **Files-as-truth vault.** Notes are plain Markdown files in a folder you pick.
+  The Rust backend (`src-tauri/src/`) scans them into a rebuildable in-memory
+  index, writes atomically (temp + fsync + rename), and watches the folder so
+  external edits (other editors, git, sync) reload live. Nothing leaves your disk.
+- **First-class vim** via **CodeMirror 6 + `@replit/codemirror-vim`**: real modes,
+  motions, operators, registers, macros, counts, `/` search, and ex-commands wired
+  to the app — `:w :q :wq :find :grep :nav :settings :config` (plus `:set` for vim
+  options). Markdown highlighting, relative line numbers, a vim command line, and a
+  live mode in the status bar. `Cmd/Ctrl-S` and debounced autosave.
+- **Search**: fuzzy file/title finding (Rust `nucleo`) + line-level content search
+  (plain / regex / fuzzy) with a preview pane.
+- **Settings** persist via the Tauri store plugin; the live `~/.notesiderc` config
+  buffer applies on `:w`.
+- **Backend seam** (`src/backend/`): a `Backend` interface with a Tauri adapter
+  (real IPC) and an in-memory mock, so `pnpm dev:web` and the landing demo run
+  without a Rust backend.
 
-## Notes / follow-ups
+## Releasing (v1)
 
-- **Fonts** load from Google Fonts to match the design. For a truly offline app,
-  vendor them locally (e.g. `@fontsource`); the CSS stacks fall back to system
-  serif/mono meanwhile.
-- The app currently runs on an **in-memory seed vault** (`src/data.ts`). The Rust
-  backend (vault scan, atomic Markdown writes, `notify` watcher, SQLite/FTS5,
-  `fff-search` palette) is the next phase — wired in as `#[tauri::command]`s.
+```bash
+pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png  # full icon set
+pnpm tauri build                                                   # native installers
+```
+
+Code signing/notarization (macOS Developer ID, Windows Authenticode) and
+auto-update (`tauri-plugin-updater`) require your own certificates + a release
+feed — wire them into CI per the [Tauri distribution docs](https://v2.tauri.app/distribute/).
+
+## Scale & follow-ups
+
+- The in-memory index targets ~1–5k notes (instant). For 10k+, swap the search
+  module for SQLite **FTS5** behind the same seam — no UI changes.
+- Content-search byte ranges assume ASCII; multi-byte highlight alignment is a
+  known v1 limitation.
+- Future: inline live-preview (CM6 decorations), backlinks, note delete UI, sync.
