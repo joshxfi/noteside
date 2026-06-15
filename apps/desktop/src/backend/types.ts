@@ -37,6 +37,14 @@ export interface ContentHit {
   ranges: [number, number][];
 }
 
+/** A note that links to the current one (one reference line per source note). */
+export interface Backlink {
+  id: string;
+  title: string;
+  lineNumber: number;
+  line: string;
+}
+
 export interface Backend {
   /** true when backed by the real Rust notebook (vs the in-memory mock). */
   readonly live: boolean;
@@ -45,8 +53,8 @@ export interface Backend {
   currentNotebook(): Promise<string | null>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
-  /** Every note with its body — backs link resolution / the backlinks panel. */
-  readAllNotes(): Promise<NoteDoc[]>;
+  /** Notes that link to `noteId` via [[wikilinks]] — scanned backend-side. */
+  backlinks(noteId: string): Promise<Backlink[]>;
   saveNote(path: string, body: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
   deleteNote(path: string): Promise<void>;

@@ -9,6 +9,7 @@
 
 mod commands;
 mod error;
+pub mod links;
 pub mod models;
 pub mod search;
 mod state;
@@ -46,6 +47,7 @@ pub fn run() {
             commands::delete_note,
             commands::search_files,
             commands::search_content,
+            commands::backlinks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

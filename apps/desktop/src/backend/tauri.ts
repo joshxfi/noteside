@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Config } from "../settings";
-import type { Backend, ContentHit, FileHit, NoteDoc, NoteMeta } from "./types";
+import type { Backend, Backlink, ContentHit, FileHit, NoteDoc, NoteMeta } from "./types";
 
 let storeP: Promise<Store> | null = null;
 const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults: {} }));
@@ -19,11 +19,7 @@ export const tauriBackend: Backend = {
   currentNotebook: () => invoke<string | null>("current_notebook"),
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
-  async readAllNotes() {
-    // TODO: a dedicated indexed command when notebooks get large; fine for now.
-    const metas = await invoke<NoteMeta[]>("list_notes");
-    return Promise.all(metas.map((m) => invoke<NoteDoc>("read_note", { path: m.path })));
-  },
+  backlinks: (noteId) => invoke<Backlink[]>("backlinks", { id: noteId }),
   saveNote: (path, body) => invoke<NoteMeta>("save_note", { path, body }),
   createNote: (title) => invoke<NoteMeta>("create_note", { title: title ?? null }),
   deleteNote: (path) => invoke<void>("delete_note", { path }),

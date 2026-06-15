@@ -9,7 +9,7 @@ import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
 import { Backlinks } from "./components/Backlinks";
-import { type Backlink, computeBacklinks, resolveLink } from "./links";
+import { type Backlink, resolveLink } from "./links";
 import {
   accentValue,
   CONFIG_DEFAULTS,
@@ -517,11 +517,8 @@ export function App() {
       return;
     }
     try {
-      const docs = await backend.readAllNotes();
-      setBacklinks({
-        title: openDoc?.title ?? activeId,
-        refs: computeBacklinks(activeId, docs, notes),
-      });
+      const refs = await backend.backlinks(activeId);
+      setBacklinks({ title: openDoc?.title ?? activeId, refs });
     } catch (e) {
       flash(`backlinks failed: ${e}`);
     }

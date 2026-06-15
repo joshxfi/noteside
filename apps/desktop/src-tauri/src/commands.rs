@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, State};
 
 use crate::error::{AppError, Result};
-use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
+use crate::links;
+use crate::models::{Backlink, ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::search;
 use crate::state::AppState;
 use crate::notebook::{self, NoteRecord};
@@ -140,4 +141,12 @@ pub fn search_content(
 ) -> Result<Vec<ContentHit>> {
     let g = state.notebook.lock().unwrap();
     Ok(search::content_search(&g.records, &query, &mode, 200)?)
+}
+
+/// Notes that link to `id` via [[wikilinks]]. Scanned in Rust over the cached
+/// index so only the matching references cross IPC (not every note body).
+#[tauri::command]
+pub fn backlinks(id: String, state: State<AppState>) -> Result<Vec<Backlink>> {
+    let g = state.notebook.lock().unwrap();
+    Ok(links::backlinks(&g.records, &id))
 }

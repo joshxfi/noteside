@@ -2,7 +2,9 @@
 // resolving a target to a note, the link under a cursor, and backlinks. Kept
 // free of CodeMirror/React so it's unit-testable and reused by the editor
 // decorations, the `gf` follow command, and the backlinks panel.
-import type { NoteDoc, NoteMeta } from "./backend";
+import type { Backlink, NoteDoc, NoteMeta } from "./backend";
+
+export type { Backlink };
 
 export interface WikiLink {
   target: string;
@@ -58,13 +60,6 @@ export function resolveLink(target: string, notes: NoteMeta[]): NoteMeta | null 
     (ts ? notes.find((n) => slug(n.title) === ts) : undefined) ??
     null
   );
-}
-
-export interface Backlink {
-  id: string;
-  title: string;
-  lineNumber: number;
-  line: string;
 }
 
 /** Notes (other than `activeId`) whose body has a wikilink resolving to it. */

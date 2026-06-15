@@ -2,6 +2,7 @@
 // from the sample notebook; search mirrors the Rust behaviour closely enough for
 // the demo. Config/last-notebook persist to localStorage.
 import { NOTES } from "../data";
+import { computeBacklinks } from "../links";
 import type { Config } from "../settings";
 import type { Backend, ContentHit, FileHit, GrepMode, NoteDoc, NoteMeta } from "./types";
 
@@ -169,8 +170,10 @@ export const mockBackend: Backend = {
     if (!r) throw new Error(`no such note: ${path}`);
     return { ...r.meta, body: r.body };
   },
-  async readAllNotes(): Promise<NoteDoc[]> {
-    return metas().map((m) => ({ ...m, body: recs.get(m.path)?.body ?? "" }));
+  async backlinks(noteId) {
+    const notes = metas();
+    const docs = notes.map((m) => ({ ...m, body: recs.get(m.path)?.body ?? "" }));
+    return computeBacklinks(noteId, docs, notes);
   },
   async saveNote(path, body) {
     const existing = recs.get(path);
