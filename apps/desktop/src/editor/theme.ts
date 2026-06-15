@@ -35,12 +35,12 @@ export const nsTheme = EditorView.theme({
   },
   ".cm-gutters": {
     backgroundColor: "var(--paper)",
-    color: "var(--ink-faint)",
+    color: "var(--ink-soft)",
     border: "none",
     fontFamily: "var(--mono)",
-    fontSize: "calc(var(--editor-size) * 0.62)",
+    fontSize: "calc(var(--editor-size) * 0.8)",
   },
-  ".cm-lineNumbers .cm-gutterElement": { padding: "0 6px 0 16px", minWidth: "32px" },
+  ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 16px", minWidth: "36px" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
     backgroundColor: "var(--sel)",
   },

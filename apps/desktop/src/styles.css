@@ -1301,3 +1301,57 @@ html.embed .av-window {
   border: 0;
   box-shadow: none;
 }
+
+/* ── CodeMirror: force the vim block cursor to the accent (override the
+      package default #ff9696) and use the accent for the bar caret too ── */
+.av-cm .cm-fat-cursor,
+.av-cm .cm-fat-cursor.cm-cursor-primary {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+.av-cm .cm-fat-cursor.cm-cursor-secondary {
+  background: color-mix(in oklab, var(--accent), transparent 55%) !important;
+}
+.av-cm .cm-cursor {
+  border-left-color: var(--accent);
+}
+
+/* ── legibility: bump the smallest UI fonts (settings panel, status, meta) ── */
+.set-head p {
+  font-size: 11.5px;
+}
+.set-sec {
+  font-size: 11px;
+}
+.set-rowlabel {
+  font-size: 13.5px;
+}
+.set-rowhint {
+  font-size: 11px;
+}
+.set-pill {
+  font-size: 13px;
+}
+.set-stepper span {
+  font-size: 13.5px;
+}
+.set-select {
+  font-size: 13.5px;
+}
+.set-custom {
+  font-size: 13px;
+}
+.set-note {
+  font-size: 11.5px;
+}
+.set-editfile,
+.set-done {
+  font-size: 13.5px;
+}
+.av-status {
+  font-size: 12.5px;
+}
+.av-item-meta,
+.av-brandsub {
+  font-size: 11px;
+}

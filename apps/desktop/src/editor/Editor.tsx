@@ -82,7 +82,9 @@ export function Editor(props: EditorProps) {
     };
 
     const extensions: Extension[] = [];
-    if (vimMode) extensions.push(vim({ status: true }));
+    // No persistent status bar: the mode + counts live in our own status bar
+    // below. The `:` / `/` command line still appears as a transient panel.
+    if (vimMode) extensions.push(vim());
     extensions.push(
       lineNumbers(relativeNumbers ? { formatNumber: relFmt } : undefined),
       highlightActiveLine(),
