@@ -61,7 +61,7 @@ pub fn read_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
         let g = state.vault.lock().unwrap();
         g.root.clone().ok_or(AppError::NoVault)?
     };
-    let abs = root.join(&path);
+    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
     let rec = vault::read_record(&root, &abs)?;
     Ok(NoteDoc {
         meta: rec.meta,
@@ -74,7 +74,7 @@ pub fn read_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
 pub fn save_note(path: String, body: String, state: State<AppState>) -> Result<NoteMeta> {
     let mut g = state.vault.lock().unwrap();
     let root = g.root.clone().ok_or(AppError::NoVault)?;
-    let abs = root.join(&path);
+    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
     vault::atomic_write(&abs, &body)?;
     let meta = vault::parse_meta(path.clone(), &body, vault::mtime_millis(&abs));
     if let Some(rec) = g.records.iter_mut().find(|r| r.meta.path == path) {
@@ -117,7 +117,7 @@ pub fn create_note(title: Option<String>, state: State<AppState>) -> Result<Note
 pub fn delete_note(path: String, state: State<AppState>) -> Result<()> {
     let mut g = state.vault.lock().unwrap();
     let root = g.root.clone().ok_or(AppError::NoVault)?;
-    let abs = root.join(&path);
+    let abs = vault::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the vault".into()))?;
     if abs.exists() {
         std::fs::remove_file(&abs)?;
     }

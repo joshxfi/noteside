@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use walkdir::WalkDir;
@@ -42,6 +42,22 @@ fn is_hidden(path: &Path) -> bool {
         .and_then(|n| n.to_str())
         .map(|n| n.starts_with('.'))
         .unwrap_or(false)
+}
+
+/// Join a client-supplied relative note path onto the vault root, rejecting any
+/// path that is absolute or contains `..` so it can't escape the vault.
+pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
+    let p = Path::new(rel);
+    if p.is_absolute() {
+        return None;
+    }
+    for c in p.components() {
+        match c {
+            Component::Normal(_) | Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    Some(root.join(p))
 }
 
 pub fn rel_path(root: &Path, abs: &Path) -> String {
