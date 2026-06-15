@@ -8,4 +8,13 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  build: {
+    rollupOptions: {
+      // Multi-page: the landing + the standalone brand guide (served at /brand.html).
+      input: {
+        main: "index.html",
+        brand: "brand.html",
+      },
+    },
+  },
 });

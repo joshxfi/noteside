@@ -1,0 +1,398 @@
+@import "tailwindcss";
+
+/* Noteside Brand Guide — ported from the design file. Light-only, self-contained. */
+:root {
+  --serif: "Newsreader", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --paper: oklch(0.971 0.011 79);
+  --paper-2: oklch(0.948 0.014 78);
+  --paper-3: oklch(0.918 0.017 77);
+  --ink: oklch(0.315 0.022 53);
+  --ink-soft: oklch(0.47 0.02 56);
+  --ink-faint: oklch(0.635 0.016 60);
+  --rule: oklch(0.886 0.016 75);
+  --rule-soft: oklch(0.918 0.013 76);
+  --plum: oklch(0.565 0.095 350);
+  --plum-ink: oklch(0.985 0.01 80);
+  --ink-bg: oklch(0.222 0.012 58);
+  --ink-bg-paper: oklch(0.892 0.016 78);
+  --plum-on-dark: color-mix(in oklab, oklch(0.565 0.095 350), white 20%);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  width: min(960px, 90vw);
+  margin: 0 auto;
+}
+
+/* ── masthead ─────────────────────────────────── */
+.top {
+  padding: 84px 0 30px;
+}
+.top .kicker {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--plum);
+  margin: 0 0 20px;
+}
+.top h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  margin: 0;
+}
+.top p {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  color: var(--ink-soft);
+  max-width: 40ch;
+  line-height: 1.5;
+  margin: 18px 0 0;
+}
+
+/* ── section scaffold ─────────────────────────── */
+section {
+  padding: 52px 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 0 34px;
+}
+.sec-h .num {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--plum);
+  font-weight: 600;
+}
+.sec-h h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.9rem;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.sec-h .note {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  max-width: 32ch;
+  text-align: right;
+  line-height: 1.5;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.panel {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 230px;
+  background: var(--paper);
+}
+.panel.dark {
+  background: var(--ink-bg);
+  border-color: transparent;
+}
+.panel .lab {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.panel.dark .lab {
+  color: oklch(0.6 0.016 66);
+}
+
+/* ── logo primitives ──────────────────────────── */
+.bmark {
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24%;
+}
+.bmark .n {
+  font-family: var(--serif);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+}
+.bmark .cur {
+  background: var(--plum);
+  border-radius: 8%;
+}
+.panel.dark .bmark {
+  background: var(--ink-bg-paper);
+  box-shadow: none;
+}
+.panel.dark .bmark .n {
+  color: var(--ink-bg);
+}
+.panel.dark .bmark .cur {
+  background: var(--plum);
+}
+
+.wordtype {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  line-height: 1;
+  white-space: nowrap;
+}
+.blockcur {
+  display: inline-block;
+  width: 0.46em;
+  height: 0.82em;
+  background: var(--plum);
+  border-radius: 0.05em;
+  margin-left: 0.1em;
+  transform: translateY(0.05em);
+}
+.panel.dark .wordtype {
+  color: var(--ink-bg-paper);
+}
+
+/* size row */
+.sizes {
+  display: flex;
+  align-items: flex-end;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+.sizes .cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.sizes .cell .lab {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+/* ── color ─────────────────────────────────────── */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.sw {
+  border: 1px solid var(--rule-soft);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sw .chip {
+  height: 92px;
+}
+.sw .meta {
+  padding: 12px 13px 14px;
+}
+.sw .nm {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.sw .val {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  margin-top: 4px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.sw .role {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  margin-top: 7px;
+  letter-spacing: 0.04em;
+}
+
+/* ── type ──────────────────────────────────────── */
+.typecard {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 30px 32px;
+}
+.typecard + .typecard {
+  margin-top: 18px;
+}
+.typecard .tc-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule-soft);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+.typecard .tc-name {
+  font-size: 1.05rem;
+}
+.typecard .tc-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--plum);
+}
+.specimen-serif {
+  font-family: var(--serif);
+}
+.specimen-mono {
+  font-family: var(--mono);
+}
+.glyphline {
+  font-size: 2.4rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.scale {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+  color: var(--ink-soft);
+}
+.scale .row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  line-height: 1.35;
+}
+.scale .row > span:last-child {
+  flex: 1;
+  min-width: 0;
+}
+.scale .tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  width: 96px;
+  flex: none;
+  letter-spacing: 0.05em;
+}
+
+/* ── motif ─────────────────────────────────────── */
+.motif {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 28px;
+  align-items: center;
+}
+.motif .demo {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  min-height: 200px;
+  display: grid;
+  place-items: center;
+  background: var(--paper-2);
+}
+.motif .big {
+  font-family: var(--serif);
+  font-size: 3.6rem;
+  color: var(--ink);
+}
+.motif .big .cell {
+  background: var(--plum);
+  color: var(--paper);
+  border-radius: 4px;
+  padding: 0 0.06em 0.04em;
+}
+.motif p {
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+}
+.motif b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ── usage ─────────────────────────────────────── */
+.rules {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.rule-card {
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.rule-card .mk {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13px;
+  flex: none;
+  width: 18px;
+}
+.rule-card.do .mk {
+  color: oklch(0.58 0.085 150);
+}
+.rule-card.dont .mk {
+  color: oklch(0.56 0.13 26);
+}
+.rule-card p {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+footer {
+  padding: 40px 0 70px;
+  border-top: 1px solid var(--rule-soft);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .grid2,
+  .swatches,
+  .motif,
+  .rules {
+    grid-template-columns: 1fr;
+  }
+}

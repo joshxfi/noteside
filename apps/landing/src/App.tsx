@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { LogoMark, Wordmark } from "./Logo";
 
 const GITHUB = "https://github.com/joshxfi/noteside";
 const RELEASES = `${GITHUB}/releases`;
@@ -156,7 +157,7 @@ export function App() {
       <header className="nav">
         <div className="wrap nav-in">
           <a className="brand" href="#top">
-            Noteside
+            <Wordmark />
           </a>
           <nav className="nav-links">
             <a href="#features">Features</a>
@@ -182,6 +183,9 @@ export function App() {
 
       <main id="top">
         <section className="hero wrap">
+          <div className="hero-icon">
+            <LogoMark large />
+          </div>
           <p className="eyebrow">Offline · local-first · open source</p>
           <h1>A quiet page that keeps up with your hands.</h1>
           <p className="lede">
@@ -268,7 +272,8 @@ export function App() {
         <div className="wrap">
           <div className="foot-in">
             <div className="foot-brand">
-              Noteside<span>notes for keyboard people</span>
+              <Wordmark />
+              <span className="foot-sub">notes for keyboard people</span>
             </div>
             <div className="foot-links">
               <div className="foot-col">
@@ -276,6 +281,7 @@ export function App() {
                 <a href="#download">Download</a>
                 <a href="#demo">Live demo</a>
                 <a href="#features">Features</a>
+                <a href="/brand.html">Brand</a>
               </div>
               <div className="foot-col">
                 <span className="h">Open source</span>
