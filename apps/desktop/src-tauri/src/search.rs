@@ -153,3 +153,76 @@ fn subsequence_ranges(line: &str, needle_lc: &str) -> Option<Vec<[u32; 2]>> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::NoteMeta;
+
+    fn rec(path: &str, body: &str, pinned: bool, updated: i64) -> NoteRecord {
+        NoteRecord {
+            meta: NoteMeta {
+                id: path.into(),
+                path: path.into(),
+                title: path.into(),
+                tags: vec![],
+                created: None,
+                updated,
+                pinned,
+            },
+            body: body.into(),
+        }
+    }
+
+    #[test]
+    fn fuzzy_empty_query_returns_all_pinned_then_recent() {
+        let recs = vec![rec("a.md", "", false, 1), rec("b.md", "", true, 0), rec("c.md", "", false, 2)];
+        let hits = fuzzy_files(&recs, "", 10);
+        assert_eq!(hits.len(), 3);
+        assert_eq!(hits[0].path, "b.md"); // pinned first
+        assert_eq!(hits[1].path, "c.md"); // then updated desc
+        assert_eq!(hits[2].path, "a.md");
+    }
+
+    #[test]
+    fn fuzzy_matches_subsequence_and_excludes_non_matches() {
+        let recs = vec![rec("welcome.md", "", false, 0), rec("keymap.md", "", false, 0)];
+        let hits = fuzzy_files(&recs, "wel", 10);
+        assert_eq!(hits[0].path, "welcome.md");
+        assert!(!hits[0].positions.is_empty());
+        assert!(fuzzy_files(&recs, "zzzzz", 10).is_empty());
+    }
+
+    #[test]
+    fn content_plain_is_case_insensitive_with_ranges() {
+        let recs = vec![rec("a.md", "The Kettle is on\nsecond", false, 0)];
+        let hits = content_search(&recs, "kettle", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line_number, 1);
+        let [s, e] = hits[0].ranges[0];
+        assert_eq!(&hits[0].line[s as usize..e as usize], "Kettle");
+    }
+
+    #[test]
+    fn content_smart_case_is_sensitive_when_uppercase() {
+        let recs = vec![rec("a.md", "kettle Kettle", false, 0)];
+        let hits = content_search(&recs, "Kettle", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].ranges.len(), 1);
+    }
+
+    #[test]
+    fn content_regex_matches_and_rejects_invalid() {
+        let recs = vec![rec("a.md", "foo123 bar", false, 0)];
+        let hits = content_search(&recs, r"\d+", "regex", 10).unwrap();
+        let [s, e] = hits[0].ranges[0];
+        assert_eq!(&hits[0].line[s as usize..e as usize], "123");
+        assert!(content_search(&recs, "(", "regex", 10).is_err());
+    }
+
+    #[test]
+    fn content_empty_needle_is_empty() {
+        let recs = vec![rec("a.md", "anything", false, 0)];
+        assert!(content_search(&recs, "  ", "plain", 10).unwrap().is_empty());
+    }
+}

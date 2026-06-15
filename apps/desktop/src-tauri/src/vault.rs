@@ -233,3 +233,72 @@ pub fn unique_note_path(root: &Path, slug: &str) -> PathBuf {
         n += 1;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_join_rejects_traversal_and_absolute() {
+        let root = Path::new("/vault");
+        assert!(safe_join(root, "a.md").is_some());
+        assert!(safe_join(root, "notes/a.md").is_some());
+        assert!(safe_join(root, "./a.md").is_some());
+        assert!(safe_join(root, "../secret").is_none());
+        assert!(safe_join(root, "notes/../../escape").is_none());
+        assert!(safe_join(root, "/etc/passwd").is_none());
+    }
+
+    #[test]
+    fn slugify_basics() {
+        assert_eq!(slugify("Hello World"), "hello-world");
+        assert_eq!(slugify("  Spaces  & punctuation!! "), "spaces-punctuation");
+        assert_eq!(slugify(""), "untitled");
+        assert_eq!(slugify("---"), "untitled");
+    }
+
+    #[test]
+    fn title_from_frontmatter_wins() {
+        let text = "---\ntitle: My Title\ntags: [a, b]\npinned: true\n---\n# Heading\nbody";
+        let m = parse_meta("notes/x.md".into(), text, 0);
+        assert_eq!(m.title, "My Title");
+        assert_eq!(m.tags, vec!["a".to_string(), "b".to_string()]);
+        assert!(m.pinned);
+    }
+
+    #[test]
+    fn title_falls_back_to_heading_then_first_line_then_filename() {
+        assert_eq!(parse_meta("x.md".into(), "# A Heading\n\ntext", 0).title, "A Heading");
+        assert_eq!(parse_meta("x.md".into(), "just a line\nmore", 0).title, "just a line");
+        assert_eq!(parse_meta("my-cool-note.md".into(), "", 0).title, "my cool note");
+    }
+
+    #[test]
+    fn frontmatter_handles_crlf() {
+        let m = parse_meta("x.md".into(), "---\r\ntitle: CRLF Title\r\n---\r\nbody", 0);
+        assert_eq!(m.title, "CRLF Title");
+    }
+
+    #[test]
+    fn split_frontmatter_offsets_and_unclosed() {
+        let text = "---\ntitle: x\n---\nbody line";
+        let (fm, start) = split_frontmatter(text);
+        assert_eq!(fm, Some("title: x\n"));
+        assert_eq!(&text[start..], "body line");
+
+        let (none, zero) = split_frontmatter("---\ntitle: x\nstill going");
+        assert!(none.is_none());
+        assert_eq!(zero, 0);
+    }
+
+    #[test]
+    fn atomic_write_round_trip_no_temp_left() {
+        let dir = std::env::temp_dir().join(format!("noteside-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("sub").join("note.md");
+        atomic_write(&file, "hello\nworld").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "hello\nworld");
+        assert!(!file.with_file_name(".note.md.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
