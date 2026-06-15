@@ -4,9 +4,10 @@
   "private": true,
   "description": "Noteside — notes for keyboard people. Offline, local-first, vim-first notes.",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=@noteside/landing --filter=@noteside/desktop",
     "dev:desktop": "turbo run dev --filter=@noteside/desktop",
     "dev:landing": "turbo run dev --filter=@noteside/landing",
+    "dev:brand": "turbo run dev --filter=@noteside/brand",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

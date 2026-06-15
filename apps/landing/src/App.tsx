@@ -264,7 +264,6 @@ export function App() {
                 <a href="#download">Download</a>
                 <a href="#demo">Live demo</a>
                 <a href="#features">Features</a>
-                <a href="/brand.html">Brand</a>
               </div>
               <div className="foot-col">
                 <span className="h">Open source</span>
