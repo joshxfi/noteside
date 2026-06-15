@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { backend, type NoteDoc, type NoteMeta } from "./backend";
 import { createAutosave } from "./autosave";
 import { Editor } from "./editor/Editor";
-import type { AppCommand } from "./editor/exCommands";
+import { type AppCommand, setInsertEscape } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
 import {
@@ -213,6 +213,11 @@ export function App() {
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
     if (configLoaded.current) void backend.setConfig(cfg);
   }, [cfg]);
+
+  // keep the vim insert-escape mapping (e.g. "jj" → <Esc>) in sync with settings
+  useEffect(() => {
+    setInsertEscape(cfg.escMap);
+  }, [cfg.escMap]);
 
   const openVault = async (path: string) => {
     const metas = await backend.openVault(path);

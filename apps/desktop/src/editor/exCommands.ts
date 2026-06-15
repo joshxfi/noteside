@@ -19,6 +19,28 @@ export function setActiveHandlers(h: EditorHandlers | null) {
   active = h;
 }
 
+// Insert-mode escape mapping (e.g. "jj" -> <Esc>), synced from Settings. Vim is
+// a global singleton, so the mapping applies to whatever editor is mounted.
+let currentEscMap = "";
+export function setInsertEscape(seq: string) {
+  if (seq === currentEscMap) return;
+  if (currentEscMap) {
+    try {
+      Vim.unmap(currentEscMap, "insert");
+    } catch {
+      /* ignore */
+    }
+  }
+  currentEscMap = seq;
+  if (seq) {
+    try {
+      Vim.map(seq, "<Esc>", "insert");
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 let defined = false;
 export function defineExCommands() {
   if (defined) return;
