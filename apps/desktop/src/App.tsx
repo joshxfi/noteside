@@ -1,9 +1,10 @@
-// App.tsx — window chrome, sidebar, settings + config orchestration.
-import { useEffect, useMemo, useState } from "react";
-import { Editor, type EditorNote } from "./components/Editor";
-import { SettingsPanel } from "./components/SettingsPanel";
+// App.tsx — window chrome, vault sidebar, editor + finder + settings orchestration.
+import { useEffect, useRef, useState } from "react";
+import { backend, type NoteDoc, type NoteMeta } from "./backend";
+import { Editor } from "./editor/Editor";
+import type { AppCommand } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
-import { NOTES } from "./data";
+import { SettingsPanel } from "./components/SettingsPanel";
 import {
   accentValue,
   CONFIG_DEFAULTS,
@@ -12,21 +13,35 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
-import type { Note } from "./types";
 import { isTauri, windowControl } from "./useWindowControls";
 
-// These were live "tweaks" in the design tool; in the app they're sensible
-// defaults (could later move into Settings).
-const TWEAKS = { relNumbers: true, hud: "auto" as const };
+const RELATIVE_NUMBERS = true;
+const CONFIG_ID = "config";
+const AUTOSAVE_MS = 800;
 
+type Status = "boot" | "no-vault" | "ready";
 type FinderMode = "files" | "content";
+
+function relTime(ms: number): string {
+  const diff = Date.now() - ms;
+  const s = Math.round(diff / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.round(d / 7);
+  if (w < 5) return `${w}w ago`;
+  const mo = Math.round(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(d / 365)}y ago`;
+}
 
 function TrafficLights({ onCloseNote }: { onCloseNote: () => void }) {
   const tauri = isTauri();
-  const onRed = () => {
-    if (tauri) void windowControl("close");
-    else onCloseNote();
-  };
+  const onRed = () => (tauri ? void windowControl("close") : onCloseNote());
   return (
     <div className="av-lights">
       <button className="av-dot red" onClick={onRed} aria-label="close" />
@@ -57,15 +72,17 @@ function Sidebar({
   open,
   notes,
   activeId,
-  dirtyOf,
+  activeDirty,
   onPick,
+  onNew,
   onSettings,
 }: {
   open: boolean;
-  notes: Note[];
+  notes: NoteMeta[];
   activeId: string | null;
-  dirtyOf: (id: string) => boolean;
+  activeDirty: boolean;
   onPick: (id: string) => void;
+  onNew: () => void;
   onSettings: () => void;
 }) {
   return (
@@ -86,22 +103,41 @@ function Sidebar({
               <span className="av-item-main">
                 <span className="av-item-title">
                   {n.title}
-                  {dirtyOf(n.id) && <span className="av-item-dot" />}
+                  {n.id === activeId && activeDirty && <span className="av-item-dot" />}
                 </span>
                 <span className="av-item-meta">
-                  {n.tag} · {n.updated}
+                  {n.tags[0] ? `${n.tags[0]} · ` : ""}
+                  {relTime(n.updated)}
                 </span>
               </span>
             </button>
           ))}
         </nav>
         <div className="av-sidefoot">
+          <button className="av-config" onClick={onNew}>
+            <span className="av-cfg-glyph">＋</span> New note
+          </button>
           <button className="av-config" onClick={onSettings}>
             <span className="av-cfg-glyph">⚙</span> Settings
           </button>
         </div>
       </div>
     </aside>
+  );
+}
+
+function VaultPicker({ onPick }: { onPick: () => void }) {
+  return (
+    <div className="av-empty">
+      <div className="av-empty-glyph">▌</div>
+      <div className="av-empty-title">Open a vault</div>
+      <div className="av-empty-sub">
+        Choose a folder of Markdown files — your notes stay as plain files on your disk.
+      </div>
+      <button className="set-done" style={{ marginTop: 8 }} onClick={onPick}>
+        Open folder…
+      </button>
+    </div>
   );
 }
 
@@ -129,28 +165,36 @@ function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: 
 }
 
 export function App() {
-  const t = TWEAKS;
   const [cfg, setCfg] = useState<Config>(CONFIG_DEFAULTS);
-  const [notes, setNotes] = useState<Note[]>(NOTES);
-  const [working, setWorking] = useState<Record<string, string>>(() =>
-    Object.fromEntries(NOTES.map((n) => [n.id, n.body])),
-  );
-  const [saved, setSaved] = useState<Record<string, string>>(() =>
-    Object.fromEntries(NOTES.map((n) => [n.id, n.body])),
-  );
-  const [activeId, setActiveId] = useState<string | null>(NOTES[0].id);
-  const [lastId, setLastId] = useState<string | null>(NOTES[0].id);
-  const [toast, setToast] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(true);
-  const [refocus, setRefocus] = useState(0);
-  const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
-  const [gotoRow, setGotoRow] = useState(0);
+  const [status, setStatus] = useState<Status>("boot");
+  const [notes, setNotes] = useState<NoteMeta[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [lastId, setLastId] = useState<string | null>(null);
+  const [openDoc, setOpenDoc] = useState<NoteDoc | null>(null);
+  const [savedText, setSavedText] = useState("");
+  const [activeDirty, setActiveDirty] = useState(false);
+  const [gotoLine, setGotoLine] = useState(0);
   const [configText, setConfigText] = useState("");
   const [configSaved, setConfigSaved] = useState("");
   const [configKey, setConfigKey] = useState(0);
+  const [navOpen, setNavOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
+  const [refocus, setRefocus] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // apply config -> design tokens
+  const latest = useRef("");
+  const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const configLoaded = useRef(false);
+
+  const isConfig = activeId === CONFIG_ID;
+
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast((m) => (m === msg ? null : m)), 1600);
+  };
+
+  // apply config -> design tokens (always); persist only after initial load
   useEffect(() => {
     const r = document.documentElement;
     r.setAttribute("data-theme", cfg.theme);
@@ -159,64 +203,103 @@ export function App() {
     r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
+    if (configLoaded.current) void backend.setConfig(cfg);
   }, [cfg]);
 
-  const flash = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast((m) => (m === msg ? null : m)), 1600);
-  };
-
-  const reseedConfig = (c: Config) => {
-    const txt = serializeConfig(c);
-    setConfigText(txt);
-    setConfigSaved(txt);
-    setConfigKey((k) => k + 1);
-  };
-  const setCfgPatch = (patch: Partial<Config>) => {
-    const next = { ...cfg, ...patch };
-    setCfg(next);
-    if (activeId === "config") reseedConfig(next);
-  };
-
-  const dirtyOf = (id: string) => (working[id] ?? "") !== (saved[id] ?? "");
-  const isConfig = activeId === "config";
-  const activeNote = useMemo<EditorNote | null>(() => {
-    if (isConfig) return { id: "config", title: "~/.notesiderc", tag: "config", body: configText };
-    const n = notes.find((x) => x.id === activeId);
-    return n ? { id: n.id, title: n.title, tag: n.tag, body: working[n.id] ?? n.body } : null;
-  }, [notes, activeId, working, isConfig, configText]);
-
-  const onText = (id: string, text: string) => {
-    if (id === "config") setConfigText(text);
-    else setWorking((w) => (w[id] === text ? w : { ...w, [id]: text }));
-  };
-  const onSaveText = (id: string, text: string) => {
-    if (id === "config") {
-      const next = parseConfig(text, cfg);
-      setCfg(next);
-      setConfigSaved(text);
-      setConfigText(text);
-      flash("config applied");
-      return;
-    }
-    setSaved((s) => ({ ...s, [id]: text }));
-    setWorking((w) => ({ ...w, [id]: text }));
-    setNotes((ns) => ns.map((n) => (n.id === id ? { ...n, updated: "just now" } : n)));
-    const wc = (text.match(/\S+/g) || []).length;
-    flash(`written · ${text.split("\n").length}L, ${wc}W`);
-  };
-  const onQuit = (id: string) => {
-    if (id === "config") {
-      setActiveId(lastId || NOTES[0].id);
-    } else {
-      setLastId(id);
+  const openVault = async (path: string) => {
+    const metas = await backend.openVault(path);
+    setNotes(metas);
+    void backend.setLastVault(path);
+    setStatus("ready");
+    if (metas.length) await openNote(metas[0].id);
+    else {
       setActiveId(null);
+      setOpenDoc(null);
     }
   };
-  const pick = (id: string) => {
-    setActiveId(id);
-    setLastId(id);
-    setGotoRow(0);
+
+  // boot: load config, then last vault
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await backend.getConfig();
+        if (stored) setCfg((c) => ({ ...c, ...stored }));
+      } catch {
+        /* defaults */
+      }
+      configLoaded.current = true;
+      try {
+        const last = await backend.getLastVault();
+        if (last) await openVault(last);
+        else setStatus("no-vault");
+      } catch {
+        setStatus("no-vault");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pickVault = async () => {
+    const path = await backend.pickVault();
+    if (path) {
+      setStatus("boot");
+      try {
+        await openVault(path);
+      } catch {
+        setStatus("no-vault");
+      }
+    }
+  };
+
+  const openNote = async (path: string, line = 0) => {
+    const doc = await backend.readNote(path);
+    setOpenDoc(doc);
+    setSavedText(doc.body);
+    setActiveDirty(false);
+    setActiveId(path);
+    setLastId(path);
+    setGotoLine(line);
+  };
+
+  const doSaveNote = async (text: string) => {
+    if (!activeId || activeId === CONFIG_ID) return;
+    try {
+      const meta = await backend.saveNote(activeId, text);
+      setSavedText(text);
+      setActiveDirty(false);
+      // update in place (don't reorder — avoids the active note jumping on autosave)
+      setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n)));
+    } catch (e) {
+      flash(`save failed: ${e}`);
+    }
+  };
+
+  const onConfigSave = (text: string) => {
+    const next = parseConfig(text, cfg);
+    setCfg(next);
+    setConfigSaved(text);
+    flash("config applied");
+  };
+
+  const onEditorChange = (text: string) => {
+    if (isConfig) return;
+    latest.current = text;
+    setActiveDirty(text !== savedText);
+    if (autosave.current) clearTimeout(autosave.current);
+    autosave.current = setTimeout(() => void doSaveNote(latest.current), AUTOSAVE_MS);
+  };
+  const onEditorSave = (text: string) => {
+    if (autosave.current) clearTimeout(autosave.current);
+    if (isConfig) onConfigSave(text);
+    else void doSaveNote(text);
+  };
+  const onEditorQuit = () => {
+    if (isConfig) {
+      setActiveId(lastId && lastId !== CONFIG_ID ? lastId : null);
+    } else {
+      setActiveId(null);
+      setOpenDoc(null);
+    }
   };
 
   const openFinder = (mode: FinderMode) => setFinder({ mode });
@@ -224,34 +307,58 @@ export function App() {
     setFinder(null);
     setRefocus((r) => r + 1);
   };
-  const openFromFinder = (id: string, line: number) => {
-    setActiveId(id);
-    setLastId(id);
-    setGotoRow(line && line > 0 ? line - 1 : 0);
+  const openFromFinder = async (path: string, line: number) => {
     setFinder(null);
+    await openNote(path, line && line > 0 ? line : 0);
     setRefocus((r) => r + 1);
   };
 
   const openConfig = () => {
-    reseedConfig(cfg);
+    const txt = serializeConfig(cfg);
+    setConfigText(txt);
+    setConfigSaved(txt);
+    setConfigKey((k) => k + 1);
     setSettingsOpen(false);
-    setActiveId("config");
+    setActiveId(CONFIG_ID);
   };
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = () => {
     setSettingsOpen(false);
     setRefocus((r) => r + 1);
   };
+  const setCfgPatch = (patch: Partial<Config>) => setCfg((c) => ({ ...c, ...patch }));
   const toggleNav = () => {
     setNavOpen((v) => !v);
     setRefocus((r) => r + 1);
   };
 
+  const createNote = async () => {
+    try {
+      const meta = await backend.createNote();
+      setNotes(await backend.listNotes());
+      await openNote(meta.id);
+    } catch (e) {
+      flash(`couldn't create note: ${e}`);
+    }
+  };
+
+  const onCommand = (c: AppCommand) => {
+    if (c === "find") openFinder("files");
+    else if (c === "grep") openFinder("content");
+    else if (c === "nav") toggleNav();
+    else if (c === "settings") openSettings();
+    else if (c === "config") openConfig();
+  };
+
+  const titleText = isConfig ? "~/.notesiderc" : (openDoc?.title ?? null);
+  const showEditor = isConfig || (!!activeId && !!openDoc && openDoc.path === activeId);
+  const vimSuffix = cfg.vimMode ? "v" : "t";
+
   return (
     <div className="av-desktop">
       <div className="av-window">
         <div className="av-titlebar" data-tauri-drag-region>
-          <TrafficLights onCloseNote={() => activeId && onQuit(activeId)} />
+          <TrafficLights onCloseNote={() => activeId && onEditorQuit()} />
           <button
             className="av-iconbtn av-navtoggle"
             onClick={toggleNav}
@@ -299,9 +406,9 @@ export function App() {
             </svg>
           </button>
           <div className="av-title" data-tauri-drag-region>
-            {activeNote ? (
+            {titleText ? (
               <>
-                Noteside — {activeNote.title}
+                Noteside — {titleText}
                 {!isConfig && <span className="av-ext">.md</span>}
               </>
             ) : (
@@ -309,40 +416,47 @@ export function App() {
             )}
           </div>
         </div>
+
         <div className="av-body">
-          <Sidebar
-            open={navOpen}
-            notes={notes}
-            activeId={activeId}
-            dirtyOf={dirtyOf}
-            onPick={pick}
-            onSettings={openSettings}
-          />
+          {status === "ready" && (
+            <Sidebar
+              open={navOpen}
+              notes={notes}
+              activeId={activeId}
+              activeDirty={activeDirty}
+              onPick={(id) => void openNote(id)}
+              onNew={() => void createNote()}
+              onSettings={openSettings}
+            />
+          )}
           <main className="av-main">
-            {activeNote ? (
+            {status === "boot" ? (
+              <div className="av-empty">
+                <div className="av-empty-glyph">▌</div>
+              </div>
+            ) : status === "no-vault" ? (
+              <VaultPicker onPick={() => void pickVault()} />
+            ) : showEditor ? (
               <Editor
-                key={isConfig ? "config-" + configKey : activeNote.id + ":" + gotoRow}
-                note={activeNote}
-                savedText={isConfig ? configSaved : (saved[activeNote.id] ?? activeNote.body)}
-                ext={isConfig ? "" : ".md"}
-                initialRow={isConfig ? 0 : gotoRow}
-                relativeNumbers={t.relNumbers}
-                hud={t.hud}
-                escMap={cfg.escMap}
+                key={
+                  (isConfig ? `config-${configKey}` : `${activeId}:${gotoLine}`) + `:${vimSuffix}`
+                }
+                notePath={isConfig ? CONFIG_ID : (activeId as string)}
+                fileLabel={isConfig ? "~/.notesiderc" : (openDoc?.title ?? "")}
+                initialText={isConfig ? configText : (openDoc?.body ?? "")}
+                savedText={isConfig ? configSaved : savedText}
                 vimMode={cfg.vimMode}
-                cursorStyle={cfg.cursor}
                 cursorBlink={cfg.cursorBlink}
+                relativeNumbers={RELATIVE_NUMBERS}
+                gotoLine={isConfig ? 0 : gotoLine}
                 refocusToken={refocus}
-                onText={onText}
-                onSaveText={onSaveText}
-                onQuit={onQuit}
-                onOpenSettings={openSettings}
-                onOpenConfig={openConfig}
-                onToggleNav={toggleNav}
-                onOpenFinder={openFinder}
+                onChange={onEditorChange}
+                onSave={onEditorSave}
+                onQuit={onEditorQuit}
+                onCommand={onCommand}
               />
             ) : (
-              <EmptyState hasClosed={!!lastId} onReopen={() => setActiveId(lastId)} />
+              <EmptyState hasClosed={!!lastId} onReopen={() => lastId && void openNote(lastId)} />
             )}
             {toast && <div className="av-toast">{toast}</div>}
           </main>
@@ -357,12 +471,7 @@ export function App() {
           />
         )}
         {finder && (
-          <Finder
-            notes={notes}
-            initialMode={finder.mode}
-            onClose={closeFinder}
-            onOpen={openFromFinder}
-          />
+          <Finder initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
         )}
       </div>
     </div>

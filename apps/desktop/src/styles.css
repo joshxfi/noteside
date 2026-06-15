@@ -350,6 +350,17 @@ body {
   outline: none;
   background: var(--paper);
 }
+/* CodeMirror host fills the editor area above the status bar */
+.av-cm {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.av-cm .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
 .av-scroller {
   flex: 1;
   overflow-y: auto;

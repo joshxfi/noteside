@@ -1,8 +1,7 @@
 {
   "ignorePatterns": [
     "**/dist/**",
-    "**/src-tauri/target/**",
-    "**/src-tauri/gen/**",
+    "**/src-tauri/**",
     "apps/landing/public/demo/**",
     "pnpm-lock.yaml"
   ]

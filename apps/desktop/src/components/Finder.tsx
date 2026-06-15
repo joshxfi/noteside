@@ -1,19 +1,13 @@
-// Finder.tsx — the fuzzy finder overlay (Files + Content modes).
-// Talks to the fff seam for results, so the search backend is swappable.
-import { createElement, useEffect, useMemo, useRef, useState } from "react";
+// Fuzzy finder overlay (Files + Content). Queries the backend (Rust nucleo +
+// content scan, or the mock) with a short debounce; the preview pane lazily
+// fetches the selected note's text.
+import { createElement, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import * as FFF from "../fff";
-import type { FileItem, GrepItem, GrepMode, Range } from "../fff";
-import type { GitStatus, Note } from "../types";
+import { backend, type ContentHit, type FileHit, type GrepMode } from "../backend";
 
-const GIT: Record<string, { letter: string; cls: string }> = {
-  modified: { letter: "M", cls: "git-modified" },
-  untracked: { letter: "U", cls: "git-untracked" },
-  staged: { letter: "S", cls: "git-staged" },
-  deleted: { letter: "D", cls: "git-deleted" },
-  renamed: { letter: "R", cls: "git-staged" },
-};
 const GREP_MODES: GrepMode[] = ["plain", "regex", "fuzzy"];
+
+type Range = [number, number];
 
 function hl(str: string, ranges?: Range[]): ReactNode {
   if (!ranges || !ranges.length) return str;
@@ -29,57 +23,62 @@ function hl(str: string, ranges?: Range[]): ReactNode {
   return out;
 }
 
-function GitTag({ status }: { status: GitStatus }) {
-  const g = status ? GIT[status] : undefined;
-  return <span className={"fnd-git " + (g ? g.cls : "")}>{g ? g.letter : ""}</span>;
+function rangesFromPositions(positions: number[]): Range[] {
+  const r: Range[] = [];
+  for (const p of positions) {
+    const last = r[r.length - 1];
+    if (last && p === last[1]) last[1] = p + 1;
+    else r.push([p, p + 1]);
+  }
+  return r;
 }
 
-function FileRow({ item }: { item: FileItem }) {
-  const path = item.relative_path;
+function FileRow({ item }: { item: FileHit }) {
+  const path = item.path;
   const bStart = path.lastIndexOf("/") + 1;
   const dir = path.slice(0, bStart);
   const name = path.slice(bStart);
-  const nameRanges = FFF.rangesFromPositions(
-    (item.positions || []).filter((p) => p >= bStart).map((p) => p - bStart),
+  const nameRanges = rangesFromPositions(
+    item.positions.filter((p) => p >= bStart).map((p) => p - bStart),
   );
-  const dirRanges = FFF.rangesFromPositions((item.positions || []).filter((p) => p < bStart));
+  const dirRanges = rangesFromPositions(item.positions.filter((p) => p < bStart));
   return (
     <>
-      <GitTag status={item.git_status} />
       <span className="fnd-name">{hl(name, nameRanges)}</span>
       {dir ? <span className="fnd-path">{hl(dir, dirRanges)}</span> : null}
-      {item.frecency >= 70 ? (
-        <span className="fnd-frec" title="recently opened">
-          recent
+      {item.pinned ? (
+        <span className="fnd-frec" title="pinned">
+          pinned
         </span>
       ) : null}
     </>
   );
 }
 
-function GrepRow({ item }: { item: GrepItem }) {
-  const lead = item.line_content.length - item.line_content.trimStart().length;
-  const text = item.line_content.slice(lead);
-  const ranges = item.match_ranges.map(
+function GrepRow({ item }: { item: ContentHit }) {
+  const lead = item.line.length - item.line.trimStart().length;
+  const text = item.line.slice(lead);
+  const ranges = item.ranges.map(
     ([s, e]) => [Math.max(0, s - lead), Math.max(0, e - lead)] as Range,
   );
   return (
     <>
-      <GitTag status={item.git_status} />
       <span className="fnd-grepline">{hl(text, ranges)}</span>
       <span className="fnd-loc">
-        {item.name}:{item.line_number}
+        {item.title}:{item.lineNumber}
       </span>
     </>
   );
 }
 
 function Preview({
-  note,
+  path,
+  lines,
   activeLine,
   ranges,
 }: {
-  note: Note | null;
+  path: string | null;
+  lines: string[] | null;
   activeLine: number | null;
   ranges: Range[] | null;
 }) {
@@ -93,17 +92,17 @@ function Preview({
       bottom = top + el.offsetHeight;
     if (top < c.scrollTop + 24) c.scrollTop = Math.max(0, top - 24);
     else if (bottom > c.scrollTop + c.clientHeight - 24) c.scrollTop = bottom - c.clientHeight + 24;
-  }, [activeLine, note]);
-  if (!note)
+  }, [activeLine, path]);
+  if (!path || !lines) {
     return (
       <div className="fnd-preview">
         <div className="fnd-prevempty">no match</div>
       </div>
     );
-  const lines = note.body.split("\n");
+  }
   return (
     <div className="fnd-preview">
-      <div className="fnd-prevhead">{note.path}</div>
+      <div className="fnd-prevhead">{path}</div>
       <div className="fnd-prevbody" ref={bodyRef}>
         {lines.map((ln, i) => {
           const isMatch = activeLine === i + 1;
@@ -123,17 +122,19 @@ function Preview({
 }
 
 export interface FinderProps {
-  notes: Note[];
   initialMode: "files" | "content";
   onClose: () => void;
-  onOpen: (id: string, line: number) => void;
+  onOpen: (path: string, line: number) => void;
 }
 
-export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
+export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   const [mode, setMode] = useState<"files" | "content">(initialMode || "files");
   const [grepMode, setGrepMode] = useState<GrepMode>("plain");
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
+  const [fileHits, setFileHits] = useState<FileHit[]>([]);
+  const [contentHits, setContentHits] = useState<ContentHit[]>([]);
+  const [preview, setPreview] = useState<{ path: string; lines: string[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -141,16 +142,37 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
     inputRef.current?.focus();
   }, [mode]);
 
-  const result = useMemo(() => {
-    return mode === "files"
-      ? FFF.fileSearch(query, notes)
-      : FFF.contentSearch(query, notes, { mode: grepMode });
-  }, [mode, grepMode, query, notes]);
-  const items = result.items as (FileItem | GrepItem)[];
-
+  // debounced search
   useEffect(() => {
-    setSel(0);
-  }, [mode, grepMode, query]);
+    let alive = true;
+    const id = setTimeout(async () => {
+      try {
+        if (mode === "files") {
+          const r = await backend.searchFiles(query);
+          if (alive) setFileHits(r);
+        } else {
+          const r = await backend.searchContent(query, grepMode);
+          if (alive) setContentHits(r);
+        }
+        if (alive) setSel(0);
+      } catch {
+        if (alive) {
+          setFileHits([]);
+          setContentHits([]);
+        }
+      }
+    }, 80);
+    return () => {
+      alive = false;
+      clearTimeout(id);
+    };
+  }, [query, mode, grepMode]);
+
+  const items: (FileHit | ContentHit)[] = mode === "files" ? fileHits : contentHits;
+  const selItem = items[sel];
+  const selPath = selItem?.path ?? null;
+
+  // keep selection in view
   useEffect(() => {
     const c = listRef.current;
     if (!c) return;
@@ -162,11 +184,24 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
     else if (bottom > c.scrollTop + c.clientHeight) c.scrollTop = bottom - c.clientHeight;
   }, [sel, items]);
 
-  const selItem = items[sel];
-  const selNote = selItem ? notes.find((n) => n.id === selItem.id) || null : null;
+  // lazily load the selected note's text for the preview
+  useEffect(() => {
+    if (!selPath) {
+      setPreview(null);
+      return;
+    }
+    let alive = true;
+    backend
+      .readNote(selPath)
+      .then((doc) => alive && setPreview({ path: selPath, lines: doc.body.split("\n") }))
+      .catch(() => alive && setPreview(null));
+    return () => {
+      alive = false;
+    };
+  }, [selPath]);
 
   const open = () => {
-    if (selItem) onOpen(selItem.id, "line_number" in selItem ? selItem.line_number : 0);
+    if (selItem) onOpen(selItem.path, "lineNumber" in selItem ? selItem.lineNumber : 0);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -192,7 +227,7 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
     }
   };
 
-  const selGrep = selItem && "line_number" in selItem ? (selItem as GrepItem) : null;
+  const selGrep = selItem && "lineNumber" in selItem ? (selItem as ContentHit) : null;
 
   return (
     <div className="fnd-scrim" onMouseDown={onClose}>
@@ -205,9 +240,7 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
             value={query}
             spellCheck={false}
             placeholder={
-              mode === "files"
-                ? "fuzzy path…  (try  git:modified  or  *.md)"
-                : "search note contents…"
+              mode === "files" ? "fuzzy path…  (try a few letters)" : "search note contents…"
             }
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -248,28 +281,28 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
             ) : (
               items.map((item, i) => (
                 <div
-                  key={mode + i}
+                  key={mode + i + item.path}
                   className={"fnd-row" + (i === sel ? " is-sel" : "")}
                   onMouseMove={() => i !== sel && setSel(i)}
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    setSel(i);
-                    if (item) onOpen(item.id, "line_number" in item ? item.line_number : 0);
+                    onOpen(item.path, "lineNumber" in item ? item.lineNumber : 0);
                   }}
                 >
                   {mode === "files" ? (
-                    <FileRow item={item as FileItem} />
+                    <FileRow item={item as FileHit} />
                   ) : (
-                    <GrepRow item={item as GrepItem} />
+                    <GrepRow item={item as ContentHit} />
                   )}
                 </div>
               ))
             )}
           </div>
           <Preview
-            note={selNote}
-            activeLine={mode === "content" && selGrep ? selGrep.line_number : null}
-            ranges={mode === "content" && selGrep ? selGrep.match_ranges : null}
+            path={preview?.path ?? null}
+            lines={preview?.lines ?? null}
+            activeLine={mode === "content" && selGrep ? selGrep.lineNumber : null}
+            ranges={mode === "content" && selGrep ? selGrep.ranges : null}
           />
         </div>
 
@@ -284,9 +317,7 @@ export function Finder({ notes, initialMode, onClose, onOpen }: FinderProps) {
             <b>⎋</b> close
           </span>
           <span className="fnd-count">
-            {items.length}
-            {result.total_matched > items.length ? "+" : ""}{" "}
-            {mode === "files" ? "files" : "matches"}
+            {items.length} {mode === "files" ? "files" : "matches"}
           </span>
         </div>
       </div>
