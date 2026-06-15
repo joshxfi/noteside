@@ -35,13 +35,11 @@ pub fn start_watcher(
                 Ok(g) => g,
                 Err(_) => return,
             };
-            if let Some(until) = g.suppress_until {
-                if Instant::now() < until {
-                    return; // echo of our own write
-                }
+            if g.should_ignore_event(Instant::now()) {
+                return; // echo of our own write
             }
             let Some(r) = g.root.clone() else { return };
-            g.records = notebook::scan_notebook(&r);
+            g.set_records(notebook::scan_notebook(&r));
             drop(g);
             let _ = app.emit("notebook:changed", ());
         },

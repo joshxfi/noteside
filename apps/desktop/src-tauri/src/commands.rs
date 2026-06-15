@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tauri::{AppHandle, State};
 
@@ -10,9 +10,6 @@ use crate::search;
 use crate::state::AppState;
 use crate::notebook::{self, NoteRecord};
 use crate::watcher;
-
-/// After our own write, ignore watcher echoes for a short window.
-const SUPPRESS_MS: u64 = 700;
 
 fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
     let mut metas: Vec<NoteMeta> = records.iter().map(|r| r.meta.clone()).collect();
@@ -32,9 +29,7 @@ pub fn open_notebook(path: String, app: AppHandle, state: State<AppState>) -> Re
     let metas = sorted_metas(&records);
     {
         let mut g = state.notebook.lock().unwrap();
-        g.root = Some(root.clone());
-        g.records = records;
-        g.suppress_until = None;
+        g.load(root.clone(), records);
     }
     match watcher::start_watcher(app, state.notebook.clone(), root) {
         Ok(d) => *state.watcher.lock().unwrap() = Some(d),
@@ -78,16 +73,7 @@ pub fn save_note(path: String, body: String, state: State<AppState>) -> Result<N
     let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
     notebook::atomic_write(&abs, &body)?;
     let meta = notebook::parse_meta(path.clone(), &body, notebook::mtime_millis(&abs));
-    if let Some(rec) = g.records.iter_mut().find(|r| r.meta.path == path) {
-        rec.meta = meta.clone();
-        rec.body = body;
-    } else {
-        g.records.push(NoteRecord {
-            meta: meta.clone(),
-            body,
-        });
-    }
-    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
+    g.record_own_write(meta.clone(), body, Instant::now());
     Ok(meta)
 }
 
@@ -106,11 +92,7 @@ pub fn create_note(title: Option<String>, state: State<AppState>) -> Result<Note
     notebook::atomic_write(&abs, &initial)?;
     let rel = notebook::rel_path(&root, &abs);
     let meta = notebook::parse_meta(rel, &initial, notebook::mtime_millis(&abs));
-    g.records.push(NoteRecord {
-        meta: meta.clone(),
-        body: initial,
-    });
-    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
+    g.record_own_write(meta.clone(), initial, Instant::now());
     Ok(meta)
 }
 
@@ -122,8 +104,7 @@ pub fn delete_note(path: String, state: State<AppState>) -> Result<()> {
     if abs.exists() {
         std::fs::remove_file(&abs)?;
     }
-    g.records.retain(|r| r.meta.path != path);
-    g.suppress_until = Some(Instant::now() + Duration::from_millis(SUPPRESS_MS));
+    g.record_own_delete(&path, Instant::now());
     Ok(())
 }
 
