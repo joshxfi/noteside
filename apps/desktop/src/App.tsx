@@ -1,8 +1,7 @@
 // App.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { backend, type NoteDoc, type NoteMeta } from "./backend";
-import { createAutosave } from "./autosave";
+import { backend, type NoteMeta } from "./backend";
 import { Editor } from "./editor/Editor";
 import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/exCommands";
 import { Finder } from "./components/Finder";
@@ -18,10 +17,10 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
+import { useEditingSession } from "./useEditingSession";
 import { isTauri, windowControl } from "./useWindowControls";
 
 const RELATIVE_NUMBERS = true;
-const CONFIG_ID = "config";
 const AUTOSAVE_MS = 800;
 
 type Status = "boot" | "no-notebook" | "ready";
@@ -277,35 +276,35 @@ export function App() {
   const [cfg, setCfg] = useState<Config>(CONFIG_DEFAULTS);
   const [status, setStatus] = useState<Status>("boot");
   const [notes, setNotes] = useState<NoteMeta[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [lastId, setLastId] = useState<string | null>(null);
-  const [openDoc, setOpenDoc] = useState<NoteDoc | null>(null);
-  const [savedText, setSavedText] = useState("");
-  const [activeDirty, setActiveDirty] = useState(false);
-  const [gotoLine, setGotoLine] = useState(0);
-  const [configText, setConfigText] = useState("");
-  const [configSaved, setConfigSaved] = useState("");
-  const [configKey, setConfigKey] = useState(0);
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const [navSeq, setNavSeq] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
 
   const configLoaded = useRef(false);
 
-  const isConfig = activeId === CONFIG_ID;
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
-
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast((m) => (m === msg ? null : m)), 1600);
   };
+
+  // The editing session owns the whole per-buffer loop: working/saved/dirty,
+  // autosave, open/save/quit, the config buffer kind, external reconcile, and the
+  // editor remount key. App keeps the sidebar list, config *semantics*, and chrome.
+  const { session, snapshot: s } = useEditingSession({
+    backend,
+    autosaveMs: AUTOSAVE_MS,
+    notify: flash,
+    onConfigApply: (text) => {
+      setCfg(parseConfig(text, cfg));
+      flash("config applied");
+    },
+    onNoteSaved: (meta) => setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n))),
+    onNotesChanged: setNotes,
+  });
 
   // apply config -> design tokens (always); persist only after initial load
   useEffect(() => {
@@ -334,11 +333,8 @@ export function App() {
     setNotes(metas);
     void backend.setLastNotebook(path);
     setStatus("ready");
-    if (metas.length) await openNote(metas[0].id);
-    else {
-      setActiveId(null);
-      setOpenDoc(null);
-    }
+    if (metas.length) await session.open(metas[0].id);
+    else session.close();
   };
 
   // boot: load config, then last notebook
@@ -362,41 +358,14 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // react to external notebook changes (other editors, git, sync)
-  const onNotebookChanged = async () => {
-    let list: NoteMeta[];
-    try {
-      list = await backend.listNotes();
-    } catch {
-      return;
-    }
-    setNotes(list);
-    if (!activeId || activeId === CONFIG_ID) return;
-    if (!list.some((n) => n.id === activeId)) {
-      setActiveId(null);
-      setOpenDoc(null);
-      return;
-    }
-    if (activeDirty) return; // don't clobber unsaved edits
-    try {
-      const doc = await backend.readNote(activeId);
-      if (doc.body !== savedText) {
-        setOpenDoc(doc);
-        setSavedText(doc.body);
-        setReloadNonce((n) => n + 1);
-        flash("reloaded from disk");
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-  const changedRef = useRef(onNotebookChanged);
-  changedRef.current = onNotebookChanged;
+  // react to external notebook changes (other editors, git, sync). The session
+  // reconciles the active buffer against disk reading its own live id, so the
+  // watcher needs no stale-closure indirection.
   useEffect(() => {
     let un: (() => void) | null = null;
     let cancelled = false;
     backend
-      .watchNotebook(() => void changedRef.current())
+      .watchNotebook(() => void session.reconcile())
       .then((u) => {
         if (cancelled) u();
         else un = u;
@@ -406,7 +375,7 @@ export function App() {
       cancelled = true;
       un?.();
     };
-  }, []);
+  }, [session]);
 
   const pickNotebook = async () => {
     const path = await backend.pickNotebook();
@@ -420,80 +389,6 @@ export function App() {
     }
   };
 
-  const openNote = async (path: string, line = 0) => {
-    flushPending(); // persist the outgoing note's queued edits before switching
-    let doc: NoteDoc;
-    try {
-      doc = await backend.readNote(path);
-    } catch (e) {
-      flash(`couldn't open note: ${e}`); // e.g. a note deleted out from under us
-      return;
-    }
-    setOpenDoc(doc);
-    setSavedText(doc.body);
-    setActiveDirty(false);
-    setActiveId(path);
-    setLastId(path);
-    setGotoLine(line);
-    // bump every nav so re-opening the SAME note at the SAME line still remounts
-    // the editor (the goto-line jump only runs on mount) — e.g. self [[links]].
-    setNavSeq((n) => n + 1);
-  };
-
-  // Save is always bound to an explicit note id (never the live activeId), so a
-  // queued autosave can't write one note's text into another after a switch.
-  const doSaveNote = async (id: string, text: string) => {
-    if (!id || id === CONFIG_ID) return;
-    try {
-      const meta = await backend.saveNote(id, text);
-      // update in place (don't reorder — avoids the active note jumping on autosave)
-      setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n)));
-      // only touch open-note state if this note is still the one on screen
-      if (activeIdRef.current === id) {
-        setSavedText(text);
-        setActiveDirty(false);
-      }
-    } catch (e) {
-      flash(`save failed: ${e}`);
-    }
-  };
-
-  // Debounced autosave coordinator, created once. It always calls the latest
-  // doSaveNote via a ref, and each queued save carries its own note id.
-  const doSaveRef = useRef(doSaveNote);
-  doSaveRef.current = doSaveNote;
-  const [autosaver] = useState(() =>
-    createAutosave((id, text) => void doSaveRef.current(id, text), AUTOSAVE_MS),
-  );
-  const flushPending = () => autosaver.flush();
-
-  const onConfigSave = (text: string) => {
-    const next = parseConfig(text, cfg);
-    setCfg(next);
-    setConfigSaved(text);
-    flash("config applied");
-  };
-
-  const onEditorChange = (text: string) => {
-    if (isConfig || !activeId) return;
-    autosaver.schedule(activeId, text);
-    setActiveDirty(text !== savedText);
-  };
-  const onEditorSave = (text: string) => {
-    autosaver.cancel();
-    if (isConfig) onConfigSave(text);
-    else if (activeId) void doSaveNote(activeId, text);
-  };
-  const onEditorQuit = () => {
-    flushPending();
-    if (isConfig) {
-      setActiveId(lastId && lastId !== CONFIG_ID ? lastId : null);
-    } else {
-      setActiveId(null);
-      setOpenDoc(null);
-    }
-  };
-
   const openFinder = (mode: FinderMode) => setFinder({ mode });
   const closeFinder = () => {
     setFinder(null);
@@ -501,24 +396,24 @@ export function App() {
   };
   const openFromFinder = async (path: string, line: number) => {
     setFinder(null);
-    await openNote(path, line && line > 0 ? line : 0);
+    await session.open(path, line && line > 0 ? line : 0);
     setRefocus((r) => r + 1);
   };
 
   // follow a [[wikilink]] (gf / :follow): resolve to a note and open it
   const onFollowLink = (target: string) => {
     const hit = resolveLink(target, notes);
-    if (hit) void openNote(hit.id);
+    if (hit) void session.open(hit.id);
     else flash(`no note: ${target}`);
   };
   const openBacklinks = async () => {
-    if (!activeId || isConfig) {
+    if (s.status !== "note" || !s.activeId) {
       flash("open a note first");
       return;
     }
     try {
-      const refs = await backend.backlinks(activeId);
-      setBacklinks({ title: openDoc?.title ?? activeId, refs });
+      const refs = await backend.backlinks(s.activeId);
+      setBacklinks({ title: s.title ?? s.activeId, refs });
     } catch (e) {
       flash(`backlinks failed: ${e}`);
     }
@@ -529,12 +424,8 @@ export function App() {
   };
 
   const openConfig = () => {
-    const txt = serializeConfig(cfg);
-    setConfigText(txt);
-    setConfigSaved(txt);
-    setConfigKey((k) => k + 1);
     setSettingsOpen(false);
-    setActiveId(CONFIG_ID);
+    session.openConfig(serializeConfig(cfg));
   };
   const openSettings = () => setSettingsOpen(true);
   const closeSettings = () => {
@@ -555,26 +446,23 @@ export function App() {
     try {
       const meta = await backend.createNote();
       setNotes(await backend.listNotes());
-      await openNote(meta.id);
+      await session.open(meta.id);
     } catch (e) {
       flash(`couldn't create note: ${e}`);
     }
   };
 
   const deleteActive = async () => {
-    if (!activeId || activeId === CONFIG_ID) return;
-    const path = activeId;
-    autosaver.cancel(); // drop any queued save so it can't resurrect the file
+    if (s.status !== "note" || !s.activeId) return;
+    const path = s.activeId;
+    session.cancelAutosave(); // drop any queued save so it can't resurrect the file
     try {
       await backend.deleteNote(path);
       const list = await backend.listNotes();
       setNotes(list);
       const next = list[0]?.id ?? null;
-      if (next) await openNote(next);
-      else {
-        setActiveId(null);
-        setOpenDoc(null);
-      }
+      if (next) await session.open(next);
+      else session.close();
       flash("note deleted");
     } catch (e) {
       flash(`delete failed: ${e}`);
@@ -613,20 +501,20 @@ export function App() {
     },
     { key: ",", label: "Settings", run: openSettings },
     { key: "c", label: "Edit ~/.notesiderc", run: openConfig },
-    { key: "q", label: "Close note", hint: ":q", run: onEditorQuit },
+    { key: "q", label: "Close note", hint: ":q", run: () => session.quit() },
     { key: "d", label: "Delete note", danger: true, run: () => void deleteActive() },
   ];
 
-  const titleText = isConfig ? "~/.notesiderc" : (openDoc?.title ?? null);
-  const showEditor = isConfig || (!!activeId && !!openDoc && openDoc.path === activeId);
+  const titleText = s.title;
+  const showEditor = s.status !== "empty";
   const vimSuffix = cfg.vimMode ? "v" : "t";
-  const previewOn = !isConfig && cfg.livePreview;
+  const previewOn = s.status === "note" && cfg.livePreview;
 
   return (
     <div className="av-desktop">
       <div className="av-window">
         <div className="av-titlebar" data-tauri-drag-region>
-          <TrafficLights onCloseNote={() => activeId && onEditorQuit()} />
+          <TrafficLights onCloseNote={() => s.activeId && session.quit()} />
           <button
             className="av-iconbtn av-navtoggle"
             onClick={toggleNav}
@@ -677,7 +565,7 @@ export function App() {
             {titleText ? (
               <>
                 Noteside — {titleText}
-                {!isConfig && <span className="av-ext">.md</span>}
+                {s.status === "note" && <span className="av-ext">.md</span>}
               </>
             ) : (
               "Noteside"
@@ -690,9 +578,9 @@ export function App() {
             <Sidebar
               open={navOpen}
               notes={notes}
-              activeId={activeId}
-              activeDirty={activeDirty}
-              onPick={(id) => void openNote(id)}
+              activeId={s.activeId}
+              activeDirty={s.dirty}
+              onPick={(id) => void session.open(id)}
               onNew={() => void createNote()}
               onSettings={openSettings}
             />
@@ -706,31 +594,26 @@ export function App() {
               <NotebookPicker onPick={() => void pickNotebook()} />
             ) : showEditor ? (
               <Editor
-                key={
-                  (isConfig
-                    ? `config-${configKey}`
-                    : `${activeId}:${gotoLine}:${reloadNonce}:${navSeq}`) +
-                  `:${vimSuffix}:${previewOn ? "p" : "s"}`
-                }
-                notePath={isConfig ? CONFIG_ID : (activeId as string)}
-                fileLabel={isConfig ? "~/.notesiderc" : (openDoc?.title ?? "")}
-                initialText={isConfig ? configText : (openDoc?.body ?? "")}
-                savedText={isConfig ? configSaved : savedText}
+                key={s.editorKey + ":" + vimSuffix + ":" + (previewOn ? "p" : "s")}
+                notePath={s.activeId as string}
+                fileLabel={s.title ?? ""}
+                initialText={s.initialText}
+                savedText={s.savedText}
                 vimMode={cfg.vimMode}
                 cursorBlink={cfg.cursorBlink}
                 relativeNumbers={RELATIVE_NUMBERS}
                 preview={previewOn}
                 linkTargets={[...new Set(notes.map((n) => n.title))]}
-                gotoLine={isConfig ? 0 : gotoLine}
+                gotoLine={s.gotoLine}
                 refocusToken={refocus}
-                onChange={onEditorChange}
-                onSave={onEditorSave}
-                onQuit={onEditorQuit}
+                onChange={(text) => session.change(text)}
+                onSave={(text) => session.save(text)}
+                onQuit={() => session.quit()}
                 onCommand={onCommand}
                 onFollowLink={onFollowLink}
               />
             ) : (
-              <EmptyState hasClosed={!!lastId} onReopen={() => lastId && void openNote(lastId)} />
+              <EmptyState hasClosed={!!s.lastNoteId} onReopen={() => session.reopenLast()} />
             )}
             {toast && <div className="av-toast">{toast}</div>}
           </main>
@@ -754,7 +637,7 @@ export function App() {
             refs={backlinks.refs}
             onOpen={(id, line) => {
               closeBacklinks();
-              void openNote(id, line);
+              void session.open(id, line);
             }}
             onClose={closeBacklinks}
           />
