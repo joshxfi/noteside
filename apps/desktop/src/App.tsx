@@ -1,5 +1,6 @@
 // App.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { backend, type NoteDoc, type NoteMeta } from "./backend";
 import { createAutosave } from "./autosave";
 import { Editor } from "./editor/Editor";
@@ -72,6 +73,105 @@ function TrafficLights({ onCloseNote }: { onCloseNote: () => void }) {
   );
 }
 
+// Past this many notes the list is virtualized (only visible rows mount); below
+// it the plain flex list renders verbatim, so typical notebooks are untouched.
+const VIRTUAL_THRESHOLD = 100;
+
+function NoteRow({
+  note,
+  active,
+  dirty,
+  onPick,
+  style,
+  index,
+  measureRef,
+}: {
+  note: NoteMeta;
+  active: boolean;
+  dirty: boolean;
+  onPick: (id: string) => void;
+  style?: CSSProperties;
+  index?: number;
+  measureRef?: (el: HTMLElement | null) => void;
+}) {
+  return (
+    <button
+      ref={measureRef}
+      data-index={index}
+      className={"av-item" + (active ? " is-active" : "")}
+      onClick={() => onPick(note.id)}
+      style={style}
+    >
+      <span className="av-item-bar" />
+      <span className="av-item-main">
+        <span className="av-item-title">
+          {note.title}
+          {active && dirty && <span className="av-item-dot" />}
+        </span>
+        <span className="av-item-meta">
+          {note.tags[0] ? `${note.tags[0]} · ` : ""}
+          {relTime(note.updated)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// Windowed note list for large notebooks — measures real row heights (titles
+// may wrap), so the scrollbar stays accurate without assuming a fixed row size.
+function VirtualNoteList({
+  notes,
+  activeId,
+  activeDirty,
+  onPick,
+}: {
+  notes: NoteMeta[];
+  activeId: string | null;
+  activeDirty: boolean;
+  onPick: (id: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virt = useVirtualizer({
+    count: notes.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 52,
+    overscan: 10,
+  });
+  const activeIndex = activeId ? notes.findIndex((n) => n.id === activeId) : -1;
+  useEffect(() => {
+    if (activeIndex >= 0) virt.scrollToIndex(activeIndex, { align: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]);
+
+  return (
+    <nav className="av-list" ref={scrollRef}>
+      <div style={{ height: virt.getTotalSize(), position: "relative", width: "100%" }}>
+        {virt.getVirtualItems().map((item) => {
+          const n = notes[item.index];
+          return (
+            <NoteRow
+              key={n.id}
+              note={n}
+              index={item.index}
+              measureRef={virt.measureElement}
+              active={n.id === activeId}
+              dirty={activeDirty}
+              onPick={onPick}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${item.start}px)`,
+              }}
+            />
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 function Sidebar({
   open,
   notes,
@@ -99,27 +199,26 @@ function Sidebar({
           </div>
           <div className="av-brandsub">notes for keyboard people</div>
         </div>
-        <nav className="av-list">
-          {notes.map((n) => (
-            <button
-              key={n.id}
-              className={"av-item" + (n.id === activeId ? " is-active" : "")}
-              onClick={() => onPick(n.id)}
-            >
-              <span className="av-item-bar" />
-              <span className="av-item-main">
-                <span className="av-item-title">
-                  {n.title}
-                  {n.id === activeId && activeDirty && <span className="av-item-dot" />}
-                </span>
-                <span className="av-item-meta">
-                  {n.tags[0] ? `${n.tags[0]} · ` : ""}
-                  {relTime(n.updated)}
-                </span>
-              </span>
-            </button>
-          ))}
-        </nav>
+        {notes.length <= VIRTUAL_THRESHOLD ? (
+          <nav className="av-list">
+            {notes.map((n) => (
+              <NoteRow
+                key={n.id}
+                note={n}
+                active={n.id === activeId}
+                dirty={activeDirty}
+                onPick={onPick}
+              />
+            ))}
+          </nav>
+        ) : (
+          <VirtualNoteList
+            notes={notes}
+            activeId={activeId}
+            activeDirty={activeDirty}
+            onPick={onPick}
+          />
+        )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
             <span className="av-cfg-glyph">＋</span> New note
