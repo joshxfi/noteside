@@ -21,8 +21,14 @@ describe("config serialize/parse round-trip", () => {
       vimMode: false,
       escMap: "jj",
       keymaps: ["nmap <Space>w :w<CR>", "vmap > >gv"],
+      chords: { find: "Ctrl-j", grep: "" },
     };
     expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual(cfg);
+  });
+
+  it("round-trips bind lines (rebind + unbind)", () => {
+    const parsed = parseConfig("bind Ctrl-j find\nbind none grep", CONFIG_DEFAULTS);
+    expect(parsed.chords).toEqual({ find: "Ctrl-j", grep: "" });
   });
 
   it("collects nmap/vmap lines into keymaps (not the escMap imap)", () => {

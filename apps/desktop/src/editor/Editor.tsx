@@ -14,6 +14,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { type AppCommand, defineExCommands, setActiveHandlers } from "./exCommands";
+import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
 import { livePreview } from "./livePreview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
 import { noteHighlight, nsTheme } from "./theme";
@@ -36,6 +37,8 @@ export interface EditorProps {
   vimMode: boolean;
   cursorBlink: boolean;
   relativeNumbers: boolean;
+  /** Non-vim chord overrides (`bind` lines), applied to the chord keymap at mount. */
+  chordOverrides?: ChordOverrides;
   /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
   preview: boolean;
   /** Note titles offered as `[[ ]]` autocompletion targets. */
@@ -90,6 +93,21 @@ export function Editor(props: EditorProps) {
       if (e?.mode) setMode(e.mode);
     };
 
+    // Run a table command in the editor's context: AppCommands go to onCommand,
+    // editor actions act on the live view. Powers the always-on Mod- chords.
+    const dispatchCommand = (cmd: Command) => {
+      const v = viewRef.current;
+      const p = propsRef.current;
+      if (cmd.command) p.onCommand(cmd.command);
+      else if (cmd.editor === "save") {
+        if (v) p.onSave(v.state.doc.toString());
+      } else if (cmd.editor === "quit") p.onQuit();
+      else if (cmd.editor === "saveQuit" && v) {
+        p.onSave(v.state.doc.toString());
+        p.onQuit();
+      }
+    };
+
     const extensions: Extension[] = [];
     // No persistent status bar: the mode + counts live in our own status bar
     // below. The `:` / `/` command line still appears as a transient panel.
@@ -109,16 +127,10 @@ export function Editor(props: EditorProps) {
       Prec.high(keymap.of(completionKeymap)),
       EditorView.lineWrapping,
       nsTheme,
+      // Always-on app chords (both vim and non-vim) — Mod- combos can't collide
+      // with vim's bare-key normal mode. Derived from the command table.
       keymap.of([
-        {
-          key: "Mod-s",
-          preventDefault: true,
-          run: () => {
-            const v = viewRef.current;
-            if (v) propsRef.current.onSave(v.state.doc.toString());
-            return true;
-          },
-        },
+        ...commandChordKeymap(dispatchCommand, propsRef.current.chordOverrides),
         ...historyKeymap,
       ]),
       EditorView.updateListener.of((u) => {

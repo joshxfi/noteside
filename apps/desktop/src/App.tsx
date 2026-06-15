@@ -8,6 +8,16 @@ import { Finder } from "./components/Finder";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
 import { Backlinks } from "./components/Backlinks";
+import { CommandSearch } from "./components/CommandSearch";
+import { Cheatsheet } from "./components/Cheatsheet";
+import {
+  cheatsheetCommands,
+  chordLabel,
+  type Command,
+  leaderCommands,
+  paletteCommands,
+  withChordOverrides,
+} from "./editor/commands";
 import { type Backlink, resolveLink } from "./links";
 import {
   accentValue,
@@ -18,6 +28,7 @@ import {
   serializeConfig,
 } from "./settings";
 import { useEditingSession } from "./useEditingSession";
+import { useGlobalChords } from "./useGlobalChords";
 import { isTauri, windowControl } from "./useWindowControls";
 
 const RELATIVE_NUMBERS = true;
@@ -268,6 +279,10 @@ function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: 
         )}
         .
       </div>
+      <div className="av-empty-keys">
+        <kbd>{chordLabel("Mod-p")}</kbd> find a note · <kbd>{chordLabel("Mod-n")}</kbd> new note ·{" "}
+        <kbd>{chordLabel("Mod-/")}</kbd> all shortcuts
+      </div>
     </div>
   );
 }
@@ -280,6 +295,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
@@ -473,6 +490,14 @@ export function App() {
     setPaletteOpen(false);
     setRefocus((r) => r + 1);
   };
+  const closeCmdSearch = () => {
+    setCmdSearchOpen(false);
+    setRefocus((r) => r + 1);
+  };
+  const closeCheatsheet = () => {
+    setCheatsheetOpen(false);
+    setRefocus((r) => r + 1);
+  };
 
   const onCommand = (c: AppCommand) => {
     if (c === "find") openFinder("all");
@@ -481,29 +506,44 @@ export function App() {
     else if (c === "settings") openSettings();
     else if (c === "config") openConfig();
     else if (c === "palette") setPaletteOpen(true);
+    else if (c === "commands") setCmdSearchOpen(true);
+    else if (c === "cheatsheet") setCheatsheetOpen(true);
     else if (c === "new") void createNote();
     else if (c === "delete") void deleteActive();
     else if (c === "togglePreview") togglePreview();
     else if (c === "backlinks") void openBacklinks();
   };
 
-  const paletteActions: PaletteAction[] = [
-    { key: "n", label: "New note", run: () => void createNote() },
-    { key: "f", label: "Find", hint: "files + content", run: () => openFinder("all") },
-    { key: "g", label: "Search content", run: () => openFinder("content") },
-    { key: "l", label: "Backlinks", hint: "links here", run: () => void openBacklinks() },
-    { key: "b", label: "Toggle sidebar", run: toggleNav },
-    {
-      key: "p",
-      label: "Toggle live preview",
-      hint: cfg.livePreview ? "on" : "off",
-      run: togglePreview,
-    },
-    { key: ",", label: "Settings", run: openSettings },
-    { key: "c", label: "Edit ~/.notesiderc", run: openConfig },
-    { key: "q", label: "Close note", hint: ":q", run: () => session.quit() },
-    { key: "d", label: "Delete note", danger: true, run: () => void deleteActive() },
-  ];
+  // Run a command chosen from the searchable palette. App-level: AppCommands via
+  // onCommand, plus quit. Editor-context commands (save/follow) aren't listed there.
+  const runPaletteCommand = (cmd: Command) => {
+    if (cmd.command) onCommand(cmd.command);
+    else if (cmd.editor === "quit") session.quit();
+  };
+
+  // Chords when no editor is focused (empty state / picker). Disabled while any
+  // overlay is open so it never steals keys from a panel that owns its own focus.
+  useGlobalChords({
+    enabled: !(
+      finder ||
+      paletteOpen ||
+      cmdSearchOpen ||
+      cheatsheetOpen ||
+      settingsOpen ||
+      backlinks
+    ),
+    overrides: cfg.chords,
+    run: onCommand,
+  });
+
+  // The which-key leader palette is derived from the command table (single source).
+  const paletteActions: PaletteAction[] = leaderCommands.map((c) => ({
+    key: c.leader as string,
+    label: c.title,
+    hint: c.id === "togglePreview" ? (cfg.livePreview ? "on" : "off") : c.paletteHint,
+    danger: c.danger,
+    run: () => runPaletteCommand(c),
+  }));
 
   const titleText = s.title;
   const showEditor = s.status !== "empty";
@@ -518,7 +558,7 @@ export function App() {
           <button
             className="av-iconbtn av-navtoggle"
             onClick={toggleNav}
-            title="toggle sidebar (:nav)"
+            title={`toggle sidebar (${chordLabel("Mod-b")})`}
             aria-label="toggle sidebar"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
@@ -538,7 +578,7 @@ export function App() {
           <button
             className="av-iconbtn"
             onClick={() => openFinder("all")}
-            title="search (:find)"
+            title={`search (${chordLabel("Mod-p")})`}
             aria-label="search"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
@@ -602,6 +642,7 @@ export function App() {
                 vimMode={cfg.vimMode}
                 cursorBlink={cfg.cursorBlink}
                 relativeNumbers={RELATIVE_NUMBERS}
+                chordOverrides={cfg.chords}
                 preview={previewOn}
                 linkTargets={[...new Set(notes.map((n) => n.title))]}
                 gotoLine={s.gotoLine}
@@ -631,6 +672,22 @@ export function App() {
           <Finder initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
         )}
         {paletteOpen && <CommandPalette actions={paletteActions} onClose={closePalette} />}
+        {cmdSearchOpen && (
+          <CommandSearch
+            commands={withChordOverrides(
+              paletteCommands.filter((c) => !c.needsNote || s.status === "note"),
+              cfg.chords,
+            )}
+            onRun={runPaletteCommand}
+            onClose={closeCmdSearch}
+          />
+        )}
+        {cheatsheetOpen && (
+          <Cheatsheet
+            commands={withChordOverrides(cheatsheetCommands, cfg.chords)}
+            onClose={closeCheatsheet}
+          />
+        )}
         {backlinks && (
           <Backlinks
             title={backlinks.title}

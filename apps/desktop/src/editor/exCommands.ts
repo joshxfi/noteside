@@ -4,6 +4,7 @@
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
 import { wikilinkAt } from "../links";
+import { COMMANDS, type Command } from "./commands";
 
 export type AppCommand =
   | "find"
@@ -14,8 +15,10 @@ export type AppCommand =
   | "new"
   | "delete"
   | "palette"
+  | "commands"
   | "togglePreview"
-  | "backlinks";
+  | "backlinks"
+  | "cheatsheet";
 
 export interface EditorHandlers {
   view: EditorView;
@@ -85,43 +88,39 @@ export function setUserKeymaps(lines: string[]) {
   }
 }
 
+// `:follow` (and `gf`): jump to the note named by the [[wikilink]] under the
+// cursor. Reads the raw line/column, so it works regardless of live-preview.
+function runFollow() {
+  const v = active?.view;
+  if (!active || !v) return;
+  const head = v.state.selection.main.head;
+  const ln = v.state.doc.lineAt(head);
+  const target = wikilinkAt(ln.text, head - ln.from);
+  if (target) active.followLink(target);
+}
+
+function runEx(c: Command) {
+  if (c.command) active?.command(c.command);
+  else if (c.editor === "save") active?.save();
+  else if (c.editor === "quit") active?.quit();
+  else if (c.editor === "saveQuit") active?.saveQuit();
+  else if (c.editor === "follow") runFollow();
+}
+
 let defined = false;
 export function defineExCommands() {
   if (defined) return;
   defined = true;
 
-  // `:w` / `:write`, `:wq`/`:x`, `:q`/`:quit` — note we intentionally leave `:set`
-  // to codemirror-vim (vim options) and expose the Settings panel as `:settings`.
-  Vim.defineEx("write", "w", () => active?.save());
-  Vim.defineEx("wq", "wq", () => active?.saveQuit());
-  Vim.defineEx("xit", "x", () => active?.saveQuit());
-  Vim.defineEx("quit", "q", () => active?.quit());
-  Vim.defineEx("find", "find", () => active?.command("find"));
-  Vim.defineEx("files", "files", () => active?.command("find"));
-  Vim.defineEx("grep", "grep", () => active?.command("grep"));
-  Vim.defineEx("nav", "nav", () => active?.command("nav"));
-  Vim.defineEx("settings", "settings", () => active?.command("settings"));
-  Vim.defineEx("prefs", "prefs", () => active?.command("settings"));
-  Vim.defineEx("config", "config", () => active?.command("config"));
-  Vim.defineEx("new", "new", () => active?.command("new"));
-  Vim.defineEx("rm", "rm", () => active?.command("delete"));
-  Vim.defineEx("palette", "palette", () => active?.command("palette"));
-  Vim.defineEx("preview", "preview", () => active?.command("togglePreview"));
-  Vim.defineEx("backlinks", "back", () => active?.command("backlinks"));
+  // Every command's `:ex` names dispatch through the shared handler registry.
+  // (`:set` is intentionally left to codemirror-vim for vim options.)
+  for (const c of COMMANDS) {
+    if (!c.ex) continue;
+    for (const name of c.ex) Vim.defineEx(name, name, () => runEx(c));
+  }
 
-  // `:follow` (and `gf`) jumps to the note named by the [[wikilink]] under the
-  // cursor. Reads the raw line/column, so it works regardless of live-preview.
-  Vim.defineEx("follow", "follow", () => {
-    const v = active?.view;
-    if (!active || !v) return;
-    const head = v.state.selection.main.head;
-    const ln = v.state.doc.lineAt(head);
-    const target = wikilinkAt(ln.text, head - ln.from);
-    if (target) active.followLink(target);
-  });
+  // `gf` follows the wikilink under the cursor; `<Space>` opens the leader palette.
   Vim.map("gf", ":follow<CR>", "normal");
-
-  // Leader: <Space> opens the command palette (which-key style).
   Vim.map("<Space>", ":palette<CR>", "normal");
 
   // Highlight all matches of the last search (vim :set hlsearch); :noh clears.

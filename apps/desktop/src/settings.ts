@@ -29,6 +29,8 @@ export interface Config {
   escMap: string;
   /** Raw vim map lines (e.g. "nmap <Space>w :w<CR>"), applied via Vim.map. */
   keymaps: string[];
+  /** Non-vim chord overrides from `bind` lines: command id → chord ("" = unbound). */
+  chords: Record<string, string>;
 }
 
 // ---- option metadata ------------------------------------------------
@@ -78,6 +80,7 @@ export const CONFIG_DEFAULTS: Config = {
   vimMode: true,
   escMap: "",
   keymaps: [],
+  chords: {},
 };
 
 const byId = <T extends { id: string }>(list: T[], id: string): T =>
@@ -119,6 +122,9 @@ export function serializeConfig(c: Config): string {
   else L.push('" imap jj <Esc>          (no insert-mode escape mapping set)');
   if (c.keymaps.length) for (const km of c.keymaps) L.push(km);
   else L.push('" nmap <Space>w :w<CR>   (custom key mappings go here)');
+  const binds = Object.entries(c.chords);
+  if (binds.length) for (const [id, chord] of binds) L.push(`bind ${chord || "none"} ${id}`);
+  else L.push('" bind Ctrl-j find       (rebind a chord; bind none <cmd> to unbind)');
   L.push("");
   return L.join("\n");
 }
@@ -127,6 +133,7 @@ export function parseConfig(text: string, base: Config): Config {
   const c: Config = { ...base };
   c.escMap = ""; // an imap line re-enables it
   c.keymaps = []; // collected fresh from the map lines below
+  c.chords = {}; // collected fresh from the bind lines below
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
   const matchFont = (list: FontOption[], val: string): string | null => {
     const n = norm(val);
@@ -139,6 +146,11 @@ export function parseConfig(text: string, base: Config): Config {
     let m: RegExpMatchArray | null;
     if ((m = line.match(/^imap\s+(\S+)\s+<esc>/i))) {
       c.escMap = m[1];
+      continue;
+    }
+    // `bind <chord> <command-id>` rebinds a non-vim chord; `bind none <id>` unbinds it.
+    if ((m = line.match(/^bind\s+(\S+)\s+(\S+)\s*$/i))) {
+      c.chords[m[2]] = /^none$/i.test(m[1]) ? "" : m[1];
       continue;
     }
     if (/^(n|v|i|o)?(nore)?map\s+\S+\s+.+$/i.test(line)) {
