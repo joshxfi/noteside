@@ -128,7 +128,9 @@ browser against an in-memory mock backend — handy for frontend work.
 **Build the native app**
 
 ```bash
-pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png  # regen the icon set
+# the icon art is scripts/mark.html (the brand mark in Newsreader); render it to
+# src-tauri/app-icon.png (see that file's header), then regenerate the icon set:
+pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png
 pnpm tauri build                                                   # native installers
 ```
 

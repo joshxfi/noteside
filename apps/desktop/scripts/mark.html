@@ -1,0 +1,77 @@
+<!doctype html>
+<!--
+  Brand-accurate Noteside mark, rendered with the real Newsreader font. This is
+  the source of truth for the app icon + README logo — the design's exact CSS
+  (see the Brand Guide: tile 128, N 74px Newsreader 600, cursor 12×54, gap 5,
+  align-items:center, border-radius 24%) scaled ×6.4375 to an 824px tile centred
+  on a 1024px transparent canvas (the macOS icon grid).
+
+  Render (Newsreader loads from Google Fonts, so be online):
+    chrome --headless=new --disable-gpu --hide-scrollbars \
+      --force-device-scale-factor=2 --window-size=1024,1024 \
+      --virtual-time-budget=8000 --default-background-color=00000000 \
+      --screenshot=out.png file://…/mark.html
+    sips --resampleWidth 1024 out.png --out src-tauri/app-icon.png
+    pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f9f5ed;
+        --ink: #3b2f27;
+        --plum: #a05e7e;
+        --rule: #e0d8ce;
+        --serif: "Newsreader", Georgia, serif;
+      }
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+      }
+      .canvas {
+        width: 1024px;
+        height: 1024px;
+        display: grid;
+        place-items: center;
+      }
+      /* exact brand .bmark, scaled to an 824px tile */
+      .bmark {
+        width: 824px;
+        height: 824px;
+        gap: 32px;
+        background: var(--paper);
+        box-shadow: inset 0 0 0 6px var(--rule);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 24%;
+      }
+      .bmark .n {
+        font-family: var(--serif);
+        font-weight: 600;
+        line-height: 1;
+        color: var(--ink);
+        font-size: 476px;
+      }
+      .bmark .cur {
+        background: var(--plum);
+        border-radius: 8%;
+        width: 77px;
+        height: 348px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="canvas">
+      <span class="bmark"><span class="n">N</span><span class="cur"></span></span>
+    </div>
+  </body>
+</html>
