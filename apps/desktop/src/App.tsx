@@ -21,7 +21,7 @@ const CONFIG_ID = "config";
 const AUTOSAVE_MS = 800;
 
 type Status = "boot" | "no-vault" | "ready";
-type FinderMode = "files" | "content";
+type FinderMode = "all" | "files" | "content";
 
 function relTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -416,7 +416,7 @@ export function App() {
   };
 
   const onCommand = (c: AppCommand) => {
-    if (c === "find") openFinder("files");
+    if (c === "find") openFinder("all");
     else if (c === "grep") openFinder("content");
     else if (c === "nav") toggleNav();
     else if (c === "settings") openSettings();
@@ -454,9 +454,9 @@ export function App() {
           </button>
           <button
             className="av-iconbtn"
-            onClick={() => openFinder("files")}
-            title="find files (:find)"
-            aria-label="find files"
+            onClick={() => openFinder("all")}
+            title="search (:find)"
+            aria-label="search"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
               <circle

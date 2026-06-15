@@ -1,6 +1,7 @@
-// Fuzzy finder overlay (Files + Content). Queries the backend (Rust nucleo +
-// content scan, or the mock) with a short debounce; the preview pane lazily
-// fetches the selected note's text.
+// Fuzzy finder overlay. Default "All" mode merges fuzzy file/title matches with
+// content matches in one list; Files / Content narrow it. Queries the backend
+// (Rust nucleo + content scan, or the mock) with a short debounce; the preview
+// pane lazily fetches the selected note's text.
 import { createElement, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backend, type ContentHit, type FileHit, type GrepMode } from "../backend";
@@ -121,19 +122,21 @@ function Preview({
   );
 }
 
+type Mode = "all" | "files" | "content";
+const MODES: Mode[] = ["all", "files", "content"];
+
 export interface FinderProps {
-  initialMode: "files" | "content";
+  initialMode: Mode;
   onClose: () => void;
   onOpen: (path: string, line: number) => void;
 }
 
 export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
-  const [mode, setMode] = useState<"files" | "content">(initialMode || "files");
+  const [mode, setMode] = useState<Mode>(initialMode || "all");
   const [grepMode, setGrepMode] = useState<GrepMode>("plain");
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
-  const [fileHits, setFileHits] = useState<FileHit[]>([]);
-  const [contentHits, setContentHits] = useState<ContentHit[]>([]);
+  const [items, setItems] = useState<(FileHit | ContentHit)[]>([]);
   const [preview, setPreview] = useState<{ path: string; lines: string[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -142,24 +145,31 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     inputRef.current?.focus();
   }, [mode]);
 
-  // debounced search
+  // debounced search. "all" merges fuzzy file/title matches with content matches.
   useEffect(() => {
     let alive = true;
     const id = setTimeout(async () => {
       try {
+        let result: (FileHit | ContentHit)[];
         if (mode === "files") {
-          const r = await backend.searchFiles(query);
-          if (alive) setFileHits(r);
+          result = await backend.searchFiles(query);
+        } else if (mode === "content") {
+          result = await backend.searchContent(query, grepMode);
         } else {
-          const r = await backend.searchContent(query, grepMode);
-          if (alive) setContentHits(r);
+          const [files, content] = await Promise.all([
+            backend.searchFiles(query),
+            query.trim()
+              ? backend.searchContent(query, "plain")
+              : Promise.resolve<ContentHit[]>([]),
+          ]);
+          result = [...files, ...content]; // files (open-by-name) first, then content
         }
-        if (alive) setSel(0);
-      } catch {
         if (alive) {
-          setFileHits([]);
-          setContentHits([]);
+          setItems(result);
+          setSel(0);
         }
+      } catch {
+        if (alive) setItems([]);
       }
     }, 80);
     return () => {
@@ -168,7 +178,6 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     };
   }, [query, mode, grepMode]);
 
-  const items: (FileHit | ContentHit)[] = mode === "files" ? fileHits : contentHits;
   const selItem = items[sel];
   const selPath = selItem?.path ?? null;
 
@@ -219,7 +228,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
       open();
     } else if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
-      setMode((m) => (m === "files" ? "content" : "files"));
+      setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
     } else if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
       if (mode === "content")
@@ -233,14 +242,18 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     <div className="fnd-scrim" onMouseDown={onClose}>
       <div className="fnd-panel" onMouseDown={(e) => e.stopPropagation()}>
         <div className="fnd-head">
-          <span className="fnd-promptchar">{mode === "files" ? "find" : "grep"} ›</span>
+          <span className="fnd-promptchar">{mode === "content" ? "grep" : "find"} ›</span>
           <input
             ref={inputRef}
             className="fnd-input"
             value={query}
             spellCheck={false}
             placeholder={
-              mode === "files" ? "fuzzy path…  (try a few letters)" : "search note contents…"
+              mode === "content"
+                ? "search note contents…"
+                : mode === "files"
+                  ? "fuzzy file name…"
+                  : "search files and contents…"
             }
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -251,26 +264,19 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
             </span>
           )}
           <div className="fnd-tabs">
-            <button
-              className={"fnd-tab" + (mode === "files" ? " is-on" : "")}
-              tabIndex={-1}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setMode("files");
-              }}
-            >
-              Files
-            </button>
-            <button
-              className={"fnd-tab" + (mode === "content" ? " is-on" : "")}
-              tabIndex={-1}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setMode("content");
-              }}
-            >
-              Content
-            </button>
+            {MODES.map((m) => (
+              <button
+                key={m}
+                className={"fnd-tab" + (mode === m ? " is-on" : "")}
+                tabIndex={-1}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setMode(m);
+                }}
+              >
+                {m === "all" ? "All" : m === "files" ? "Files" : "Content"}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -291,11 +297,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
                     onOpen(item.path, "lineNumber" in item ? item.lineNumber : 0);
                   }}
                 >
-                  {mode === "files" ? (
-                    <FileRow item={item as FileHit} />
-                  ) : (
-                    <GrepRow item={item as ContentHit} />
-                  )}
+                  {"lineNumber" in item ? <GrepRow item={item} /> : <FileRow item={item} />}
                 </div>
               ))
             )}
@@ -303,14 +305,14 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
           <Preview
             path={preview?.path ?? null}
             lines={preview?.lines ?? null}
-            activeLine={mode === "content" && selGrep ? selGrep.lineNumber : null}
-            ranges={mode === "content" && selGrep ? selGrep.ranges : null}
+            activeLine={selGrep ? selGrep.lineNumber : null}
+            ranges={selGrep ? selGrep.ranges : null}
           />
         </div>
 
         <div className="fnd-foot">
           <span className="fnd-hint">
-            <b>↑↓</b> move · <b>↵</b> open · <b>⇥</b> {mode === "files" ? "content" : "files"} ·{" "}
+            <b>↑↓</b> move · <b>↵</b> open · <b>⇥</b> filter ·{" "}
             {mode === "content" ? (
               <>
                 <b>⇧⇥</b> grep mode ·{" "}
@@ -319,7 +321,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
             <b>⎋</b> close
           </span>
           <span className="fnd-count">
-            {items.length} {mode === "files" ? "files" : "matches"}
+            {items.length} {items.length === 1 ? "result" : "results"}
           </span>
         </div>
       </div>
