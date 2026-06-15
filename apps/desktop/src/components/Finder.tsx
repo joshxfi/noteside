@@ -58,9 +58,9 @@ function FileRow({ item }: { item: FileHit }) {
 function GrepRow({ item }: { item: ContentHit }) {
   const lead = item.line.length - item.line.trimStart().length;
   const text = item.line.slice(lead);
-  const ranges = item.ranges.map(
-    ([s, e]) => [Math.max(0, s - lead), Math.max(0, e - lead)] as Range,
-  );
+  const ranges = item.ranges
+    .filter(([, e]) => e > lead)
+    .map(([s, e]) => [Math.max(0, s - lead), e - lead] as Range);
   return (
     <>
       <span className="fnd-grepline">{hl(text, ranges)}</span>

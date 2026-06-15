@@ -184,11 +184,13 @@ export function App() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
-  const latest = useRef("");
+  const pending = useRef<{ id: string; text: string } | null>(null);
   const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const configLoaded = useRef(false);
 
   const isConfig = activeId === CONFIG_ID;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
 
   const flash = (msg: string) => {
     setToast(msg);
@@ -273,12 +275,13 @@ export function App() {
   useEffect(() => {
     let un: (() => void) | null = null;
     let cancelled = false;
-    void backend
+    backend
       .watchVault(() => void changedRef.current())
       .then((u) => {
         if (cancelled) u();
         else un = u;
-      });
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
       un?.();
@@ -298,6 +301,7 @@ export function App() {
   };
 
   const openNote = async (path: string, line = 0) => {
+    flushPending(); // persist the outgoing note's queued edits before switching
     const doc = await backend.readNote(path);
     setOpenDoc(doc);
     setSavedText(doc.body);
@@ -307,16 +311,34 @@ export function App() {
     setGotoLine(line);
   };
 
-  const doSaveNote = async (text: string) => {
-    if (!activeId || activeId === CONFIG_ID) return;
+  // Save is always bound to an explicit note id (never the live activeId), so a
+  // queued autosave can't write one note's text into another after a switch.
+  const doSaveNote = async (id: string, text: string) => {
+    if (!id || id === CONFIG_ID) return;
     try {
-      const meta = await backend.saveNote(activeId, text);
-      setSavedText(text);
-      setActiveDirty(false);
+      const meta = await backend.saveNote(id, text);
       // update in place (don't reorder — avoids the active note jumping on autosave)
       setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n)));
+      // only touch open-note state if this note is still the one on screen
+      if (activeIdRef.current === id) {
+        setSavedText(text);
+        setActiveDirty(false);
+      }
     } catch (e) {
       flash(`save failed: ${e}`);
+    }
+  };
+
+  // Flush a queued autosave immediately to its own note (e.g. before switching).
+  const flushPending = () => {
+    if (autosave.current) {
+      clearTimeout(autosave.current);
+      autosave.current = null;
+    }
+    const p = pending.current;
+    if (p) {
+      pending.current = null;
+      void doSaveNote(p.id, p.text);
     }
   };
 
@@ -328,18 +350,28 @@ export function App() {
   };
 
   const onEditorChange = (text: string) => {
-    if (isConfig) return;
-    latest.current = text;
+    if (isConfig || !activeId) return;
+    pending.current = { id: activeId, text };
     setActiveDirty(text !== savedText);
     if (autosave.current) clearTimeout(autosave.current);
-    autosave.current = setTimeout(() => void doSaveNote(latest.current), AUTOSAVE_MS);
+    autosave.current = setTimeout(() => {
+      autosave.current = null;
+      const p = pending.current;
+      pending.current = null;
+      if (p) void doSaveNote(p.id, p.text);
+    }, AUTOSAVE_MS);
   };
   const onEditorSave = (text: string) => {
-    if (autosave.current) clearTimeout(autosave.current);
+    if (autosave.current) {
+      clearTimeout(autosave.current);
+      autosave.current = null;
+    }
+    pending.current = null;
     if (isConfig) onConfigSave(text);
-    else void doSaveNote(text);
+    else if (activeId) void doSaveNote(activeId, text);
   };
   const onEditorQuit = () => {
+    flushPending();
     if (isConfig) {
       setActiveId(lastId && lastId !== CONFIG_ID ? lastId : null);
     } else {
