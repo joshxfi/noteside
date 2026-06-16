@@ -9,7 +9,7 @@ import {
 } from "@codemirror/view";
 import { completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { openSearchPanel, search } from "@codemirror/search";
+import { closeSearchPanel, openSearchPanel, search, searchPanelOpen } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
@@ -106,7 +106,11 @@ export function Editor(props: EditorProps) {
       else if (cmd.editor === "saveQuit" && v) {
         p.onSave(v.state.doc.toString());
         p.onQuit();
-      } else if (cmd.editor === "search" && v) openSearchPanel(v);
+      } else if (cmd.editor === "search" && v) {
+        // Mod-f toggles the find panel: close it if it's open, otherwise open it.
+        if (searchPanelOpen(v.state)) closeSearchPanel(v);
+        else openSearchPanel(v);
+      }
     };
 
     const extensions: Extension[] = [];
@@ -122,6 +126,19 @@ export function Editor(props: EditorProps) {
       // in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
       // theme styling. The default panel handles type / Enter (next) / Esc (close).
       search({ top: true }),
+      // The editor-scope chord above only fires when the content is focused; this makes
+      // Mod-f also CLOSE the panel while the find field itself is focused, so it toggles.
+      keymap.of([
+        {
+          key: "Mod-f",
+          scope: "search-panel",
+          preventDefault: true,
+          run: (view) => {
+            closeSearchPanel(view);
+            return true;
+          },
+        },
+      ]),
       markdown({ addKeymap: false }),
       syntaxHighlighting(noteHighlight),
       ...(preview ? [livePreview] : []),
