@@ -2,7 +2,7 @@
   "name": "noteside",
   "version": "0.1.0",
   "private": true,
-  "description": "Noteside — notes for keyboard people. Offline, local-first, vim-first notes.",
+  "description": "Noteside — notes for keyboard people. Offline, local-first, keyboard-first notes (vim or shortcuts).",
   "license": "MIT",
   "scripts": {
     "dev": "turbo run dev --filter=@noteside/landing --filter=@noteside/desktop",

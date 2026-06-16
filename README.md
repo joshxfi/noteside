@@ -6,8 +6,9 @@
 
 <p align="center">
   <strong>Notes for keyboard people.</strong><br/>
-  An offline, local-first notebook with first-class vim — your notes stay as plain
-  Markdown files on your disk. No account, no cloud, no chrome in the way.
+  An offline, local-first notebook you drive entirely from the keyboard — full vim, or
+  the conventional shortcuts you already know. Your notes stay as plain Markdown files
+  on your disk. No account, no cloud, no chrome in the way.
 </p>
 
 <p align="center">
@@ -28,9 +29,9 @@
 ---
 
 Noteside is a desktop notebook for people who'd rather keep their hands on home
-row. It opens in NORMAL mode like vim, the page is the interface, and every note
-is a plain `.md` file in a folder you choose — grep it, back it up, sync it, or
-walk away with it. Nothing leaves your machine.
+row — full vim if you want it, conventional `⌘`-shortcuts if you don't. The page is
+the interface, and every note is a plain `.md` file in a folder you choose — grep it,
+back it up, sync it, or walk away with it. Nothing leaves your machine.
 
 It's built on **CodeMirror 6 + a real vim engine** inside a native **Tauri**
 window, with a Rust core that treats your files as the source of truth.
@@ -45,6 +46,10 @@ window, with a Rust core that treats your files as the source of truth.
   `/` search with match highlighting, marks, and a jumplist — via CodeMirror 6 and
   [`@replit/codemirror-vim`](https://github.com/replit/codemirror-vim). Ex-commands
   are wired to the app, and a `<Space>` leader opens a which-key command palette.
+- **Keyboard-first, vim optional.** Don't use vim? Turn it off and drive everything with
+  conventional shortcuts — `⌘P` to find, `⌘⇧P` for a searchable command palette, `⌘F` to
+  find in the note, `⌘/` for the full cheatsheet — all remappable via `bind` lines in
+  `~/.notesiderc`. The chords are always on, so they work alongside vim too.
 - **Files as truth.** Notes are plain Markdown in a folder you pick. The Rust core
   scans them into a rebuildable in-memory index, writes **atomically** (temp →
   fsync → rename), and watches the folder so external edits (other editors, git,
@@ -82,6 +87,25 @@ Standard vim throughout. On top of that:
 
 Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
 `~/.notesiderc` and apply on `:w`.
+
+**Don't use vim?** Turn it off (`:set vim off`, or the settings panel) and the same
+commands are conventional chords — always available, even with vim on:
+
+| Chord  | Does                              |
+| ------ | --------------------------------- |
+| `⌘P`   | Find files & content              |
+| `⌘⇧P`  | Searchable command palette        |
+| `⌘⇧F`  | Content search (grep)             |
+| `⌘F`   | Find in the current note (toggle) |
+| `⌘N`   | New note                          |
+| `⌘B`   | Toggle the sidebar                |
+| `⌘E`   | Toggle inline live-preview        |
+| `⌘⇧L`  | Linked-references panel           |
+| `⌘,`   | Settings panel                    |
+| `⌘/`   | Keyboard cheatsheet               |
+
+`⌘` is Cmd on macOS, Ctrl elsewhere. Remap any of them with `bind <chord> <command>`
+in `~/.notesiderc`.
 
 ## Tech stack
 
@@ -172,9 +196,9 @@ The hot paths are benchmarked (`cargo bench`, `pnpm bench`). On a modern laptop:
 
 ## Roadmap
 
-Working today: vim editing, files-as-truth storage + watcher, fuzzy/content search,
-the command palette, inline live-preview, wikilinks + backlinks, themes, and the
-live `~/.notesiderc`.
+Working today: vim and conventional-shortcut editing, files-as-truth storage +
+watcher, fuzzy/content search, the command palette, inline live-preview, wikilinks +
+backlinks, themes, and the live `~/.notesiderc`.
 
 Next: wikilink niceties (create-on-follow, unresolved-link styling), richer preview
 (images, tables), SQLite FTS5 for very large notebooks, vendored offline fonts, and
