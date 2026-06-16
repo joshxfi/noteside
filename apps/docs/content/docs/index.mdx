@@ -1,0 +1,53 @@
+---
+title: Introduction
+description: An offline, local-first, keyboard-first notes app.
+---
+
+**Noteside** is a desktop notebook for people who'd rather keep their hands on home
+row — full vim if you want it, conventional shortcuts if you don't. Every note is a
+plain `.md` file in a folder you choose: grep it, back it up, sync it, or walk away
+with it. Nothing leaves your machine.
+
+It's built on **CodeMirror 6** + a real vim engine inside a native **Tauri** window,
+with a Rust core that treats your files as the source of truth — so what you see in
+the editor is exactly what's on disk.
+
+<Callout title="Status">
+  Pre-1.0 and moving fast. The editor, search, wikilinks, live preview, and the files-as-truth
+  backend all work today.
+</Callout>
+
+## What you get
+
+- **Keyboard-first, vim optional.** Real vim modes and motions, or the conventional
+  `⌘`-shortcuts you already know — both first-class, both always on.
+- **Files as truth.** Plain Markdown in a folder you pick, autosaved and written
+  atomically, and reloaded live when something edits them from outside.
+- **Offline & local-first.** No account, no telemetry, no network.
+- **Wikilinks, backlinks, inline live-preview, and fast search** — over a warm,
+  literary reading surface you can theme from a live `~/.notesiderc`.
+
+## Start here
+
+<Cards>
+  <Card
+    title="Getting started"
+    href="/getting-started"
+    description="Install, open a notebook, write your first note."
+  />
+  <Card
+    title="Keybindings"
+    href="/keybindings"
+    description="Vim commands, chords, and the leader palette."
+  />
+  <Card
+    title="Wikilinks & backlinks"
+    href="/wikilinks"
+    description="Link notes together and see what points back."
+  />
+  <Card
+    title="Configuration"
+    href="/configuration"
+    description="Theme, fonts, and ~/.notesiderc."
+  />
+</Cards>

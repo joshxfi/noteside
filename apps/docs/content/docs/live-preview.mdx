@@ -1,0 +1,32 @@
+---
+title: Live preview
+description: Render Markdown inline without ever rewriting your text.
+---
+
+Live preview renders Markdown **in place**, Obsidian-style. Headings, bold, inline
+code, and `[[wikilinks]]` display as formatted text — but the raw markup reappears on
+the line your cursor is on, so you always edit the real characters.
+
+## How it works
+
+- Markup (`#`, `**`, `` ` ``, `[[ ]]`) is hidden on every line _except_ the one
+  you're editing.
+- The document is **never rewritten** — the styling is purely a display layer over
+  your literal Markdown. What you save is exactly what you typed.
+- Because the text underneath is unchanged, vim motions, counts, and visual selections
+  all operate on the real characters, not on rendered output.
+
+## Toggling it
+
+- `⌘E`, `:preview`, or `<Space> p`
+
+You can also set the default in your config:
+
+```vim
+set live-preview = off
+```
+
+<Callout title="Why not full WYSIWYG?">
+  Keeping the buffer equal to the file on disk is the whole point: your notes stay plain Markdown
+  that any other tool can read, and vim never has to guess where the "real" text is.
+</Callout>

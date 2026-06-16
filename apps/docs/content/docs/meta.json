@@ -1,0 +1,12 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "getting-started",
+    "keybindings",
+    "search",
+    "wikilinks",
+    "live-preview",
+    "configuration"
+  ]
+}

@@ -1,0 +1,41 @@
+---
+title: Search
+description: Find notes by name, search inside them, or jump within the current note.
+---
+
+Noteside has three distinct search surfaces. They look similar but answer different
+questions.
+
+## Find files & content — `⌘P`
+
+The fuzzy finder (`⌘P`, `:find`, or `<Space> f`) is how you jump between notes. Type a
+few characters of a note's title or path and it ranks matches instantly — backed by
+Rust [`nucleo`](https://github.com/helix-editor/nucleo), so it stays sub-millisecond
+even on very large notebooks. It also surfaces content matches, so it doubles as a
+quick "where did I write that?".
+
+This is your everyday navigator — reach for it first.
+
+## Search note contents — `⌘⇧F`
+
+Content search (`⌘⇧F`, `:grep`, or `<Space> g`) scans the text of every note and
+shows matching lines with a live preview pane. It supports three modes:
+
+- **Plain** — literal substring
+- **Regex** — full regular expressions
+- **Fuzzy** — loose, typo-tolerant matching
+
+Use this when you want to see the matching lines in context across the whole
+notebook, not just jump to a file.
+
+## Find in the current note — `⌘F`
+
+`⌘F` toggles an in-note search bar (CodeMirror's own find) scoped to the open note —
+the conventional equivalent of vim's `/`. Press `⌘F` again to close it. Vim users can
+keep using `/` and `?` as normal.
+
+<Callout title="Scaling up">
+  Content search is a linear scan: instant up to a few thousand notes. The search layer is a
+  deliberate seam for **SQLite FTS5** once a notebook grows past ~10k notes — file/title fuzzy
+  search stays fast regardless.
+</Callout>

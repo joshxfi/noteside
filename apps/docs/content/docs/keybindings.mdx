@@ -1,0 +1,81 @@
+---
+title: Keybindings
+description: Vim commands, conventional chords, and the leader palette — all first-class.
+---
+
+Noteside is **keyboard-first**: drive it with full vim, or with the conventional
+chords you already know. The chords are always on, so they work even with vim
+enabled. Every command below comes from one table, so the three ways to reach it —
+ex-command, chord, and leader key — never drift apart.
+
+<Callout title="Three places to search">
+  These are easy to mix up:
+  - `⌘P` — **find files & content** across the notebook (fuzzy)
+  - `⌘⇧F` — **search note contents** (grep, with a preview pane)
+  - `⌘F` — **find in the current note** (toggles the in-note search bar)
+
+See [Search](/search) for the difference.
+
+</Callout>
+
+## Conventional chords
+
+Don't use vim? Turn it off (`:set vim off`, or the settings panel) and these are all
+you need. They stay available with vim on, too.
+
+| Chord | Command                           |
+| ----- | --------------------------------- |
+| `⌘P`  | Find files & content              |
+| `⌘⇧P` | Command palette (searchable)      |
+| `⌘⇧F` | Search note contents (grep)       |
+| `⌘F`  | Find in the current note (toggle) |
+| `⌘N`  | New note                          |
+| `⌘S`  | Save note                         |
+| `⌘B`  | Toggle the sidebar                |
+| `⌘E`  | Toggle inline live-preview        |
+| `⌘⇧L` | Backlinks to this note            |
+| `⌘,`  | Settings panel                    |
+| `⌘/`  | Keyboard cheatsheet               |
+
+`⌘` is Cmd on macOS, Ctrl elsewhere. Forgot one? `⌘/` opens the cheatsheet. Remap any
+chord with `bind <chord> <command>` in `~/.notesiderc` — see [Configuration](/configuration).
+
+## Vim commands
+
+Standard vim throughout. On top of that, these ex-commands and motions are wired to
+the app:
+
+| Command                | Does                                          |
+| ---------------------- | --------------------------------------------- |
+| `:w` `:q` `:wq`        | Save · close note · save & close (`:x` too)   |
+| `:find` (`:files`)     | Fuzzy file & content finder                   |
+| `:grep`                | Search note contents                          |
+| `gf` / `:follow`       | Follow the `[[wikilink]]` under the cursor    |
+| `:backlinks` (`:back`) | Backlinks panel for the current note          |
+| `:new` / `:rm`         | New note · delete note                        |
+| `:preview`             | Toggle inline live-preview                    |
+| `:nav`                 | Toggle the sidebar                            |
+| `:commands`            | Open the searchable command palette           |
+| `:settings` `:config`  | Settings panel · edit `~/.notesiderc`         |
+| `:help`                | Keyboard cheatsheet                           |
+| `:set …`               | CodeMirror-vim options (e.g. `:set hlsearch`) |
+
+Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
+`~/.notesiderc` and apply on `:w`.
+
+## The `<Space>` leader palette
+
+Tap `<Space>` in normal mode to open a which-key menu, then a single key:
+
+| Key         | Command              |
+| ----------- | -------------------- |
+| `<Space> f` | Find files & content |
+| `<Space> g` | Search note contents |
+| `<Space> n` | New note             |
+| `<Space> q` | Close note           |
+| `<Space> d` | Delete note          |
+| `<Space> b` | Toggle the sidebar   |
+| `<Space> p` | Toggle live-preview  |
+| `<Space> l` | Backlinks            |
+| `<Space> ,` | Settings             |
+| `<Space> c` | Edit `~/.notesiderc` |

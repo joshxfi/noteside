@@ -9,6 +9,7 @@
     "dev:desktop": "turbo run dev --filter=@noteside/desktop",
     "dev:landing": "turbo run dev --filter=@noteside/landing",
     "dev:brand": "turbo run dev --filter=@noteside/brand",
+    "dev:docs": "turbo run dev --filter=@noteside/docs",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

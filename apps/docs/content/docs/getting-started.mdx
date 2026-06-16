@@ -1,0 +1,59 @@
+---
+title: Getting started
+description: Install Noteside, open a notebook, and write your first note.
+---
+
+Noteside is pre-1.0, so for now you run it from source.
+
+## Prerequisites
+
+- **Node 24** and **pnpm 11** — run `corepack enable` (the repo pins both)
+- **Rust** (stable) + the [Tauri 2 system dependencies](https://v2.tauri.app/start/prerequisites/)
+  to run or build the desktop app
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev:desktop    # the desktop app — native window + Vite HMR
+```
+
+<Callout title="No Rust toolchain?">
+  `pnpm --filter @noteside/desktop dev:web` runs the UI in a plain browser against an in-memory mock
+  backend — handy for trying it out or doing frontend work without a native window. Your edits won't
+  touch disk in this mode.
+</Callout>
+
+To build a native installer instead: `pnpm tauri build`.
+
+## Open a notebook
+
+A **notebook** is just a folder of Markdown files that you choose — there's no
+import step and no database. The first time you launch, Noteside asks you to **Open a
+notebook**; pick any folder. After that it reopens your last notebook automatically.
+
+- Every `.md` file in the folder (and its subfolders) becomes a note.
+- `.git/` and `.noteside/` are ignored, so a notebook can live inside a repo.
+- Edits from outside Noteside (another editor, git, a sync client) reload live.
+
+## Your first note
+
+Press `⌘N` (or `:new`, or `<Space> n`) to create a note. New notes start as
+`Untitled`; a note's **title** is taken from, in order:
+
+1. a frontmatter `title:` field,
+2. otherwise the first heading or non-blank line,
+3. otherwise the prettified filename.
+
+So just typing `# My ideas` at the top names the note "My ideas" in the sidebar.
+
+## Saving
+
+Noteside **autosaves** about a second after you stop typing — your words are always
+on disk. You can still save explicitly with `:w` or `⌘S` (handy before quitting), and:
+
+- `:q` — close the note (back to the notebook)
+- `:rm` — delete the current note (asks first)
+
+Next: learn the [keybindings](/keybindings), wire up
+[wikilinks](/wikilinks), or theme your [`~/.notesiderc`](/configuration).

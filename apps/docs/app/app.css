@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* ── Noteside brand theme ──────────────────────────────────────────────────
+   Palette ported from apps/brand (light) and apps/desktop (dark): warm paper,
+   ink text, a single plum accent. Fonts mirror the app — IBM Plex Mono for the
+   chrome and code, Newsreader serif for the reading surface (prose + headings). */
+:root {
+  --font-sans: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --color-fd-background: oklch(0.971 0.011 79);
+  --color-fd-foreground: oklch(0.315 0.022 53);
+  --color-fd-muted: oklch(0.948 0.014 78);
+  --color-fd-muted-foreground: oklch(0.47 0.02 56);
+  --color-fd-popover: oklch(0.971 0.011 79);
+  --color-fd-popover-foreground: oklch(0.315 0.022 53);
+  --color-fd-card: oklch(0.948 0.014 78);
+  --color-fd-card-foreground: oklch(0.315 0.022 53);
+  --color-fd-border: oklch(0.886 0.016 75);
+  --color-fd-primary: oklch(0.565 0.095 350);
+  --color-fd-primary-foreground: oklch(0.985 0.01 80);
+  --color-fd-secondary: oklch(0.948 0.014 78);
+  --color-fd-secondary-foreground: oklch(0.315 0.022 53);
+  --color-fd-accent: oklch(0.918 0.017 77);
+  --color-fd-accent-foreground: oklch(0.315 0.022 53);
+  --color-fd-ring: oklch(0.565 0.095 350);
+}
+
+.dark {
+  --color-fd-background: oklch(0.232 0.012 58);
+  --color-fd-foreground: oklch(0.892 0.016 78);
+  --color-fd-muted: oklch(0.262 0.013 58);
+  --color-fd-muted-foreground: oklch(0.72 0.017 72);
+  --color-fd-popover: oklch(0.262 0.013 58);
+  --color-fd-popover-foreground: oklch(0.892 0.016 78);
+  --color-fd-card: oklch(0.262 0.013 58);
+  --color-fd-card-foreground: oklch(0.892 0.016 78);
+  --color-fd-border: oklch(0.345 0.013 60);
+  --color-fd-primary: color-mix(in oklab, oklch(0.565 0.095 350), white 22%);
+  --color-fd-primary-foreground: oklch(0.2 0.02 60);
+  --color-fd-secondary: oklch(0.262 0.013 58);
+  --color-fd-secondary-foreground: oklch(0.892 0.016 78);
+  --color-fd-accent: oklch(0.312 0.015 58);
+  --color-fd-accent-foreground: oklch(0.892 0.016 78);
+  --color-fd-ring: color-mix(in oklab, oklch(0.565 0.095 350), white 22%);
+}
+
+/* neutral.css special-cases the dark sidebar; keep it warm too. */
+.dark #nd-sidebar {
+  --color-fd-muted: oklch(0.262 0.013 58);
+  --color-fd-secondary: oklch(0.262 0.013 58);
+  --color-fd-muted-foreground: oklch(0.72 0.017 72);
+}
+
+/* IBM Plex Mono for chrome + body (more legible on the dark paper than serif),
+   Newsreader serif reserved for headings — the brand guide's split. */
+body {
+  font-family: var(--font-sans);
+}
+:is(h1, h2, h3, h4) {
+  font-family: "Newsreader", Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* ── logo lockup (nav) — mirrors apps/brand/src/Logo.tsx ───────────────────── */
+.ns-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.ns-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12em;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 24%;
+  background: var(--color-fd-background);
+  box-shadow: inset 0 0 0 1px var(--color-fd-border);
+}
+.ns-mark .ns-n {
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--color-fd-foreground);
+}
+.ns-mark .ns-cur {
+  width: 0.17rem;
+  height: 0.6rem;
+  border-radius: 1px;
+  background: var(--color-fd-primary);
+}
+.ns-word {
+  display: inline-flex;
+  align-items: center;
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.0625rem;
+  letter-spacing: -0.015em;
+  color: var(--color-fd-foreground);
+}
+.ns-blockcur {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.78em;
+  margin-left: 0.12em;
+  border-radius: 0.05em;
+  background: var(--color-fd-primary);
+  transform: translateY(0.04em);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
