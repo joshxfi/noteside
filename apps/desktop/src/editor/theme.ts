@@ -44,7 +44,14 @@ export const nsTheme = EditorView.theme({
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
     backgroundColor: "var(--sel)",
   },
-  ".cm-content ::selection": { backgroundColor: "var(--sel)" },
+  // drawSelection() paints the (theme-aware) .cm-selectionBackground above. Keep the
+  // NATIVE selection transparent everywhere in the content — including .cm-content /
+  // .cm-line themselves, not just their descendants — so the browser default doesn't
+  // bleed across the whole content box (side + 36vh bottom padding, inter-line gaps)
+  // as one giant theme-agnostic block.
+  ".cm-content::selection, .cm-content ::selection, .cm-line::selection, .cm-line ::selection": {
+    backgroundColor: "transparent",
+  },
   // vim hlsearch matches
   ".cm-searchMatch": {
     backgroundColor: "color-mix(in oklab, var(--accent), transparent 62%)",
