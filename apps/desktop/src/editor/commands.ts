@@ -11,7 +11,7 @@ import type { KeyBinding } from "@codemirror/view";
 import type { AppCommand } from "./exCommands";
 
 /** Editor-scoped actions that need live editor state (not plain AppCommands). */
-export type EditorAction = "save" | "quit" | "saveQuit" | "follow";
+export type EditorAction = "save" | "quit" | "saveQuit" | "follow" | "search";
 
 export interface Command {
   id: string;
@@ -41,7 +41,8 @@ export interface Command {
 
 // Chords deliberately avoid CM defaultKeymap collisions (active in non-vim mode):
 // Mod-Shift-k = deleteLine, Mod-Enter = insertBlankLine; and the native
-// Mod-f/z/a/c/v/x/Backspace. Shifted punctuation (Mod-Shift-,) is avoided because
+// Mod-z/a/c/v/x/Backspace. (Mod-f IS bound — to in-note search, the non-vim
+// equivalent of vim's `/`.) Shifted punctuation (Mod-Shift-,) is avoided because
 // CM matches on event.key, where Shift+"," is "<" — so `config` has no chord.
 export const COMMANDS: Command[] = [
   // ── Find ──────────────────────────────────────────────────────────
@@ -63,6 +64,15 @@ export const COMMANDS: Command[] = [
     ex: ["grep"],
     leader: "g",
     command: "grep",
+  },
+  {
+    id: "search",
+    title: "Find in note",
+    group: "Find",
+    chord: "Mod-f",
+    editor: "search",
+    needsNote: true,
+    inPalette: false,
   },
   {
     id: "commands",

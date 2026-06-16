@@ -70,6 +70,13 @@ describe("command table", () => {
     }
   });
 
+  it("in-note search is bound to Mod-f as an editor action (not in the App palette)", () => {
+    const s = COMMAND_BY_ID.search;
+    expect(s?.chord).toBe("Mod-f");
+    expect(s?.editor).toBe("search");
+    expect(s?.inPalette).toBe(false); // needs the editor view, can't run from the App-level palette
+  });
+
   it("chordLabel renders the modifiers per platform", () => {
     expect(chordLabel("Mod-p", false)).toBe("Ctrl+P");
     expect(chordLabel("Mod-Shift-f", false)).toBe("Ctrl+Shift+F");

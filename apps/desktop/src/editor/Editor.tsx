@@ -9,6 +9,7 @@ import {
 } from "@codemirror/view";
 import { completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { openSearchPanel, search } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
@@ -105,7 +106,7 @@ export function Editor(props: EditorProps) {
       else if (cmd.editor === "saveQuit" && v) {
         p.onSave(v.state.doc.toString());
         p.onQuit();
-      }
+      } else if (cmd.editor === "search" && v) openSearchPanel(v);
     };
 
     const extensions: Extension[] = [];
@@ -118,6 +119,9 @@ export function Editor(props: EditorProps) {
       highlightActiveLineGutter(),
       drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
       history(),
+      // in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
+      // theme styling. The default panel handles type / Enter (next) / Esc (close).
+      search({ top: true }),
       markdown({ addKeymap: false }),
       syntaxHighlighting(noteHighlight),
       ...(preview ? [livePreview] : []),

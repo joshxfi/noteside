@@ -94,6 +94,60 @@ export const nsTheme = EditorView.theme({
     outline: "none",
     width: "100%",
   },
+  // in-note search panel (@codemirror/search), shown at the top via search({ top: true })
+  ".cm-panels.cm-panels-top": {
+    borderTop: "none",
+    borderBottom: "1px solid var(--rule-soft)",
+  },
+  ".cm-panel.cm-search": {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "8px",
+    padding: "7px 14px",
+    fontFamily: "var(--mono)",
+    fontSize: "12px",
+  },
+  ".cm-search .cm-textfield": {
+    fontFamily: "var(--mono)",
+    fontSize: "12px",
+    color: "var(--ink)",
+    backgroundColor: "var(--paper)",
+    border: "1px solid var(--rule)",
+    borderRadius: "6px",
+    padding: "3px 8px",
+    outline: "none",
+  },
+  ".cm-search .cm-button": {
+    fontFamily: "var(--mono)",
+    fontSize: "11px",
+    color: "var(--ink-soft)",
+    backgroundColor: "var(--paper)",
+    backgroundImage: "none",
+    border: "1px solid var(--rule)",
+    borderRadius: "6px",
+    padding: "3px 9px",
+    cursor: "pointer",
+  },
+  ".cm-search .cm-button:hover": {
+    backgroundColor: "var(--paper-3)",
+    color: "var(--ink)",
+  },
+  ".cm-search label": {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: "11px",
+    color: "var(--ink-faint)",
+  },
+  ".cm-search [name=close]": {
+    color: "var(--ink-faint)",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "16px",
+    padding: "0 4px",
+  },
 });
 
 // Markdown syntax highlighting tuned to the warm palette. Markup punctuation
