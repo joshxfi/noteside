@@ -18,7 +18,8 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "tauri": "pnpm --filter @noteside/desktop tauri",
-    "demo:build": "pnpm --filter @noteside/desktop build:web && rm -rf apps/landing/public/demo && cp -r apps/desktop/dist apps/landing/public/demo"
+    "demo:build": "pnpm --filter @noteside/desktop build:web && rm -rf apps/landing/public/demo && cp -r apps/desktop/dist apps/landing/public/demo",
+    "build:landing": "pnpm demo:build && pnpm --filter @noteside/landing build"
   },
   "devDependencies": {
     "oxfmt": "0.54.0",
