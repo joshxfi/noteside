@@ -91,18 +91,18 @@ Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
 **Don't use vim?** Turn it off (`:set vim off`, or the settings panel) and the same
 commands are conventional chords — always available, even with vim on:
 
-| Chord  | Does                              |
-| ------ | --------------------------------- |
-| `⌘P`   | Find files & content              |
-| `⌘⇧P`  | Searchable command palette        |
-| `⌘⇧F`  | Content search (grep)             |
-| `⌘F`   | Find in the current note (toggle) |
-| `⌘N`   | New note                          |
-| `⌘B`   | Toggle the sidebar                |
-| `⌘E`   | Toggle inline live-preview        |
-| `⌘⇧L`  | Linked-references panel           |
-| `⌘,`   | Settings panel                    |
-| `⌘/`   | Keyboard cheatsheet               |
+| Chord | Does                              |
+| ----- | --------------------------------- |
+| `⌘P`  | Find files & content              |
+| `⌘⇧P` | Searchable command palette        |
+| `⌘⇧F` | Content search (grep)             |
+| `⌘F`  | Find in the current note (toggle) |
+| `⌘N`  | New note                          |
+| `⌘B`  | Toggle the sidebar                |
+| `⌘E`  | Toggle inline live-preview        |
+| `⌘⇧L` | Linked-references panel           |
+| `⌘,`  | Settings panel                    |
+| `⌘/`  | Keyboard cheatsheet               |
 
 `⌘` is Cmd on macOS, Ctrl elsewhere. Remap any of them with `bind <chord> <command>`
 in `~/.notesiderc`.
