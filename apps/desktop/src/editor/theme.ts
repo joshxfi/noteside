@@ -41,14 +41,16 @@ export const nsTheme = EditorView.theme({
     fontSize: "calc(var(--editor-size) * 0.8)",
   },
   ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 16px", minWidth: "36px" },
+  // CM6's baseTheme sets the FOCUSED selection color (#d7d4f0) via a high-specificity
+  // selector (&light.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground).
+  // This theme never declares `dark`, so CM applies its *light* default in BOTH app
+  // themes — a light-lavender block that outranks a plain rule and washes out the text.
+  // !important makes our theme-aware --sel token win regardless of CM's selector.
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "var(--sel)",
+    backgroundColor: "var(--sel) !important",
   },
-  // drawSelection() paints the (theme-aware) .cm-selectionBackground above. Keep the
-  // NATIVE selection transparent everywhere in the content — including .cm-content /
-  // .cm-line themselves, not just their descendants — so the browser default doesn't
-  // bleed across the whole content box (side + 36vh bottom padding, inter-line gaps)
-  // as one giant theme-agnostic block.
+  // With drawSelection active, the drawn layer above IS the selection; keep the native
+  // selection transparent everywhere in the content so the browser default can't bleed.
   ".cm-content::selection, .cm-content ::selection, .cm-line::selection, .cm-line ::selection": {
     backgroundColor: "transparent",
   },
