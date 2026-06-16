@@ -3,7 +3,6 @@ import { EditorState, type Extension, Prec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
-  highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
@@ -15,6 +14,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { type AppCommand, defineExCommands, setActiveHandlers } from "./exCommands";
 import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
+import { activeLineHighlight } from "./activeLine";
 import { livePreview } from "./livePreview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
 import { noteHighlight, nsTheme } from "./theme";
@@ -114,7 +114,7 @@ export function Editor(props: EditorProps) {
     if (vimMode) extensions.push(vim());
     extensions.push(
       lineNumbers(relativeNumbers ? { formatNumber: relFmt } : undefined),
-      highlightActiveLine(),
+      activeLineHighlight,
       highlightActiveLineGutter(),
       drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
       history(),
