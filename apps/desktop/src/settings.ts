@@ -40,6 +40,9 @@ export const ACCENTS: AccentOption[] = [
   { id: "sage", label: "Sage", value: "oklch(0.585 0.075 150)" },
   { id: "dusk", label: "Dusk", value: "oklch(0.58 0.078 255)" },
   { id: "plum", label: "Plum", value: "oklch(0.565 0.095 350)" },
+  // Near-zero chroma (a hair of warmth to match the paper) — a grayscale accent for
+  // people who want the headings/cursor/selection neutral rather than tinted.
+  { id: "monochrome", label: "Monochrome", value: "oklch(0.52 0.008 70)" },
 ];
 
 export const EDITOR_FONTS: FontOption[] = [
