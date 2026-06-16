@@ -320,6 +320,8 @@ body {
   color: var(--ink);
 }
 .av-cfg-glyph {
+  flex: none;
+  display: block;
   color: var(--ink-faint);
 }
 .av-config.is-active .av-cfg-glyph {

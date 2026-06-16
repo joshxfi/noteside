@@ -231,10 +231,56 @@ function Sidebar({
         )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
-            <span className="av-cfg-glyph">＋</span> New note
+            <svg
+              className="av-cfg-glyph"
+              width="15"
+              height="15"
+              viewBox="0 0 15 15"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M7.5 3v9M3 7.5h9"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+            </svg>
+            New note
           </button>
           <button className="av-config" onClick={onSettings}>
-            <span className="av-cfg-glyph">⚙</span> Settings
+            <svg
+              className="av-cfg-glyph"
+              width="15"
+              height="15"
+              viewBox="0 0 15 15"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M2.5 5h10M2.5 10h10"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+              <circle
+                cx="5.5"
+                cy="5"
+                r="1.7"
+                fill="var(--paper-2)"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+              <circle
+                cx="9.5"
+                cy="10"
+                r="1.7"
+                fill="var(--paper-2)"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+            </svg>
+            Settings
           </button>
         </div>
       </div>
