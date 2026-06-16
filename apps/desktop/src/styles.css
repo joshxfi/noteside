@@ -1302,6 +1302,18 @@ html.embed .av-window {
   box-shadow: none;
 }
 
+/* ── native Tauri window: the OS window is transparent (tauri.conf), so a rounded,
+      clipped .av-window paints rounded corners with the desktop showing through;
+      macOS draws the window shadow around the rounded shape. The landing iframe has
+      `embed` only (no `tauri`), so it keeps square edge-to-edge fill. ── */
+html.tauri,
+html.tauri body {
+  background: transparent;
+}
+html.tauri .av-window {
+  border-radius: 12px;
+}
+
 /* ── CodeMirror: force the vim block cursor to the accent (override the
       package default #ff9696) and use the accent for the bar caret too ── */
 .av-cm .cm-fat-cursor,

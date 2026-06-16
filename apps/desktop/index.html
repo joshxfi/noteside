@@ -10,6 +10,8 @@
       // running inside the Tauri window (the OS provides the window frame).
       if (location.search.indexOf("embed") > -1 || "__TAURI_INTERNALS__" in window)
         document.documentElement.classList.add("embed");
+      // Native window only (not the landing iframe) — used to round the window corners.
+      if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("tauri");
     </script>
   </head>
   <body>

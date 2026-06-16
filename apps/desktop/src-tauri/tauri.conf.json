@@ -10,6 +10,7 @@
     "beforeBuildCommand": "pnpm build:web"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -19,6 +20,7 @@
         "minWidth": 720,
         "minHeight": 520,
         "decorations": false,
+        "transparent": true,
         "resizable": true,
         "center": true
       }
