@@ -86,6 +86,18 @@ const STEPS: Step[] = [
       </>
     ),
   },
+  {
+    caps: [
+      ["⌘", true],
+      ["⇧", true],
+      ["P", true],
+    ],
+    cap: (
+      <>
+        <span className="k">⌘⇧P</span> opens the command palette — no vim required
+      </>
+    ),
+  },
 ];
 
 // Adds `.in` to every `.reveal` element as it scrolls into view.
@@ -118,9 +130,9 @@ function useKeycast() {
 
 const FEATURES = [
   {
-    k: "vim, first-class",
-    h: "Modal editing that means it",
-    p: "Real modes, motions, operators, and a command line — not a plugin bolted on. Don't know vim? Flip on plain-text mode and just type.",
+    k: "keyboard, first-class",
+    h: "Vim or ⌘-shortcuts — your call",
+    p: "Full modal vim if you want it — real modes, motions, operators, a command line. Don't want vim? Turn it off and run everything from ⌘-shortcuts, a searchable command palette, and ⌘F find. Either way, the mouse stays parked.",
   },
   {
     k: "offline & local-first",
@@ -169,11 +181,10 @@ export function App() {
           <div className="hero-icon">
             <LogoMark large />
           </div>
-          <p className="eyebrow">Offline · local-first · open source</p>
           <h1>A quiet page that keeps up with your hands.</h1>
           <p className="lede">
-            Noteside is an offline notebook with vim at its core. Stay on home row, keep every note
-            as a plain file, and let the chrome disappear.
+            Noteside is an offline notebook built for the keyboard — drive it with full vim, or the
+            everyday shortcuts you already know.
           </p>
           <div className="cta-row" id="download">
             <a className="btn btn-primary" href={RELEASES}>
@@ -196,8 +207,8 @@ export function App() {
             <iframe src={DEMO_URL} title="Noteside, running live" />
           </div>
           <p className="demo-cap">
-            The real app, running right here. Press <b>i</b> to write, <b>:</b> for commands,{" "}
-            <b>⌘K</b>… just kidding — <b>:find</b> to jump anywhere.
+            The real app, running right here. Press <b>i</b> to write, <b>:</b> for commands, and{" "}
+            <b>:find</b> to jump anywhere.
           </p>
         </section>
 
