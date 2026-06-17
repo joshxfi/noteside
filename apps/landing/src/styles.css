@@ -230,7 +230,7 @@
     font-family: var(--serif);
     font-size: clamp(1.2rem, 2.6vw, 1.7rem);
     color: var(--ink-soft);
-    max-width: 26ch;
+    max-width: 52ch;
     transition: opacity 0.3s ease;
     animation: var(--animate-capfade);
   }

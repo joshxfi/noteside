@@ -8,7 +8,7 @@
   <strong>Notes for keyboard people.</strong><br/>
   An offline, local-first notebook you drive entirely from the keyboard — full vim, or
   the conventional shortcuts you already know. Your notes stay as plain Markdown files
-  on your disk. No account, no cloud, no chrome in the way.
+  on your disk. No account, no cloud, nothing between you and the page.
 </p>
 
 <p align="center">
