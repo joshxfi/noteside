@@ -22,11 +22,10 @@ export const nsTheme = EditorView.theme({
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "2px" },
   // vim's block ("fat") cursor in normal/visual mode
   ".cm-fat-cursor": { background: "var(--accent)", color: "var(--accent-ink)" },
-  "&:not(.cm-focused) .cm-fat-cursor": {
-    background: "transparent",
-    outline: "1px solid var(--accent)",
-    color: "inherit",
-  },
+  // When the editor is blurred — e.g. while a command line, finder, or palette has
+  // focus — hide the block cursor entirely (no hollow outline) so nothing lingers
+  // in the page during a command.
+  "&:not(.cm-focused) .cm-fat-cursor": { display: "none" },
   ".cm-activeLine": { backgroundColor: "var(--active-line)" },
   ".cm-activeLineGutter": {
     backgroundColor: "transparent",
