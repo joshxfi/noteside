@@ -4,7 +4,7 @@ Guidance for any coding agent working in this repository — the single, tool-ag
 
 ## What this is
 
-Noteside — an offline, local-first, **keyboard-first** notes desktop app (full vim _and_ conventional shortcuts, both first-class), plus its marketing site. Turborepo + pnpm monorepo:
+Noteside — an offline & **keyboard-first** notes desktop app (full vim _and_ conventional shortcuts, both first-class), plus its marketing site. Turborepo + pnpm monorepo:
 
 - `apps/desktop` — Tauri 2 + React 19 + Vite + TypeScript (the app)
 - `apps/landing` — Vite + React 19 + TypeScript + Tailwind v4 (the site)
