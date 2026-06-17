@@ -117,22 +117,50 @@ pub fn content_search(
 }
 
 fn plain_ranges(line: &str, needle: &str, needle_lc: &str, smart_case: bool) -> Vec<[u32; 2]> {
-    let hay = if smart_case {
-        line.to_string()
-    } else {
-        line.to_lowercase()
-    };
-    let nee = if smart_case { needle } else { needle_lc };
-    if nee.is_empty() {
+    if needle.is_empty() {
         return Vec::new();
     }
+    if smart_case {
+        return exact_ranges(line, needle);
+    }
+    if line.is_ascii() && needle_lc.is_ascii() {
+        return ascii_case_insensitive_ranges(line, needle_lc);
+    }
+    let hay = line.to_lowercase();
+    exact_ranges(&hay, needle_lc)
+}
+
+fn exact_ranges(line: &str, needle: &str) -> Vec<[u32; 2]> {
     let mut ranges = Vec::new();
     let mut start = 0;
-    while let Some(idx) = hay[start..].find(nee) {
+    while let Some(idx) = line[start..].find(needle) {
         let s = start + idx;
-        let e = s + nee.len();
+        let e = s + needle.len();
         ranges.push([s as u32, e as u32]);
         start = e;
+    }
+    ranges
+}
+
+fn ascii_case_insensitive_ranges(line: &str, needle_lc: &str) -> Vec<[u32; 2]> {
+    let hay = line.as_bytes();
+    let nee = needle_lc.as_bytes();
+    let mut ranges = Vec::new();
+    if nee.is_empty() || hay.len() < nee.len() {
+        return ranges;
+    }
+    let mut i = 0;
+    while i + nee.len() <= hay.len() {
+        if hay[i..i + nee.len()]
+            .iter()
+            .zip(nee)
+            .all(|(a, b)| a.to_ascii_lowercase() == *b)
+        {
+            ranges.push([i as u32, (i + nee.len()) as u32]);
+            i += nee.len();
+        } else {
+            i += 1;
+        }
     }
     ranges
 }

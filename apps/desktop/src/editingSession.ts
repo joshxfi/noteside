@@ -60,7 +60,7 @@ export interface EditingSession {
   /** Flush the outgoing buffer's queued save, read `id` from disk, swap to it. */
   open(id: string, line?: number): Promise<void>;
   /** Editor typed: schedule an id-pinned autosave and recompute dirty (no-op for config). */
-  change(text: string): void;
+  change(text: string | (() => string), dirty?: boolean): void;
   /** `:w` / Mod-s: cancel the debounce and persist now (routes config to onConfigApply). */
   save(text: string): void;
   /** `:q`: flush, then restore the last note (from config) or go empty (from a note). */
@@ -97,6 +97,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   let configText = "";
   let configSaved = "";
   let configKey = 0;
+  let editSeq = 0;
   // Monotonic navigation guard. Every user navigation (open/openConfig/quit/close)
   // bumps this; an in-flight open()/reconcile() captures it and bails if it changed,
   // so a slow readNote can't resolve late and clobber a buffer the user has since
@@ -161,14 +162,14 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // The id-pinned note save (autosave timer + explicit :w). Mirrors App's doSaveNote:
   // bound to an explicit id, so a queued save can never write one note's text into
   // another after a switch; only touches the on-screen buffer if `id` is still active.
-  async function persistNote(id: string, text: string): Promise<void> {
+  async function persistNote(id: string, text: string, seq = editSeq): Promise<void> {
     if (!id || id === CONFIG_ID) return;
     try {
       const meta = await backend.saveNote(id, text);
       onNoteSaved(meta);
       if (activeId === id) {
         noteSaved = text;
-        noteDirty = false;
+        noteDirty = seq !== editSeq;
         commit();
       }
     } catch (e) {
@@ -177,7 +178,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   const autosaver: Autosave = createAutosave(
-    (id, text) => void persistNote(id, text),
+    (id, text, seq) => void persistNote(id, text, seq),
     deps.autosaveMs ?? DEFAULT_AUTOSAVE_MS,
   );
 
@@ -205,10 +206,11 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     commit();
   }
 
-  function change(text: string): void {
+  function change(text: string | (() => string), dirty?: boolean): void {
     if (activeId === null || activeId === CONFIG_ID) return; // config never autosaves
-    autosaver.schedule(activeId, text); // pinned to the buffer being edited
-    noteDirty = text !== noteSaved;
+    const seq = ++editSeq;
+    autosaver.schedule(activeId, text, seq); // pinned to the buffer being edited
+    noteDirty = dirty ?? (typeof text === "function" ? text() : text) !== noteSaved;
     commit();
   }
 
@@ -219,7 +221,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       onConfigApply(text);
       commit();
     } else if (activeId) {
-      void persistNote(activeId, text);
+      void persistNote(activeId, text, editSeq);
     }
   }
 

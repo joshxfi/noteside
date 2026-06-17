@@ -27,6 +27,8 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
     },
     async saveNote(id: string, body: string): Promise<NoteMeta> {
       calls.push(`save:${id}`);
+      const d = delays[id] ?? 0;
+      if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
       bodies.set(id, body);
       return metaOf(id);
     },
@@ -98,6 +100,21 @@ describe("editingSession", () => {
     expect(savedMetas.map((m) => m.id)).toEqual(["a.md"]);
   });
 
+  it("change() can queue lazy text and uses the supplied dirty flag", async () => {
+    const { session, bodies } = makeSession({ "a.md": "old" });
+    let reads = 0;
+    await session.open("a.md");
+    session.change(() => {
+      reads++;
+      return "new text";
+    }, true);
+    expect(reads).toBe(0);
+    expect(session.getSnapshot().dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(reads).toBe(1);
+    expect(bodies.get("a.md")).toBe("new text");
+  });
+
   it("commit bail-out: a keystroke that leaves the snapshot field-identical does not notify", async () => {
     const { session } = makeSession({ "a.md": "base" });
     await session.open("a.md");
@@ -135,6 +152,22 @@ describe("editingSession", () => {
     await vi.advanceTimersByTimeAsync(800);
     expect(bodies.get("a.md")).toBe("content A");
     expect(bodies.get("b.md")).toBe("content B");
+  });
+
+  it("a stale in-flight save does not clear dirty after a newer edit", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" }, {}, { "a.md": 50 });
+    const open = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await open;
+    session.change("A1");
+    await vi.advanceTimersByTimeAsync(800); // starts save of A1, still in flight
+    session.change("A2");
+    await vi.advanceTimersByTimeAsync(50); // A1 save resolves
+    expect(bodies.get("a.md")).toBe("A1");
+    expect(session.getSnapshot().dirty).toBe(true);
+    await vi.advanceTimersByTimeAsync(800); // A2 save resolves
+    expect(bodies.get("a.md")).toBe("A2");
+    expect(session.getSnapshot().dirty).toBe(false);
   });
 
   it("out-of-order open(): a slow earlier open does not clobber the latest", async () => {

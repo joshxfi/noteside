@@ -31,15 +31,26 @@ pub fn start_watcher(
             if !touches_md {
                 return;
             }
+            let r = {
+                let g = match notebook.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+                if g.should_ignore_event(Instant::now()) {
+                    return; // echo of our own write
+                }
+                let Some(r) = g.root.clone() else { return };
+                r
+            };
+            let records = notebook::scan_notebook(&r);
             let mut g = match notebook.lock() {
                 Ok(g) => g,
                 Err(_) => return,
             };
-            if g.should_ignore_event(Instant::now()) {
-                return; // echo of our own write
+            if g.root.as_ref() != Some(&r) {
+                return; // notebook switched while the rescan was running
             }
-            let Some(r) = g.root.clone() else { return };
-            g.set_records(notebook::scan_notebook(&r));
+            g.set_records(records);
             drop(g);
             let _ = app.emit("notebook:changed", ());
         },

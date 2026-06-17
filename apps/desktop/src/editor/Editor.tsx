@@ -27,6 +27,8 @@ const MODE_LABEL: Record<string, string> = {
   replace: "REPLACE",
 };
 
+const WORD_COUNT_DELAY_MS = 180;
+
 defineExCommands();
 
 export interface EditorProps {
@@ -47,7 +49,7 @@ export interface EditorProps {
   /** 1-based line to place the cursor on at mount (e.g. opening a grep hit). */
   gotoLine?: number;
   refocusToken: number;
-  onChange: (text: string) => void;
+  onChange: (text: string | (() => string), dirty: boolean) => void;
   onSave: (text: string) => void;
   onQuit: () => void;
   onCommand: (c: AppCommand) => void;
@@ -68,6 +70,7 @@ export function Editor(props: EditorProps) {
   propsRef.current = props;
   const savedRef = useRef(props.savedText);
   savedRef.current = props.savedText;
+  const wordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mode, setMode] = useState(vimMode ? "normal" : "insert");
   const [stat, setStat] = useState({ words: 0, line: 1, col: 1, pct: "All", dirty: false });
@@ -76,19 +79,50 @@ export function Editor(props: EditorProps) {
     const host = hostRef.current;
     if (!host) return;
 
-    const computeStat = (state: EditorState) => {
-      const text = state.doc.toString();
+    const clearWordTimer = () => {
+      if (wordTimerRef.current !== null) {
+        clearTimeout(wordTimerRef.current);
+        wordTimerRef.current = null;
+      }
+    };
+    const cursorStat = (state: EditorState) => {
       const head = state.selection.main.head;
       const lineObj = state.doc.lineAt(head);
       const total = state.doc.lines;
       const pct = total <= 1 ? "All" : Math.round(((lineObj.number - 1) / (total - 1)) * 100) + "%";
-      setStat({
-        words: (text.match(/\S+/g) || []).length,
+      return {
         line: lineObj.number,
         col: head - lineObj.from + 1,
         pct,
-        dirty: text !== savedRef.current,
-      });
+      };
+    };
+    const countWords = (state: EditorState) => {
+      let words = 0;
+      const iter = state.doc.iter();
+      while (!iter.done) {
+        const matches = iter.value.match(/\S+/g);
+        if (matches) words += matches.length;
+        iter.next();
+      }
+      return words;
+    };
+    const setCursorStat = (state: EditorState, dirty?: boolean) => {
+      const next = cursorStat(state);
+      setStat((s) => ({ ...s, ...next, ...(dirty === undefined ? {} : { dirty }) }));
+    };
+    const setFullStat = (state: EditorState, dirty: boolean) => {
+      setStat({ words: countWords(state), ...cursorStat(state), dirty });
+    };
+    const scheduleWordCount = (state: EditorState) => {
+      clearWordTimer();
+      wordTimerRef.current = setTimeout(() => {
+        wordTimerRef.current = null;
+        setStat((s) => ({ ...s, words: countWords(state) }));
+      }, WORD_COUNT_DELAY_MS);
+    };
+    const isDirtyAfterChange = (state: EditorState) => {
+      const saved = savedRef.current;
+      return state.doc.length !== saved.length || state.doc.toString() !== saved;
     };
     const onVimMode = (e: { mode?: string }) => {
       if (e?.mode) setMode(e.mode);
@@ -155,8 +189,15 @@ export function Editor(props: EditorProps) {
         ...historyKeymap,
       ]),
       EditorView.updateListener.of((u) => {
-        if (u.docChanged) propsRef.current.onChange(u.state.doc.toString());
-        if (u.docChanged || u.selectionSet) computeStat(u.state);
+        if (u.docChanged) {
+          const state = u.state;
+          const dirty = isDirtyAfterChange(state);
+          propsRef.current.onChange(() => state.doc.toString(), dirty);
+          setCursorStat(state, dirty);
+          scheduleWordCount(state);
+        } else if (u.selectionSet) {
+          setCursorStat(u.state);
+        }
       }),
     );
     if (!vimMode) extensions.push(keymap.of(defaultKeymap));
@@ -166,7 +207,7 @@ export function Editor(props: EditorProps) {
       parent: host,
     });
     viewRef.current = view;
-    computeStat(view.state);
+    setFullStat(view.state, view.state.doc.toString() !== savedRef.current);
 
     const goto = propsRef.current.gotoLine ?? 0;
     if (goto > 0) {
@@ -191,6 +232,7 @@ export function Editor(props: EditorProps) {
     view.focus();
 
     return () => {
+      clearWordTimer();
       cm?.off("vim-mode-change", onVimMode);
       setActiveHandlers(null);
       view.destroy();
@@ -202,6 +244,15 @@ export function Editor(props: EditorProps) {
   useEffect(() => {
     viewRef.current?.focus();
   }, [refocusToken]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const dirty =
+      view.state.doc.length !== props.savedText.length ||
+      view.state.doc.toString() !== props.savedText;
+    setStat((s) => (s.dirty === dirty ? s : { ...s, dirty }));
+  }, [props.savedText]);
 
   return (
     <div className="av-editor">

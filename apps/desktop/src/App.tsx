@@ -693,7 +693,7 @@ export function App() {
                 linkTargets={[...new Set(notes.map((n) => n.title))]}
                 gotoLine={s.gotoLine}
                 refocusToken={refocus}
-                onChange={(text) => session.change(text)}
+                onChange={(text, dirty) => session.change(text, dirty)}
                 onSave={(text) => session.save(text)}
                 onQuit={() => session.quit()}
                 onCommand={onCommand}

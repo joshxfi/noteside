@@ -27,6 +27,26 @@ describe("createAutosave", () => {
     expect(saved).toEqual([["a.md", "hel"]]);
   });
 
+  it("materializes lazy text only when the queued save lands", () => {
+    const saved: Array<[string, string]> = [];
+    let reads = 0;
+    let latest = "h";
+    const a = createAutosave((id, text) => saved.push([id, text]), 800);
+    a.schedule("a.md", () => {
+      reads++;
+      return latest;
+    });
+    latest = "he";
+    a.schedule("a.md", () => {
+      reads++;
+      return latest;
+    });
+    expect(reads).toBe(0);
+    vi.advanceTimersByTime(800);
+    expect(saved).toEqual([["a.md", "he"]]);
+    expect(reads).toBe(1);
+  });
+
   // The bug the v1 review caught: a queued save fired against the *active* note
   // instead of the note it was scheduled for, corrupting the new note.
   it("REGRESSION: a queued save always targets its own note", () => {

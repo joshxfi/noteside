@@ -24,7 +24,7 @@ const SUPPRESS: Duration = Duration::from_millis(700);
 #[derive(Default)]
 pub struct NotebookState {
     pub root: Option<PathBuf>,
-    pub records: Vec<NoteRecord>,
+    pub records: Arc<Vec<NoteRecord>>,
     /// When set, watcher events before this instant are echoes of our own write.
     /// Owned by the methods below — never set or read directly.
     suppress_until: Option<Instant>,
@@ -35,30 +35,32 @@ impl NotebookState {
     /// (a fresh open is never an echo of a previous write).
     pub fn load(&mut self, root: PathBuf, records: Vec<NoteRecord>) {
         self.root = Some(root);
-        self.records = records;
+        self.records = Arc::new(records);
         self.suppress_until = None;
     }
 
     /// Replace the index after an external change (the watcher's rescan).
     pub fn set_records(&mut self, records: Vec<NoteRecord>) {
-        self.records = records;
+        self.records = Arc::new(records);
     }
 
     /// Record our own write: upsert the record in place (no reorder) and arm the
     /// echo-suppression window from `now`.
     pub fn record_own_write(&mut self, meta: NoteMeta, body: String, now: Instant) {
-        if let Some(rec) = self.records.iter_mut().find(|r| r.meta.path == meta.path) {
+        let records = Arc::make_mut(&mut self.records);
+        if let Some(rec) = records.iter_mut().find(|r| r.meta.path == meta.path) {
             rec.meta = meta;
             rec.body = body;
         } else {
-            self.records.push(NoteRecord { meta, body });
+            records.push(NoteRecord { meta, body });
         }
         self.suppress_until = Some(now + SUPPRESS);
     }
 
     /// Record our own delete: drop the record and arm the suppression window.
     pub fn record_own_delete(&mut self, path: &str, now: Instant) {
-        self.records.retain(|r| r.meta.path != path);
+        let records = Arc::make_mut(&mut self.records);
+        records.retain(|r| r.meta.path != path);
         self.suppress_until = Some(now + SUPPRESS);
     }
 
