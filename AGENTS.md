@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for any coding agent working in this repository — the single, tool-agnostic source of truth for how Noteside is built. (Claude Code loads it through `CLAUDE.md`, which imports this file.) Keep it accurate as the architecture changes.
+Guidance for any coding agent working in this repository — the single, tool-agnostic source of truth for how Noteside is built. Keep it accurate as the architecture changes.
 
 ## What this is
 
