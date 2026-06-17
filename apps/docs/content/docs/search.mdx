@@ -34,8 +34,8 @@ notebook, not just jump to a file.
 the conventional equivalent of vim's `/`. Press `⌘F` again to close it. Vim users can
 keep using `/` and `?` as normal.
 
-<Callout title="Scaling up">
-  Content search is a linear scan: instant up to a few thousand notes. The search layer is a
-  deliberate seam for **SQLite FTS5** once a notebook grows past ~10k notes — file/title fuzzy
-  search stays fast regardless.
+<Callout title="No index, no database">
+  Search runs entirely in memory — fuzzy file search is sub-millisecond and content search is a fast
+  scan that stays quick across thousands of notes. Nothing to index, rebuild, or keep in sync; your
+  notes stay plain files and search stays instant.
 </Callout>

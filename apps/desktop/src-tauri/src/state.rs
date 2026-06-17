@@ -13,9 +13,8 @@ use crate::notebook::NoteRecord;
 const SUPPRESS: Duration = Duration::from_millis(700);
 
 /// The open notebook plus its in-memory index (rebuilt from files on open and kept
-/// in sync on save / external change). For v1's target scale (1–5k notes) this
-/// is faster and simpler than a SQLite/FTS5 index; the search module is the seam
-/// to swap in FTS5 for 10k+ notebooks later.
+/// in sync on save / external change). Plain in-memory structures are faster and
+/// simpler than a database here, and stay fast at any realistic notebook size.
 ///
 /// The "did we cause this watcher event?" protocol lives entirely on this type:
 /// the mutating commands call `record_own_write`/`record_own_delete` (which also

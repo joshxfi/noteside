@@ -198,8 +198,8 @@ pnpm tauri build                                                   # native inst
 The hot paths are benchmarked (`cargo bench`, `pnpm bench`). On a modern laptop:
 
 - Fuzzy file search stays **sub-millisecond even at 50k notes** (`nucleo`).
-- Content search is a linear scan — ~5 ms at 1k notes (instant); the search module
-  is a seam for **SQLite FTS5** once notebooks reach 10k+.
+- Content search is a fast in-memory scan — a few milliseconds across thousands of
+  notes, with no database or index to build, write, or keep in sync.
 - The note sidebar **virtualizes** past 100 notes (only visible rows mount).
 - Backlinks are computed in Rust, not by shipping every note body to the UI.
 
@@ -210,8 +210,7 @@ watcher, fuzzy/content search, the command palette, inline live-preview, wikilin
 backlinks, themes, and the live `~/.notesiderc`.
 
 Next: wikilink niceties (create-on-follow, unresolved-link styling), richer preview
-(images, tables), SQLite FTS5 for very large notebooks, vendored offline fonts, and
-signed/auto-updating releases.
+(images, tables), vendored offline fonts, and signed/auto-updating releases.
 
 ## Contributing
 

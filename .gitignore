@@ -12,9 +12,6 @@ apps/landing/public/demo/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 
-# vault index (never commit the derived SQLite index)
-**/.noteside/index.sqlite*
-
 # editor / os
 .DS_Store
 *.log

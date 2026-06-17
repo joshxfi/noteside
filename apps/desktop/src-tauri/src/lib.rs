@@ -1,8 +1,8 @@
 // Noteside desktop backend.
 //
 // Files-as-truth: notes are plain Markdown files in a user-chosen notebook folder.
-// A rebuildable in-memory index (see `state`/`notebook`) powers listing + search;
-// FTS5/SQLite is the documented upgrade path for very large notebooks.
+// A rebuildable in-memory index (see `state`/`notebook`) powers listing + search —
+// no database, kept fully in memory and fast at any realistic notebook size.
 //
 // The window is decorationless; the React titlebar drives close/minimize/maximize
 // through the core window APIs authorized in `capabilities/default.json`.
