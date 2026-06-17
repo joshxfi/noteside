@@ -151,7 +151,7 @@ const FEATURES = [
   {
     k: "fast fuzzy search",
     h: "Find anything in a keystroke",
-    p: "Typo-resistant, frecency-ranked search across paths and contents, powered by fff. The note you want is two keys away.",
+    p: "Typo-resistant, frecency-ranked search across paths and contents, powered by nucleo. The note you want is two keys away.",
   },
 ];
 
@@ -165,7 +165,7 @@ export function App() {
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-rule-soft bg-paper/90 backdrop-blur-[10px]">
+      <header className="sticky top-0 z-20 border-b border-rule-soft bg-paper/88 backdrop-blur-[10px]">
         <div className="wrap flex h-[62px] items-center gap-[22px]">
           <a
             className="inline-block whitespace-nowrap font-serif text-[22px] font-semibold tracking-[-0.01em]"
@@ -184,9 +184,14 @@ export function App() {
               Keys
             </a>
             <a className="whitespace-nowrap hover:text-ink" href={DOCS}>
-              Docs ↗
+              Docs
             </a>
-            <a className="whitespace-nowrap hover:text-ink" href={GITHUB}>
+            <a
+              className="whitespace-nowrap hover:text-ink"
+              href={GITHUB}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               GitHub ↗
             </a>
           </nav>
@@ -194,8 +199,8 @@ export function App() {
             <a className="btn btn-ghost" href={DOCS}>
               Documentation
             </a>
-            <a className="btn btn-primary" href="#download">
-              Download
+            <a className="btn btn-primary" href="#get">
+              Get started
             </a>
           </div>
         </div>
@@ -213,20 +218,19 @@ export function App() {
             Noteside is an offline notebook built for the keyboard — drive it with full vim, or the
             everyday shortcuts you already know.
           </p>
-          <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="download">
-            <a className="btn btn-primary" href={RELEASES}>
-              Download for macOS
+          <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
+            <a className="btn btn-primary" href={DOCS}>
+              Read the docs
             </a>
-            <a className="btn btn-ghost" href={RELEASES}>
-              Windows
-            </a>
-            <a className="btn btn-ghost" href={RELEASES}>
-              Linux
+            <a className="btn btn-ghost" href="#demo">
+              Try the live demo
             </a>
           </div>
           <p className="font-mono text-[12.5px] text-ink-faint">
             Free forever · open source ·{" "}
-            <b className="font-semibold text-ink-soft">no account, no cloud</b>
+            <b className="font-semibold text-ink-soft">
+              macOS, Windows &amp; Linux · build from source today
+            </b>
           </p>
         </section>
 
@@ -236,6 +240,7 @@ export function App() {
               className="absolute inset-0 block h-full w-full border-0"
               src={DEMO_URL}
               title="Noteside, running live"
+              loading="lazy"
             />
           </div>
           <p className="mt-[22px] text-center font-mono text-[13px] text-ink-faint">
@@ -311,11 +316,11 @@ export function App() {
                 <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
                   Product
                 </span>
-                <a className="whitespace-nowrap hover:text-accent" href="#download">
-                  Download
-                </a>
                 <a className="whitespace-nowrap hover:text-accent" href={DOCS}>
                   Documentation
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href="#get">
+                  Get started
                 </a>
                 <a className="whitespace-nowrap hover:text-accent" href="#demo">
                   Live demo
@@ -328,13 +333,28 @@ export function App() {
                 <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
                   Open source
                 </span>
-                <a className="whitespace-nowrap hover:text-accent" href={GITHUB}>
+                <a
+                  className="whitespace-nowrap hover:text-accent"
+                  href={GITHUB}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   GitHub
                 </a>
-                <a className="whitespace-nowrap hover:text-accent" href={RELEASES}>
+                <a
+                  className="whitespace-nowrap hover:text-accent"
+                  href={RELEASES}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Releases
                 </a>
-                <a className="whitespace-nowrap hover:text-accent" href={`${GITHUB}/issues`}>
+                <a
+                  className="whitespace-nowrap hover:text-accent"
+                  href={`${GITHUB}/issues`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Issues
                 </a>
               </div>
@@ -343,7 +363,12 @@ export function App() {
           <div className="mt-[30px] flex w-full flex-wrap justify-between gap-4 border-t border-rule-soft pt-[22px] font-mono text-[12px] text-ink-faint">
             <span>
               Free forever. Open source. Built by{" "}
-              <a className="text-ink-soft hover:text-accent" href={AUTHOR}>
+              <a
+                className="text-ink-soft hover:text-accent"
+                href={AUTHOR}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Josh Daniel
               </a>
               .

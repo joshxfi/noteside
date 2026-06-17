@@ -3,9 +3,9 @@ title: Configuration
 description: Theme, typography, and the ~/.notesiderc config file.
 ---
 
-Everything is configurable from a live **`~/.notesiderc`** buffer (vimrc-flavored) or
-the in-app **Settings** panel — they're two editors over the same config. Open the
-file with `:config`, edit any line, and `:w` to apply.
+Everything is configurable from a live **`~/.notesiderc`** buffer (vimrc-flavored, in
+your home directory) or the in-app **Settings** panel — they're two editors over the
+same config. Open the file with `:config`, edit any line, and `:w` to apply.
 
 ## Example
 
@@ -50,6 +50,15 @@ bind Ctrl-j find
 | `live-preview` | `on` · `off`                                                     |
 | `vim`          | `on` · `off`                                                     |
 
+## Appearance
+
+- **Theme** — `light` or `dark`; a warm paper reading surface either way.
+- **Accent** — one quiet color, used for the cursor, headings, links, and selection:
+  `terracotta`, `ochre`, `sage`, `dusk`, `plum` (the default), or `monochrome`.
+- **Typography** — `editor-font` sets the writing surface (serif `Newsreader` or
+  `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono`); `ui-font` sets the chrome.
+  `font-size` (14–28) and `line-height` (1.4–2.1) tune the reading rhythm.
+
 ## Key mappings
 
 - **Vim mappings** — `nmap` / `imap` / `vmap` lines apply on `:w` (e.g. `imap jj <Esc>`).
@@ -57,5 +66,5 @@ bind Ctrl-j find
   `bind none <command-id>` unbinds it.
 
 The command ids are: `find`, `grep`, `search`, `commands`, `backlinks`, `new`,
-`save`, `quit`, `delete`, `follow`, `nav`, `togglePreview`, `settings`, `config`,
-`cheatsheet`. For example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.
+`save`, `saveQuit`, `quit`, `delete`, `follow`, `nav`, `togglePreview`, `settings`,
+`config`, `cheatsheet`. For example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.

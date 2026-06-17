@@ -36,13 +36,14 @@ const clientLoader = browserCollections.docs.createClientLoader({
   ) {
     const canonical = canonicalUrl(url);
     const title = `${frontmatter.title} — Noteside Docs`;
+    const ogType = url === "/" ? "website" : "article";
     return (
       <DocsPage toc={toc}>
         {/* SEO — React 19 hoists these into the prerendered <head>. */}
         <title>{title}</title>
         <meta name="description" content={frontmatter.description} />
         <link rel="canonical" href={canonical} />
-        <meta property="og:type" content="article" />
+        <meta property="og:type" content={ogType} />
         <meta property="og:site_name" content="Noteside Docs" />
         <meta property="og:title" content={title} />
         <meta property="og:description" content={frontmatter.description} />
@@ -56,6 +57,7 @@ const clientLoader = browserCollections.docs.createClientLoader({
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={frontmatter.description} />
         <meta name="twitter:image" content={OG_IMAGE} />
+        <meta name="twitter:image:alt" content="Noteside documentation" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

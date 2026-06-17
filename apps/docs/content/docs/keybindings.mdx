@@ -10,9 +10,10 @@ ex-command, chord, and leader key — never drift apart.
 
 <Callout title="Three places to search">
   These are easy to mix up:
-  - `⌘P` — **find files & content** across the notebook (fuzzy)
-  - `⌘⇧F` — **search note contents** (grep, with a preview pane)
-  - `⌘F` — **find in the current note** (toggles the in-note search bar)
+
+- `⌘P` — **find files & content** across the notebook (fuzzy)
+- `⌘⇧F` — **search note contents** (grep, with a preview pane)
+- `⌘F` — **find in the current note** (toggles the in-note search bar)
 
 See [Search](/search) for the difference.
 
@@ -20,8 +21,8 @@ See [Search](/search) for the difference.
 
 ## Conventional chords
 
-Don't use vim? Turn it off (`:set vim off`, or the settings panel) and these are all
-you need. They stay available with vim on, too.
+Don't use vim? Turn it off (`set vim = off` in your `~/.notesiderc`, or the settings
+panel) and these are all you need. They stay available with vim on, too.
 
 | Chord | Command                           |
 | ----- | --------------------------------- |
@@ -33,7 +34,7 @@ you need. They stay available with vim on, too.
 | `⌘S`  | Save note                         |
 | `⌘B`  | Toggle the sidebar                |
 | `⌘E`  | Toggle inline live-preview        |
-| `⌘⇧L` | Backlinks to this note            |
+| `⌘⇧L` | Linked references panel           |
 | `⌘,`  | Settings panel                    |
 | `⌘/`  | Keyboard cheatsheet               |
 
@@ -51,7 +52,7 @@ the app:
 | `:find` (`:files`)     | Fuzzy file & content finder                   |
 | `:grep`                | Search note contents                          |
 | `gf` / `:follow`       | Follow the `[[wikilink]]` under the cursor    |
-| `:backlinks` (`:back`) | Backlinks panel for the current note          |
+| `:backlinks` (`:back`) | Linked-references panel for the current note  |
 | `:new` / `:rm`         | New note · delete note                        |
 | `:preview`             | Toggle inline live-preview                    |
 | `:nav`                 | Toggle the sidebar                            |
@@ -76,6 +77,15 @@ Tap `<Space>` in normal mode to open a which-key menu, then a single key:
 | `<Space> d` | Delete note          |
 | `<Space> b` | Toggle the sidebar   |
 | `<Space> p` | Toggle live-preview  |
-| `<Space> l` | Backlinks            |
+| `<Space> l` | Linked references    |
 | `<Space> ,` | Settings             |
 | `<Space> c` | Edit `~/.notesiderc` |
+
+## Discovering commands
+
+Three surfaces help you find your way:
+
+- **`⌘⇧P` — command palette.** A searchable list of every command (also `:commands`).
+- **`<Space>` — which-key menu.** In vim normal mode, shows the leader keys above as
+  you start typing.
+- **`⌘/` — cheatsheet.** A scannable overview of every chord and command.

@@ -45,7 +45,10 @@ Press `⌘N` (or `:new`, or `<Space> n`) to create a note. New notes start as
 2. otherwise the first heading or non-blank line,
 3. otherwise the prettified filename.
 
-So just typing `# My ideas` at the top names the note "My ideas" in the sidebar.
+So just typing `# My ideas` at the top names the note "My ideas" in the sidebar. To
+**rename** a note, change that title — there's no separate rename command, and the
+file on disk keeps its name. (A `title:` in YAML frontmatter wins over the heading if
+you'd rather set it explicitly.)
 
 ## Saving
 
@@ -53,7 +56,8 @@ Noteside **autosaves** about a second after you stop typing — your words are a
 on disk. You can still save explicitly with `:w` or `⌘S` (handy before quitting), and:
 
 - `:q` — close the note (back to the notebook)
-- `:rm` — delete the current note (asks first)
+- `:rm` — delete the current note. Deleting from the `<Space> d` leader or the command
+  palette asks for confirmation first; `:rm` deletes right away.
 
 Next: learn the [keybindings](/keybindings), wire up
 [wikilinks](/wikilinks), or theme your [`~/.notesiderc`](/configuration).

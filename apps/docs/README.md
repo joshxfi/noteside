@@ -26,3 +26,10 @@ pnpm --filter @noteside/docs typecheck   # react-router typegen + fumadocs-mdx +
 - `vite.config.ts` sets `ssr.noExternal: true` + `resolve.dedupe` to force a single
   React instance during prerender. The generated `.source/` (fumadocs-mdx codegen)
   and `.react-router/` (typegen) directories are gitignored.
+
+## Deploy
+
+Deployed as its own Vercel project, separate from the landing: set **Root Directory =
+`apps/docs`** (it uses `apps/docs/vercel.json` — framework `null`, build `pnpm build`,
+output `dist/client`, plus an SPA-fallback rewrite), then point the **docs.noteside.app**
+domain at it.

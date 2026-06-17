@@ -98,6 +98,7 @@ commands are conventional chords — always available, even with vim on:
 | `⌘⇧F` | Content search (grep)             |
 | `⌘F`  | Find in the current note (toggle) |
 | `⌘N`  | New note                          |
+| `⌘S`  | Save note                         |
 | `⌘B`  | Toggle the sidebar                |
 | `⌘E`  | Toggle inline live-preview        |
 | `⌘⇧L` | Linked-references panel           |
@@ -106,6 +107,12 @@ commands are conventional chords — always available, even with vim on:
 
 `⌘` is Cmd on macOS, Ctrl elsewhere. Remap any of them with `bind <chord> <command>`
 in `~/.notesiderc`.
+
+## Documentation
+
+Full docs live at **[docs.noteside.app](https://docs.noteside.app)** — getting started,
+keybindings, search, wikilinks, live preview, and configuration. Run them locally with
+`pnpm dev:docs`.
 
 ## Tech stack
 
@@ -121,6 +128,7 @@ in `~/.notesiderc`.
 apps/
   desktop/   Tauri 2 + React 19 + TypeScript — the app (Rust core in src-tauri/)
   landing/   Vite + React + Tailwind v4 — the marketing site (embeds the real app)
+  docs/      Fumadocs on React Router 7 — the documentation site (docs.noteside.app)
   brand/     The brand guide — internal reference only, not deployed
 ```
 
@@ -140,6 +148,7 @@ pnpm install
 pnpm dev            # landing (:3000) + desktop Tauri window
 pnpm dev:desktop    # just the desktop app (native window + Vite HMR)
 pnpm dev:landing    # just the landing site
+pnpm dev:docs       # just the docs site (:3002)
 pnpm dev:brand      # the brand guide (:3001)
 
 pnpm typecheck      # tsc across the workspace
