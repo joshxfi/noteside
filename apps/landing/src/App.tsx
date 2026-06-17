@@ -141,7 +141,7 @@ const FEATURES = [
   {
     k: "fast & lightweight",
     h: "Native speed, no bloat",
-    p: "A Rust core (Tauri), not Electron — it launches instantly, stays light on memory, and ships with no bundled browser engine. Even fuzzy search across 50,000 notes stays sub-millisecond.",
+    p: "A Rust core (Tauri) over your OS's native webview — it launches instantly, stays light on memory, and ships as a small native binary. Even fuzzy search across 50,000 notes stays sub-millisecond.",
   },
   {
     k: "offline & local-first",

@@ -197,8 +197,8 @@ pnpm tauri build                                                   # native inst
 
 The hot paths are benchmarked (`cargo bench`, `pnpm bench`). On a modern laptop:
 
-- **Native, not Electron.** A Rust core (Tauri) over the OS webview — instant launch,
-  low memory, a small native binary, and no background daemon.
+- **Native shell.** A Rust core (Tauri) over the OS webview — instant launch, low
+  memory, a small native binary, and no background daemon.
 - Fuzzy file search stays **sub-millisecond even at 50k notes** (`nucleo`).
 - Content search is a fast in-memory scan — a few milliseconds across thousands of
   notes, with no database or index to build, write, or keep in sync.
