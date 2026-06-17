@@ -155,25 +155,42 @@ const FEATURES = [
   },
 ];
 
+const eyebrow = "font-mono text-[12.5px] tracking-[0.16em] uppercase text-accent mb-3.5";
+const sectionH2 =
+  "font-serif font-medium text-[clamp(1.9rem,4vw,2.9rem)] tracking-[-0.02em] max-w-[20ch] mx-auto leading-[1.08] text-balance";
+
 export function App() {
   const step = useKeycast();
   useScrollReveal();
 
   return (
     <>
-      <header className="nav">
-        <div className="wrap nav-in">
-          <a className="brand" href="#top">
+      <header className="sticky top-0 z-20 border-b border-rule-soft bg-paper/90 backdrop-blur-[10px]">
+        <div className="wrap flex h-[62px] items-center gap-[22px]">
+          <a
+            className="inline-block whitespace-nowrap font-serif text-[22px] font-semibold tracking-[-0.01em]"
+            href="#top"
+          >
             <Wordmark />
           </a>
-          <nav className="nav-links">
-            <a href="#features">Features</a>
-            <a href="#demo">Demo</a>
-            <a href="#keys">Keys</a>
-            <a href={DOCS}>Docs ↗</a>
-            <a href={GITHUB}>GitHub ↗</a>
+          <nav className="ml-3.5 flex gap-[22px] font-mono text-[13px] text-ink-soft max-sm:hidden">
+            <a className="whitespace-nowrap hover:text-ink" href="#features">
+              Features
+            </a>
+            <a className="whitespace-nowrap hover:text-ink" href="#demo">
+              Demo
+            </a>
+            <a className="whitespace-nowrap hover:text-ink" href="#keys">
+              Keys
+            </a>
+            <a className="whitespace-nowrap hover:text-ink" href={DOCS}>
+              Docs ↗
+            </a>
+            <a className="whitespace-nowrap hover:text-ink" href={GITHUB}>
+              GitHub ↗
+            </a>
           </nav>
-          <div className="nav-right">
+          <div className="ml-auto flex items-center gap-3">
             <a className="btn btn-ghost" href={DOCS}>
               Documentation
             </a>
@@ -185,16 +202,18 @@ export function App() {
       </header>
 
       <main id="top">
-        <section className="hero wrap">
-          <div className="hero-icon">
+        <section className="wrap pt-[92px] pb-10 text-center max-sm:pt-16 max-sm:pb-[30px]">
+          <div className="mb-[30px] flex justify-center">
             <LogoMark large />
           </div>
-          <h1>A quiet page that keeps up with your hands.</h1>
-          <p className="lede">
+          <h1 className="mx-auto max-w-[24ch] font-serif text-[clamp(2.5rem,6.2vw,4.7rem)] font-medium leading-[1.04] tracking-[-0.022em] text-balance">
+            A quiet page that keeps up with your hands.
+          </h1>
+          <p className="mx-auto mt-6 max-w-[39rem] text-[clamp(1.05rem,2.2vw,1.32rem)] leading-[1.55] text-ink-soft text-pretty">
             Noteside is an offline notebook built for the keyboard — drive it with full vim, or the
             everyday shortcuts you already know.
           </p>
-          <div className="cta-row" id="download">
+          <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="download">
             <a className="btn btn-primary" href={RELEASES}>
               Download for macOS
             </a>
@@ -205,44 +224,52 @@ export function App() {
               Linux
             </a>
           </div>
-          <p className="cta-note">
-            Free forever · open source · <b>no account, no cloud</b>
+          <p className="font-mono text-[12.5px] text-ink-faint">
+            Free forever · open source ·{" "}
+            <b className="font-semibold text-ink-soft">no account, no cloud</b>
           </p>
         </section>
 
-        <section className="demo" id="demo">
-          <div className="demo-frame reveal">
-            <iframe src={DEMO_URL} title="Noteside, running live" />
+        <section className="pt-10 pb-24" id="demo">
+          <div className="reveal relative mx-auto aspect-[1120/740] w-[min(1120px,94vw)] overflow-hidden rounded-[18px] border border-rule-soft bg-paper-2 shadow-[var(--shadow)]">
+            <iframe
+              className="absolute inset-0 block h-full w-full border-0"
+              src={DEMO_URL}
+              title="Noteside, running live"
+            />
           </div>
-          <p className="demo-cap">
-            The real app, running right here. Press <b>i</b> to write, <b>:</b> for commands, and{" "}
-            <b>:find</b> to jump anywhere.
+          <p className="mt-[22px] text-center font-mono text-[13px] text-ink-faint">
+            The real app, running right here. Press <b className="text-accent">i</b> to write,{" "}
+            <b className="text-accent">:</b> for commands, and <b className="text-accent">:find</b>{" "}
+            to jump anywhere.
           </p>
         </section>
 
-        <section className="features wrap" id="features">
-          <div className="section-head reveal">
-            <p className="eyebrow">Why Noteside</p>
-            <h2>Built for people who would rather not touch the mouse.</h2>
+        <section className="wrap border-t border-rule-soft pt-[30px] pb-24" id="features">
+          <div className="reveal mb-[46px] text-center">
+            <p className={eyebrow}>Why Noteside</p>
+            <h2 className={sectionH2}>Built for people who would rather not touch the mouse.</h2>
           </div>
-          <div className="feat-grid reveal">
+          <div className="reveal grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-rule-soft bg-rule-soft max-sm:grid-cols-1">
             {FEATURES.map((f) => (
-              <article className="feat" key={f.k}>
-                <div className="feat-k">{f.k}</div>
-                <h3>{f.h}</h3>
-                <p>{f.p}</p>
+              <article className="bg-paper px-8 py-[34px]" key={f.k}>
+                <div className="mb-3.5 font-mono text-[11.5px] tracking-[0.13em] uppercase text-accent">
+                  {f.k}
+                </div>
+                <h3 className="mb-2.5 font-serif text-2xl font-medium tracking-[-0.01em]">{f.h}</h3>
+                <p className="text-[1.04rem] leading-[1.55] text-ink-soft text-pretty">{f.p}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="keys wrap" id="keys">
-          <div className="section-head reveal">
-            <p className="eyebrow">The keyboard layer</p>
-            <h2>Learn it in an afternoon. Keep it for years.</h2>
+        <section className="wrap border-t border-rule-soft pt-16 pb-[100px] text-center" id="keys">
+          <div className="reveal mb-[46px] text-center">
+            <p className={eyebrow}>The keyboard layer</p>
+            <h2 className={sectionH2}>Learn it in an afternoon. Keep it for years.</h2>
           </div>
-          <div className="keycast reveal">
-            <div className="kc-caps" key={step} aria-hidden="true">
+          <div className="reveal mt-3.5 flex min-h-[200px] flex-col items-center justify-center gap-7">
+            <div className="flex min-h-16 items-center gap-3" key={step} aria-hidden="true">
               {STEPS[step].caps.map(([ch, on], i) => (
                 <span
                   key={i}
@@ -257,7 +284,7 @@ export function App() {
               {STEPS[step].cap}
             </div>
           </div>
-          <div className="keys-cta reveal">
+          <div className="reveal mt-[26px]">
             <a
               className="btn btn-ghost"
               href="https://www.vim-hero.com/"
@@ -270,32 +297,56 @@ export function App() {
         </section>
       </main>
 
-      <footer className="foot">
+      <footer className="border-t border-rule-soft bg-paper-2 pt-[54px] pb-[60px]">
         <div className="wrap">
-          <div className="foot-in">
-            <div className="foot-brand">
+          <div className="flex flex-wrap items-start justify-between gap-7">
+            <div className="flex flex-col gap-1 font-serif text-2xl font-semibold">
               <Wordmark />
-              <span className="foot-sub">notes for keyboard people</span>
+              <span className="font-mono text-[11px] font-normal tracking-[0.03em] text-ink-faint">
+                notes for keyboard people
+              </span>
             </div>
-            <div className="foot-links">
-              <div className="foot-col">
-                <span className="h">Product</span>
-                <a href="#download">Download</a>
-                <a href={DOCS}>Documentation</a>
-                <a href="#demo">Live demo</a>
-                <a href="#features">Features</a>
+            <div className="flex gap-[30px] font-mono text-[13px] text-ink-soft">
+              <div className="flex flex-col gap-2.5">
+                <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
+                  Product
+                </span>
+                <a className="whitespace-nowrap hover:text-accent" href="#download">
+                  Download
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href={DOCS}>
+                  Documentation
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href="#demo">
+                  Live demo
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href="#features">
+                  Features
+                </a>
               </div>
-              <div className="foot-col">
-                <span className="h">Open source</span>
-                <a href={GITHUB}>GitHub</a>
-                <a href={RELEASES}>Releases</a>
-                <a href={`${GITHUB}/issues`}>Issues</a>
+              <div className="flex flex-col gap-2.5">
+                <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
+                  Open source
+                </span>
+                <a className="whitespace-nowrap hover:text-accent" href={GITHUB}>
+                  GitHub
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href={RELEASES}>
+                  Releases
+                </a>
+                <a className="whitespace-nowrap hover:text-accent" href={`${GITHUB}/issues`}>
+                  Issues
+                </a>
               </div>
             </div>
           </div>
-          <div className="foot-note">
+          <div className="mt-[30px] flex w-full flex-wrap justify-between gap-4 border-t border-rule-soft pt-[22px] font-mono text-[12px] text-ink-faint">
             <span>
-              Free forever. Open source. Built by <a href={AUTHOR}>Josh Daniel</a>.
+              Free forever. Open source. Built by{" "}
+              <a className="text-ink-soft hover:text-accent" href={AUTHOR}>
+                Josh Daniel
+              </a>
+              .
             </span>
             <span>~/.notesiderc</span>
           </div>
