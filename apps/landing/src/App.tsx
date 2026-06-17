@@ -139,6 +139,11 @@ const FEATURES = [
     p: "Full modal vim if you want it — real modes, motions, operators, a command line. Don't want vim? Turn it off and run everything from ⌘-shortcuts, a searchable command palette, and ⌘F find. Either way, the mouse stays parked.",
   },
   {
+    k: "fast & lightweight",
+    h: "Native speed, no bloat",
+    p: "A Rust core (Tauri), not Electron — it launches instantly, stays light on memory, and ships with no bundled browser engine. Even fuzzy search across 50,000 notes stays sub-millisecond.",
+  },
+  {
     k: "offline & local-first",
     h: "Everything stays on your machine",
     p: "No account, no sync, no cloud round-trip. Close the lid and your words are still here, exactly where the cursor left them.",
@@ -147,11 +152,6 @@ const FEATURES = [
     k: "your notes are files",
     h: "Plain Markdown on your disk",
     p: "Folders of text you can grep, back up, and read in any editor. No database, no lock-in. Your notes outlive the app.",
-  },
-  {
-    k: "fast fuzzy search",
-    h: "Find anything in a keystroke",
-    p: "Typo-resistant, frecency-ranked search across paths and contents, powered by nucleo. The note you want is two keys away.",
   },
 ];
 
