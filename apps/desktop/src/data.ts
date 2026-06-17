@@ -18,7 +18,7 @@ export const NOTES: Note[] = [
     frecency: 96,
     body: `Noteside is a notebook for keyboard people.
 
-No mouse required, no chrome in your way — just a warm page and a
+No mouse required, nothing in your way — just a warm page and a
 blinking block cursor. Your hands stay on home row; the writing stays
 in front of you.
 
@@ -117,7 +117,7 @@ before the inbox opened.`,
 powerful when summoned.
 
 Principles
-  - The page is the interface. Chrome earns its place or disappears.
+  - The page is the interface. Everything else earns its place or disappears.
   - Every action has a key. The mouse is a guest, not the host.
   - Local first. Your notes are files, not someone else's database.
 
