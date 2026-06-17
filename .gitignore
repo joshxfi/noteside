@@ -19,8 +19,7 @@ apps/desktop/src-tauri/gen/
 !.vscode/extensions.json
 .idea/
 
-# Claude Code / superpowers (local agent tooling — keep out of the repo)
-CLAUDE.md
+# Agent tooling — local only. CLAUDE.md is tracked (it points at AGENTS.md).
 CLAUDE.local.md
 .claude/
 .superpowers/

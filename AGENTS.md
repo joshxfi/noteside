@@ -1,0 +1,80 @@
+# AGENTS.md
+
+Guidance for any coding agent working in this repository — the single, tool-agnostic source of truth for how Noteside is built. (Claude Code loads it through `CLAUDE.md`, which imports this file.) Keep it accurate as the architecture changes.
+
+## What this is
+
+Noteside — an offline, local-first, **keyboard-first** notes desktop app (full vim _and_ conventional shortcuts, both first-class), plus its marketing site. Turborepo + pnpm monorepo:
+
+- `apps/desktop` — Tauri 2 + React 19 + Vite + TypeScript (the app)
+- `apps/landing` — Vite + React 19 + TypeScript + Tailwind v4 (the site)
+- `apps/brand` — Vite + React + Tailwind, the standalone **brand guide** (internal reference only; not deployed, not linked from the landing). Runs on `:3001` via `pnpm dev:brand`; has its own `Logo.tsx` copy + `styles.css` (the brand CSS).
+
+The UI was implemented from a Claude Design (HTML/JSX) handoff; the React/TS code in `apps/desktop/src` is a faithful, typed port of that prototype.
+
+## Commands
+
+Run from the repo root (Turborepo fans out to the right package):
+
+```bash
+pnpm install
+pnpm dev              # everything: landing (:3000) + desktop Tauri window
+pnpm dev:landing      # landing only
+pnpm dev:desktop      # desktop only — runs `tauri dev` (needs Rust + Tauri system deps)
+pnpm typecheck        # tsc --noEmit across the workspace  ← primary verification gate
+pnpm build            # web bundles for both apps (Vite)
+pnpm lint             # oxlint (root; config .oxlintrc.json)   — pnpm lint:fix to autofix
+pnpm format           # oxfmt (writes in place; root; config .oxfmtrc.json) — pnpm format:check to verify
+```
+
+Desktop / Tauri specifics:
+
+```bash
+pnpm --filter @noteside/desktop dev:web     # Vite only, no native window (browser dev)
+pnpm --filter @noteside/desktop build       # web bundle → apps/desktop/dist
+pnpm tauri build                            # full native bundle (see Icons below)
+cd apps/desktop/src-tauri && cargo check    # verify the Rust shell compiles
+# icon source of truth = scripts/mark.html (brand mark in Newsreader, exact design CSS).
+# Render it with headless Chrome (see the file header) → src-tauri/app-icon.png, then:
+pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png  # → all bundle icons (.icns/.ico/png)
+pnpm demo:build                             # build desktop web bundle → apps/landing/public/demo
+pnpm --filter @noteside/desktop bench       # vitest benchmarks — JS hot paths (computeBacklinks, parse)
+cd apps/desktop/src-tauri && cargo bench    # criterion — search/scan at 1k/10k/50k (benches/perf.rs)
+```
+
+**Performance posture (measured — see `benches/perf.rs` + `src/perf.bench.ts`).** `fuzzy_files` is sub-ms even at 50k (nucleo — untouched). `content_search` is a linear scan: fine to ~5k (≈5ms), but a rare/no-match query is 48ms @10k / 243ms @50k — far past realistic note counts, and deliberately kept in-memory (no DB or index to build or sync). `scan_notebook` is a one-time 156ms @10k. The **sidebar virtualizes** above 100 notes (`@tanstack/react-virtual`; the plain list renders verbatim below). **Backlinks** run as a Rust command (`commands::backlinks` → `links.rs`, mirrors `src/links.ts`) so the scan stays off the JS thread and only references cross IPC.
+
+Lint/format are oxc, run from the repo root (not per-package, not through Turbo): `oxlint` (`.oxlintrc.json`, correctness=error/suspicious=warn, react+typescript+import plugins) and `oxfmt` (`.oxfmtrc.json`; pinned exactly — still beta). The codebase is kept oxfmt-formatted, **including `styles.css`** (so it's no longer byte-identical to the design source — diff semantically, not line-for-line). Tests: **Vitest** (`pnpm test`, node env — pure modules only, no jsdom/CM6) covers `autosave.ts` (incl. the cross-note regression), `settings.ts` round-trip, and the mock backend; **cargo test** (`pnpm test:rust`) covers `notebook`/`search` (`#[cfg(test)]` modules). No e2e yet (deferred). `pnpm typecheck` + `pnpm lint` + both test suites are the gates.
+
+## Architecture: the parts that span files
+
+**The editor is CodeMirror 6 + `@replit/codemirror-vim`** (`apps/desktop/src/editor/`), not a bespoke engine — the old `src/vim.ts` reducer is gone. Ex-commands, the `<Space>` leader palette, `gf`, and `:`-actions dispatch through a module-level handler registry: `exCommands.ts` (`Vim.defineEx`/`Vim.map` + `setActiveHandlers`) → `App.tsx`. To follow any save/quit/open/follow flow, read `editor/Editor.tsx` (mount + handler wiring) + `editor/exCommands.ts` (where actions/ex-commands originate) + `App.tsx` (the handlers) together. `livePreview.ts`/`wikilinks.ts` add reveal-on-cursor-line decorations; `theme.ts` maps the CSS-var design tokens into the editor.
+
+**`editor/commands.ts` is the single command table.** Every command (id, title, chord, ex-names, leader key, `editor`-action) lives here; the vim ex-commands, the `<Space>` which-key palette, the always-on `Mod-` chord keymap, the searchable command palette (`CommandSearch`), the `Mod-/` cheatsheet, and button tooltips all DERIVE from it — add or rebind a command in one place. `useGlobalChords.ts` is the document-level chord fallback for the no-note-open state (gated on overlay React state, not `activeElement`). In-note find is `@codemirror/search`, toggled via `Mod-f`. Non-vim users are first-class; `bind <chord> <command-id>` lines in `~/.notesiderc` remap chords.
+
+**Do NOT wrap the desktop app in `<React.StrictMode>`.** `apps/desktop/src/main.tsx` deliberately omits it. StrictMode's dev double-invoke of effects would double-run the editor's mount effect (creating two `EditorView`s and firing the action-flush twice → double saves/quits/finder-opens). The landing app _does_ use StrictMode (no such pattern).
+
+**The per-buffer state machine lives in `editingSession.ts`** — a framework-free `createEditingSession` store (working/saved/dirty, autosave, open/save/quit, config-as-a-buffer-kind, external reconcile, the editor remount `key`), consumed via `useEditingSession.ts` (`useSyncExternalStore`). It imports no React, so the whole loop is node-testable (`editingSession.test.ts`). `App.tsx` drives the session and owns the sidebar list, config _semantics_ (`onConfigApply`), and panels — it **no longer holds the working/saved maps**. The Editor is remounted via its `key` (`session.editorKey` + a vim/preview suffix) so cursor position resets cleanly.
+
+**The `~/.notesiderc` config buffer is a synthetic note.** `activeId === "config"` swaps the editor onto `configText` instead of a real note; `:w` runs `parseConfig` (settings.ts) and applies it. `settings.ts` round-trips `Config ⇄ text` via `serializeConfig`/`parseConfig`; the in-app `SettingsPanel` and the config buffer are two editors over the same `Config`. Config changes are applied by writing CSS custom properties (`--accent-base`, `--editor-font`, `--editor-size`, etc.) onto `document.documentElement` in an effect in `App.tsx`.
+
+**Search lives behind the `backend/` seam.** The `Backend` interface (`src/backend/types.ts`) exposes `searchFiles(query) → FileHit[]` and `searchContent(query, mode) → ContentHit[]`. The Tauri adapter (`backend/tauri.ts`) `invoke()`s the Rust commands `search_files`/`search_content` (`src-tauri/src/search.rs`: nucleo `fuzzy_files` for path/title matching, a `content_search` scan for plain/regex/fuzzy), and the in-memory `mock.ts` backs browser dev + the landing demo. `Finder` only talks to the `Backend` interface, so it's identical in both modes — and search stays fully in-memory (no database).
+
+**`links.ts` is the wikilink seam — pure, CodeMirror-free.** `parseWikilinks` / `resolveLink` (title → exact filename → filename-slug → title-slug, ordered so ties are deterministic and empty/punctuation targets never match) / `wikilinkAt` (link under a cursor, half-open end) / `computeBacklinks`. The editor side (`editor/wikilinks.ts`) styles `[[links]]` and hides the `[[ ]]` syntax in live-preview using the _same_ reveal-on-cursor-line model as `livePreview.ts` (and exports `activeLines` from there), plus `[[`-autocomplete over note titles. `gf` / `:follow` (exCommands → `App.onFollowLink`) opens the resolved note; the backlinks panel (`<Space>l` / `:backlinks`) is `backend.readAllNotes()` + `computeBacklinks`. Wikilinks are **not** lezer-markdown nodes — they're regex-scanned and never rewritten, so vim motions stay on the literal `[[Target]]` text. To move "jump to line" reliably, `openNote` bumps `navSeq` (part of the Editor remount `key`) on every nav.
+
+**Styling is a verbatim port of the design system, not Tailwind-in-the-app.** `apps/desktop/src/styles.css` is the design's hand-written CSS (oklch token palette, themed via `[data-theme="light"|"dark"]`). Class names (`av-*`, `set-*`, `fnd-*`) are load-bearing — the React components reproduce the prototype's exact markup against them. Treat `styles.css` as the visual source of truth; don't casually refactor it into utility classes. (This applies to the **desktop app only**. The **landing** has been migrated to **Tailwind v4 utilities**: `apps/landing/src/styles.css` now holds just the oklch tokens — exposed to utilities via `@theme inline` so `bg-paper`/`text-ink`/`font-serif`/`text-accent` follow `data-theme` — plus `@theme` keyframes and a thin `@layer components` for the reusable/bespoke bits (`.wrap`, `.btn*`, the logo `.bmark`/`.wordtype`, keycast `.kc-*`, `.reveal`). Everything else is utilities in `App.tsx`. `--breakpoint-sm` is overridden to `45rem` to match the design's single 720px breakpoint, used via `max-sm:`.)
+
+**Window chrome is custom.** The Tauri window is `decorations: false` (see `src-tauri/tauri.conf.json`). The in-app titlebar traffic lights drive close/minimize/maximize through `useWindowControls.ts` (`@tauri-apps/api/window`, dynamically imported and code-split). Outside Tauri (the landing's `?embed=1` iframe) those controls are inert and red falls back to closing the note buffer. `isTauri()` / the `embed` html class gate this; the same build runs both as the native app and as the embedded demo.
+
+**Landing ↔ desktop coupling is the demo iframe only.** The landing embeds the desktop web build via `<iframe src={DEMO_URL}>`; in dev `DEMO_URL` points at the desktop Vite server, in prod at `/demo/` (populated by `pnpm demo:build`). Override with `VITE_DEMO_URL`. Deploys on Vercel via `vercel.json` (repo root): build = `pnpm build:landing` (builds the demo into `public/demo`, then the landing), output `apps/landing/dist`, **Root Directory = repo root** (a default `vite build` would ship an empty `/demo`).
+
+**SEO + domains.** Landing → **noteside.app**, docs → **docs.noteside.app** (a _separate_ Vercel project, Root Directory = `apps/docs`, config `apps/docs/vercel.json` with the SPA-fallback rewrite). Landing SEO is static in `apps/landing/index.html` (canonical/OG/Twitter/theme-color + WebSite/SoftwareApplication JSON-LD) plus `public/robots.txt` + `public/sitemap.xml`. Docs SEO is per-page: `routes/docs.tsx`'s clientLoader component renders `<title>`/`<meta>`/canonical/OG/Twitter/JSON-LD in the body and **React 19 hoists them into the prerendered `<head>`** — do NOT add a route `meta()` (React 19 hoists but does NOT dedupe → duplicate tags). The docs sitemap is a prerendered resource route (`routes/sitemap.ts`, registered in `routes.ts` and pushed into `react-router.config.ts` `prerender()`); robots is static `public/robots.txt`. Canonical + sitemap URLs are clean directory paths with **no trailing slash** (root = `https://docs.noteside.app`). The **OG cards** (`apps/{landing,docs}/public/og.png`, 1200×630, opaque) render from `apps/desktop/scripts/og.html` via headless Chrome — regenerate with `pnpm og:build` (must be online; one template, `?variant=landing|docs`, `--force-device-scale-factor=1`). Attribution ("Josh Daniel" → github.com/joshxfi, the _personal_ profile) is in the landing footer, the README, and the root `package.json` `author`.
+
+## Conventions & gotchas
+
+- **TypeScript is strict** with `noUnusedLocals`, `noUnusedParameters`, and `verbatimModuleSyntax` (from `tsconfig.base.json`). Use `import type { … }` for type-only imports or the build breaks.
+- **The mock backend is an in-memory seed** (`src/data.ts`, used in browser dev / the landing demo); the real Tauri backend persists to Markdown files. Notebook scanning, atomic writes, and the watcher live in `src-tauri/src` (`notebook.rs`/`commands.rs`/`watcher.rs`); search stays fully in-memory (no database).
+- **Fonts load from Google Fonts** (in each `index.html`) to match the design. For the offline promise, vendor them locally (e.g. `@fontsource`); CSS stacks fall back to system serif/mono.
+- **Tauri Rust is a single crate** at `apps/desktop/src-tauri` (no root cargo workspace). Turbo does not cache the Rust build — `desktop#build` is the _web_ bundle; `tauri build` is separate. Window-control permissions and `data-tauri-drag-region` are authorized in `src-tauri/capabilities/default.json` (window label `main`).
+- **Toolchain: Node 24 + pnpm 11** (`.nvmrc`, `packageManager` in root `package.json`). pnpm 11 enforces a **supply-chain freshness gate** (`minimumReleaseAge: 1440` in `pnpm-workspace.yaml`) — if `pnpm install`/`pnpm <script>` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, a dependency was published <1 day ago. Wait for it to age, or allowlist that one package under `minimumReleaseAgeExclude` (never `minimum-release-age=0` globally). Dependency build scripts are also gated — approve trusted ones under `allowBuilds` (e.g. `esbuild`). When the gate blocks a `pnpm <script>` (pnpm 11 re-runs an install check first), run the tool binary directly to bypass it: `./apps/desktop/node_modules/.bin/vitest run --root apps/desktop` (vitest is package-local — not in the root `.bin`), `./node_modules/.bin/tsc --noEmit -p apps/desktop/tsconfig.json`, `./node_modules/.bin/oxlint apps/desktop/src`, `./node_modules/.bin/oxfmt --check apps/desktop/src`, `(cd apps/desktop && ./node_modules/.bin/tauri icon …)`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`.
+- **Editor theme/extension changes need a full reload, not HMR.** CM6 injects `EditorView.theme(...)` CSS as a static StyleModule and wires extensions at `EditorView` mount, so Vite HMR won't apply `editor/theme.ts` or extension edits to a running editor — restart/hard-reload to see them. Editor selection/cursor colors must use `!important` + CSS vars: CM's baseTheme defaults win on specificity and the theme isn't declared `dark`, so a plain `.cm-selectionBackground` rule loses (CM's light default `#d7d4f0` then shows in **both** themes).
