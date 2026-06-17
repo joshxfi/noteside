@@ -10,8 +10,6 @@ Noteside — an offline, local-first, **keyboard-first** notes desktop app (full
 - `apps/landing` — Vite + React 19 + TypeScript + Tailwind v4 (the site)
 - `apps/brand` — Vite + React + Tailwind, the standalone **brand guide** (internal reference only; not deployed, not linked from the landing). Runs on `:3001` via `pnpm dev:brand`; has its own `Logo.tsx` copy + `styles.css` (the brand CSS).
 
-The UI was implemented from a Claude Design (HTML/JSX) handoff; the React/TS code in `apps/desktop/src` is a faithful, typed port of that prototype.
-
 ## Commands
 
 Run from the repo root (Turborepo fans out to the right package):
