@@ -200,8 +200,8 @@ The hot paths are benchmarked (`cargo bench`, `pnpm bench`). On a modern laptop:
 - **Native shell.** A Rust core (Tauri) over the OS webview — instant launch, low
   memory, a small native binary, and no background daemon.
 - Fuzzy file search stays **sub-millisecond even at 50k notes** (`nucleo`).
-- Content search is a fast in-memory scan — a few milliseconds across thousands of
-  notes, with no database or index to build, write, or keep in sync.
+- Content search is a fast in-memory scan — ~2 ms at 1k notes, ~20 ms at 10k, and
+  ~100 ms even at 50k, with no database or index to build, write, or keep in sync.
 - The note sidebar **virtualizes** past 100 notes (only visible rows mount).
 - Backlinks are computed in Rust, not by shipping every note body to the UI.
 
