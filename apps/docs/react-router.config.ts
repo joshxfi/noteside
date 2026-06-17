@@ -25,6 +25,7 @@ export default {
       paths.push(getUrl(slugs), `/llms.mdx/docs/${[...slugs, "content.md"].join("/")}`);
     }
 
+    paths.push("/sitemap.xml");
     return paths;
   },
 } satisfies Config;

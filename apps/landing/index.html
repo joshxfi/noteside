@@ -6,8 +6,39 @@
     <title>Noteside — notes for keyboard people</title>
     <meta
       name="description"
-      content="Noteside is an offline notebook with vim at its core. Stay on home row, keep every note as a plain file, and let the chrome disappear."
+      content="An offline, local-first notes app you drive from the keyboard — full vim, or the conventional shortcuts you already know. Plain Markdown files, no cloud."
     />
+    <link rel="canonical" href="https://noteside.app/" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Josh Daniel" />
+    <meta name="theme-color" content="#f9f5ed" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232323" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Noteside" />
+    <meta property="og:title" content="Noteside — notes for keyboard people" />
+    <meta
+      property="og:description"
+      content="An offline, local-first notes app you drive from the keyboard — full vim, or the shortcuts you already know. Plain Markdown files, no account, no cloud."
+    />
+    <meta property="og:url" content="https://noteside.app/" />
+    <meta property="og:image" content="https://noteside.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="Noteside — an offline, keyboard-first notebook" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Noteside — notes for keyboard people" />
+    <meta
+      name="twitter:description"
+      content="An offline, local-first notes app you drive from the keyboard — full vim, or the shortcuts you already know. Plain Markdown files, no account, no cloud."
+    />
+    <meta name="twitter:image" content="https://noteside.app/og.png" />
+    <meta name="twitter:image:alt" content="Noteside — an offline, keyboard-first notebook" />
+
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,6 +47,37 @@
       href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://noteside.app/#website",
+            "name": "Noteside",
+            "url": "https://noteside.app/",
+            "description": "An offline, local-first, keyboard-first Markdown notes app.",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Noteside",
+            "url": "https://noteside.app/",
+            "applicationCategory": "ProductivityApplication",
+            "operatingSystem": "macOS, Windows, Linux",
+            "description": "An offline, local-first notes app you drive from the keyboard — full vim, or the conventional shortcuts you already know. Your notes stay plain Markdown files.",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "isAccessibleForFree": true,
+            "author": {
+              "@type": "Person",
+              "name": "Josh Daniel",
+              "url": "https://github.com/joshxfi"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

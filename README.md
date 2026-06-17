@@ -218,4 +218,4 @@ The codebase is kept `oxfmt`-formatted (`pnpm format`). TypeScript is strict
 
 ## License
 
-[MIT](LICENSE) © Noteside
+[MIT](LICENSE) © Noteside — built by [Josh Daniel](https://github.com/joshxfi)

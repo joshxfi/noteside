@@ -4,6 +4,10 @@ import { LogoMark, Wordmark } from "./Logo";
 
 const GITHUB = "https://github.com/joshxfi/noteside";
 const RELEASES = `${GITHUB}/releases`;
+const AUTHOR = "https://github.com/joshxfi";
+// The docs site (docs.noteside.app in prod). Override with VITE_DOCS_URL — e.g.
+// http://localhost:3002 when running `pnpm dev:docs` locally.
+const DOCS = import.meta.env.VITE_DOCS_URL ?? "https://docs.noteside.app";
 
 // The live demo embeds the desktop app's web build. In dev, point at the
 // desktop Vite server (started by `turbo dev`); in prod, at /demo, populated by
@@ -166,9 +170,13 @@ export function App() {
             <a href="#features">Features</a>
             <a href="#demo">Demo</a>
             <a href="#keys">Keys</a>
+            <a href={DOCS}>Docs ↗</a>
             <a href={GITHUB}>GitHub ↗</a>
           </nav>
           <div className="nav-right">
+            <a className="btn btn-ghost" href={DOCS}>
+              Documentation
+            </a>
             <a className="btn btn-primary" href="#download">
               Download
             </a>
@@ -273,6 +281,7 @@ export function App() {
               <div className="foot-col">
                 <span className="h">Product</span>
                 <a href="#download">Download</a>
+                <a href={DOCS}>Documentation</a>
                 <a href="#demo">Live demo</a>
                 <a href="#features">Features</a>
               </div>
@@ -285,7 +294,9 @@ export function App() {
             </div>
           </div>
           <div className="foot-note">
-            <span>Free forever. Open source. Your notes are yours.</span>
+            <span>
+              Free forever. Open source. Built by <a href={AUTHOR}>Josh Daniel</a>.
+            </span>
             <span>~/.notesiderc</span>
           </div>
         </div>

@@ -559,6 +559,12 @@ h1 {
   gap: 16px;
   flex-wrap: wrap;
 }
+.foot-note a {
+  color: var(--ink-soft);
+}
+.foot-note a:hover {
+  color: var(--accent);
+}
 
 /* ── voice: technical recasts the headlines in mono ── */
 [data-voice="technical"] h1 {
