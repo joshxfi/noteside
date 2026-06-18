@@ -3,6 +3,7 @@
     "**/dist/**",
     "**/src-tauri/**",
     "apps/landing/public/demo/**",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    "CHANGELOG.md"
   ]
 }
