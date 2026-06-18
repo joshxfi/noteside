@@ -219,7 +219,7 @@ Next: wikilink niceties (create-on-follow, unresolved-link styling), richer prev
 Issues and PRs are welcome. Before opening a PR, please run the gates:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test && pnpm test:rust
+pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:rust
 ```
 
 The codebase is kept `oxfmt`-formatted (`pnpm format`). TypeScript is strict
