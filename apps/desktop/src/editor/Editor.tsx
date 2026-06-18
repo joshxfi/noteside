@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState, type Extension, Prec } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -37,6 +37,11 @@ const MODE_LABEL: Record<string, string> = {
 
 const WORD_COUNT_DELAY_MS = 180;
 const DIRTY_CHECK_DELAY_MS = 220;
+
+// The always-on chord keymap lives in a Compartment so a rebind (cfg.chords)
+// can be re-applied to the LIVE editor without a remount (CM wires keymaps at
+// mount; a remount would also steal focus from the open shortcut editor).
+const chordKeymap = new Compartment();
 
 defineExCommands();
 
@@ -81,6 +86,9 @@ export function Editor(props: EditorProps) {
   savedRef.current = props.savedText;
   const wordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // dispatchCommand lives inside the mount effect; expose it so the live chord
+  // reconfigure effect below can rebuild the keymap with fresh overrides.
+  const dispatchRef = useRef<(cmd: Command) => void>(() => {});
 
   const [mode, setMode] = useState(vimMode ? "normal" : "insert");
   const [stat, setStat] = useState({ words: 0, line: 1, col: 1, pct: "All", dirty: false });
@@ -183,6 +191,7 @@ export function Editor(props: EditorProps) {
         findPrevious(v);
       }
     };
+    dispatchRef.current = dispatchCommand;
 
     const extensions: Extension[] = [];
     // No persistent status bar: the mode + counts live in our own status bar
@@ -221,10 +230,12 @@ export function Editor(props: EditorProps) {
       nsTheme,
       // Always-on app chords (both vim and non-vim) — Mod- combos can't collide
       // with vim's bare-key normal mode. Derived from the command table.
-      keymap.of([
-        ...commandChordKeymap(dispatchCommand, propsRef.current.chordOverrides),
-        ...historyKeymap,
-      ]),
+      chordKeymap.of(
+        keymap.of([
+          ...commandChordKeymap(dispatchCommand, propsRef.current.chordOverrides),
+          ...historyKeymap,
+        ]),
+      ),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
           const state = u.state;
@@ -282,6 +293,21 @@ export function Editor(props: EditorProps) {
   useEffect(() => {
     viewRef.current?.focus();
   }, [refocusToken]);
+
+  // Re-apply the chord keymap when the user rebinds a shortcut, so the change
+  // takes effect in the already-open editor (no remount, no focus theft).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: chordKeymap.reconfigure(
+        keymap.of([
+          ...commandChordKeymap(dispatchRef.current, props.chordOverrides),
+          ...historyKeymap,
+        ]),
+      ),
+    });
+  }, [props.chordOverrides]);
 
   useEffect(() => {
     const view = viewRef.current;
