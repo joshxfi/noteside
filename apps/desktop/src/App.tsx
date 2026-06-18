@@ -116,7 +116,7 @@ function NoteRow({
       <span className="av-item-bar" />
       <span className="av-item-main">
         <span className="av-item-title">
-          {note.title}
+          <span className="av-item-titletext">{note.title}</span>
           {active && dirty && <span className="av-item-dot" />}
         </span>
         <span className="av-item-meta">

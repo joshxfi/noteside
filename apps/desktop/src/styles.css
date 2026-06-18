@@ -329,6 +329,15 @@ body {
   align-items: center;
   gap: 7px;
   line-height: 1.1;
+  min-width: 0;
+}
+/* the title text truncates with an ellipsis; the dirty dot stays visible after it
+   (flex container can't ellipsis its own text, so the text gets its own span) */
+.av-item-titletext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .av-item-dot {
   width: 6px;

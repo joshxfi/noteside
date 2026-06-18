@@ -275,7 +275,12 @@ export function SettingsPanel({
               <button
                 tabIndex={-1}
                 onClick={() =>
-                  setCfg({ uiScale: Math.max(0.9, Math.round((cfg.uiScale - 0.05) * 20) / 20) })
+                  setCfg({
+                    uiScale: Math.max(
+                      0.9,
+                      Math.min(1.3, Math.round((cfg.uiScale - 0.05) * 20) / 20),
+                    ),
+                  })
                 }
               >
                 −
@@ -284,7 +289,12 @@ export function SettingsPanel({
               <button
                 tabIndex={-1}
                 onClick={() =>
-                  setCfg({ uiScale: Math.min(1.3, Math.round((cfg.uiScale + 0.05) * 20) / 20) })
+                  setCfg({
+                    uiScale: Math.max(
+                      0.9,
+                      Math.min(1.3, Math.round((cfg.uiScale + 0.05) * 20) / 20),
+                    ),
+                  })
                 }
               >
                 +
