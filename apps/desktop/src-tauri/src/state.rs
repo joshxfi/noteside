@@ -152,7 +152,11 @@ mod tests {
         assert_eq!(s.records.len(), 1);
         assert_eq!(s.records[0].body, "v1");
         s.record_own_write(meta("a.md"), "v2".to_string(), t0);
-        assert_eq!(s.records.len(), 1, "same path updates in place, no new record");
+        assert_eq!(
+            s.records.len(),
+            1,
+            "same path updates in place, no new record"
+        );
         assert_eq!(s.records[0].body, "v2");
     }
 
@@ -160,7 +164,10 @@ mod tests {
     fn record_own_delete_drops_the_record_and_arms_suppression() {
         let mut s = NotebookState::default();
         let t0 = Instant::now();
-        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x"), rec("b.md", "y")]);
+        s.load(
+            PathBuf::from("/nb"),
+            vec![rec("a.md", "x"), rec("b.md", "y")],
+        );
         s.record_own_delete("a.md", t0);
         assert_eq!(s.records.len(), 1);
         assert_eq!(s.records[0].meta.path, "b.md");

@@ -6,8 +6,8 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
 use tauri::{AppHandle, Emitter};
 
-use crate::state::NotebookState;
 use crate::notebook;
+use crate::state::NotebookState;
 
 /// Watch the notebook folder for external changes (other editors, git, sync). On a
 /// debounced change to any `.md` file, rebuild the in-memory index and notify

@@ -78,7 +78,10 @@ pub fn resolve<'a>(target: &str, records: &'a [NoteRecord]) -> Option<&'a NoteRe
         }
     }
     if !ts.is_empty() {
-        if let Some(r) = records.iter().find(|r| slug(&base_name(&r.meta.path)) == ts) {
+        if let Some(r) = records
+            .iter()
+            .find(|r| slug(&base_name(&r.meta.path)) == ts)
+        {
             return Some(r);
         }
         if let Some(r) = records.iter().find(|r| slug(&r.meta.title) == ts) {
@@ -101,7 +104,9 @@ pub fn backlinks(records: &[NoteRecord], active_id: &str) -> Vec<Backlink> {
             let mut found = false;
             for t in parse_targets(line) {
                 let hit = *cache.entry(t.to_string()).or_insert_with(|| {
-                    resolve(t, records).map(|m| m.meta.id == active_id).unwrap_or(false)
+                    resolve(t, records)
+                        .map(|m| m.meta.id == active_id)
+                        .unwrap_or(false)
                 });
                 if hit {
                     found = true;
@@ -144,16 +149,31 @@ mod tests {
 
     #[test]
     fn parses_plain_and_piped_targets() {
-        assert_eq!(parse_targets("see [[A]] and [[b c|disp]] x"), vec!["A", "b c"]);
+        assert_eq!(
+            parse_targets("see [[A]] and [[b c|disp]] x"),
+            vec!["A", "b c"]
+        );
         assert!(parse_targets("[[]] and [[unterminated").is_empty());
     }
 
     #[test]
     fn resolves_by_title_filename_and_slug() {
-        let recs = vec![rec("ideas/garden.md", "Digital Garden", ""), rec("meeting-notes.md", "Meeting Notes", "")];
-        assert_eq!(resolve("digital garden", &recs).unwrap().meta.id, "ideas/garden.md");
-        assert_eq!(resolve("meeting-notes", &recs).unwrap().meta.id, "meeting-notes.md");
-        assert_eq!(resolve("Meeting Notes", &recs).unwrap().meta.id, "meeting-notes.md");
+        let recs = vec![
+            rec("ideas/garden.md", "Digital Garden", ""),
+            rec("meeting-notes.md", "Meeting Notes", ""),
+        ];
+        assert_eq!(
+            resolve("digital garden", &recs).unwrap().meta.id,
+            "ideas/garden.md"
+        );
+        assert_eq!(
+            resolve("meeting-notes", &recs).unwrap().meta.id,
+            "meeting-notes.md"
+        );
+        assert_eq!(
+            resolve("Meeting Notes", &recs).unwrap().meta.id,
+            "meeting-notes.md"
+        );
         assert!(resolve("nope", &recs).is_none());
         assert!(resolve("!!!", &recs).is_none());
     }
@@ -162,7 +182,11 @@ mod tests {
     fn backlinks_finds_linkers_and_excludes_self() {
         let recs = vec![
             rec("a.md", "Alpha", "links to [[Beta]]"),
-            rec("b.md", "Beta", "self ref [[Beta]] ignored for itself\nand [[Alpha]]"),
+            rec(
+                "b.md",
+                "Beta",
+                "self ref [[Beta]] ignored for itself\nand [[Alpha]]",
+            ),
             rec("c.md", "Gamma", "no links"),
         ];
         let back = backlinks(&recs, "b.md");

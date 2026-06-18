@@ -9,9 +9,26 @@ use noteside_lib::search::{content_search, fuzzy_files};
 use std::fs;
 
 const WORDS: &[&str] = &[
-    "kettle", "roadmap", "cursor", "vim", "notebook", "lighthouse", "design", "review", "fig",
-    "vanilla", "morning", "pages", "keymap", "welcome", "sync", "quarter", "offline", "markdown",
-    "search", "backlink",
+    "kettle",
+    "roadmap",
+    "cursor",
+    "vim",
+    "notebook",
+    "lighthouse",
+    "design",
+    "review",
+    "fig",
+    "vanilla",
+    "morning",
+    "pages",
+    "keymap",
+    "welcome",
+    "sync",
+    "quarter",
+    "offline",
+    "markdown",
+    "search",
+    "backlink",
 ];
 const FOLDERS: &[&str] = &["journal", "work", "ideas", "recipes", "notes"];
 
