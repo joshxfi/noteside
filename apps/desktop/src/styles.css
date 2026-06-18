@@ -54,7 +54,6 @@
    mouse clicks. Panels and inputs keep their own (outline:none + accent border)
    focus styling defined further down. */
 button:focus-visible,
-[role="option"]:focus-visible,
 [role="button"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

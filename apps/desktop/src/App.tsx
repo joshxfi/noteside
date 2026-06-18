@@ -109,7 +109,7 @@ function NoteRow({
       ref={measureRef}
       data-index={index}
       className={"av-item" + (active ? " is-active" : "")}
-      aria-current={active ? "true" : undefined}
+      aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
       style={style}
     >
