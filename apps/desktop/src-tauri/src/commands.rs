@@ -6,9 +6,9 @@ use tauri::{AppHandle, State};
 use crate::error::{AppError, Result};
 use crate::links;
 use crate::models::{Backlink, ContentHit, FileHit, NoteDoc, NoteMeta};
+use crate::notebook::{self, NoteRecord};
 use crate::search;
 use crate::state::AppState;
-use crate::notebook::{self, NoteRecord};
 use crate::watcher;
 
 async fn blocking<T, F>(f: F) -> Result<T>
@@ -72,7 +72,8 @@ pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteD
         let g = state.notebook.lock().unwrap();
         g.root.clone().ok_or(AppError::NoNotebook)?
     };
-    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
+    let abs = notebook::safe_note_path(&root, &path)
+        .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     let rec = blocking(move || Ok(notebook::read_record(&root, &abs)?)).await?;
     Ok(NoteDoc {
         meta: rec.meta,
@@ -87,7 +88,8 @@ pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -
         let g = state.notebook.lock().unwrap();
         g.root.clone().ok_or(AppError::NoNotebook)?
     };
-    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
+    let abs = notebook::safe_note_path(&root, &path)
+        .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     let (meta, body) = blocking(move || {
         notebook::atomic_write(&abs, &body)?;
         let meta = notebook::parse_meta(path, &body, notebook::mtime_millis(&abs));
@@ -131,7 +133,8 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
         let g = state.notebook.lock().unwrap();
         g.root.clone().ok_or(AppError::NoNotebook)?
     };
-    let abs = notebook::safe_join(&root, &path).ok_or_else(|| AppError::Msg("path escapes the notebook".into()))?;
+    let abs = notebook::safe_note_path(&root, &path)
+        .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     blocking(move || {
         if abs.exists() {
             std::fs::remove_file(&abs)?;
@@ -163,7 +166,15 @@ pub async fn search_content(
         let g = state.notebook.lock().unwrap();
         g.records.clone()
     };
-    blocking(move || Ok(search::content_search(records.as_slice(), &query, &mode, 200)?)).await
+    blocking(move || {
+        Ok(search::content_search(
+            records.as_slice(),
+            &query,
+            &mode,
+            200,
+        )?)
+    })
+    .await
 }
 
 /// Notes that link to `id` via [[wikilinks]]. Scanned in Rust over the cached

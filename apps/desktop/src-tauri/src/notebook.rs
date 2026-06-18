@@ -60,6 +60,16 @@ pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
     Some(root.join(p))
 }
 
+/// Resolve a client-supplied note path and reject anything that is not a
+/// Markdown note inside the notebook.
+pub fn safe_note_path(root: &Path, rel: &str) -> Option<PathBuf> {
+    let abs = safe_join(root, rel)?;
+    if abs.extension().and_then(|e| e.to_str()) != Some("md") {
+        return None;
+    }
+    Some(abs)
+}
+
 pub fn rel_path(root: &Path, abs: &Path) -> String {
     abs.strip_prefix(root)
         .unwrap_or(abs)
@@ -250,6 +260,16 @@ mod tests {
     }
 
     #[test]
+    fn safe_note_path_requires_markdown() {
+        let root = Path::new("/notebook");
+        assert!(safe_note_path(root, "a.md").is_some());
+        assert!(safe_note_path(root, "notes/a.md").is_some());
+        assert!(safe_note_path(root, "notes/a.txt").is_none());
+        assert!(safe_note_path(root, ".git/config").is_none());
+        assert!(safe_note_path(root, "../a.md").is_none());
+    }
+
+    #[test]
     fn slugify_basics() {
         assert_eq!(slugify("Hello World"), "hello-world");
         assert_eq!(slugify("  Spaces  & punctuation!! "), "spaces-punctuation");
@@ -268,9 +288,18 @@ mod tests {
 
     #[test]
     fn title_falls_back_to_heading_then_first_line_then_filename() {
-        assert_eq!(parse_meta("x.md".into(), "# A Heading\n\ntext", 0).title, "A Heading");
-        assert_eq!(parse_meta("x.md".into(), "just a line\nmore", 0).title, "just a line");
-        assert_eq!(parse_meta("my-cool-note.md".into(), "", 0).title, "my cool note");
+        assert_eq!(
+            parse_meta("x.md".into(), "# A Heading\n\ntext", 0).title,
+            "A Heading"
+        );
+        assert_eq!(
+            parse_meta("x.md".into(), "just a line\nmore", 0).title,
+            "just a line"
+        );
+        assert_eq!(
+            parse_meta("my-cool-note.md".into(), "", 0).title,
+            "my cool note"
+        );
     }
 
     #[test]
