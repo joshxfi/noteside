@@ -14,6 +14,15 @@ describe("mock backend", () => {
     const hits = await mockBackend.searchFiles("welcome");
     expect(hits[0]?.path).toBe("welcome.md");
     expect(hits[0]?.positions.length).toBeGreaterThan(0);
+    expect(hits[0]?.titlePositions.length).toBeGreaterThan(0);
+  });
+
+  it("fuzzy file search matches by title when the path does not match", async () => {
+    const hits = await mockBackend.searchFiles("design");
+    expect(hits[0]?.title).toBe("Sync — design review");
+    expect(hits[0]?.path).toBe("work/meeting-notes.md");
+    expect(hits[0]?.positions).toEqual([]);
+    expect(hits[0]?.titlePositions.length).toBeGreaterThan(0);
   });
 
   it("plain content search finds a known seeded line", async () => {

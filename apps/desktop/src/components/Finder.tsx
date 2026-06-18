@@ -1,7 +1,7 @@
 // Fuzzy finder overlay. Default "All" mode merges fuzzy file/title matches with
 // content matches in one list; Files / Content narrow it. Queries the backend
 // (Rust nucleo + content scan, or the mock) with a short debounce; the preview
-// pane lazily fetches the selected note's text.
+// pane reads selected note text from the backend's in-memory preview path.
 import { createElement, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backend, type ContentHit, type FileHit, type GrepMode } from "../backend";
@@ -39,14 +39,23 @@ function FileRow({ item }: { item: FileHit }) {
   const bStart = path.lastIndexOf("/") + 1;
   const dir = path.slice(0, bStart);
   const name = path.slice(bStart);
+  const filenameTitle = name.replace(/\.md$/i, "");
+  const showTitle = item.title && item.title !== name && item.title !== filenameTitle;
+  const titleRanges = rangesFromPositions(item.titlePositions);
   const nameRanges = rangesFromPositions(
     item.positions.filter((p) => p >= bStart).map((p) => p - bStart),
   );
   const dirRanges = rangesFromPositions(item.positions.filter((p) => p < bStart));
   return (
     <>
-      <span className="fnd-name">{hl(name, nameRanges)}</span>
-      {dir ? <span className="fnd-path">{hl(dir, dirRanges)}</span> : null}
+      <span className="fnd-name">
+        {showTitle ? hl(item.title, titleRanges) : hl(name, nameRanges)}
+      </span>
+      {showTitle ? (
+        <span className="fnd-path">{hl(path, rangesFromPositions(item.positions))}</span>
+      ) : dir ? (
+        <span className="fnd-path">{hl(dir, dirRanges)}</span>
+      ) : null}
       {item.pinned ? (
         <span className="fnd-frec" title="pinned">
           pinned
@@ -125,6 +134,12 @@ function Preview({
 type Mode = "all" | "files" | "content";
 const MODES: Mode[] = ["all", "files", "content"];
 
+function itemKey(item: FileHit | ContentHit): string {
+  return "lineNumber" in item
+    ? `content:${item.path}:${item.lineNumber}:${item.line}`
+    : `file:${item.path}`;
+}
+
 export interface FinderProps {
   initialMode: Mode;
   onClose: () => void;
@@ -140,6 +155,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   const [preview, setPreview] = useState<{ path: string; lines: string[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const previewCacheRef = useRef(new Map<string, string[]>());
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -193,16 +209,27 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     else if (bottom > c.scrollTop + c.clientHeight) c.scrollTop = bottom - c.clientHeight;
   }, [sel, items]);
 
-  // lazily load the selected note's text for the preview
+  // Lazily load preview text from the backend's cached path, then memoize it for
+  // this overlay session so moving across many hits in the same file stays cheap.
   useEffect(() => {
     if (!selPath) {
       setPreview(null);
       return;
     }
+    const cached = previewCacheRef.current.get(selPath);
+    if (cached) {
+      setPreview({ path: selPath, lines: cached });
+      return;
+    }
     let alive = true;
     backend
-      .readNote(selPath)
-      .then((doc) => alive && setPreview({ path: selPath, lines: doc.body.split("\n") }))
+      .previewNote(selPath)
+      .then((doc) => {
+        if (!alive) return;
+        const lines = doc.body.split("\n");
+        previewCacheRef.current.set(selPath, lines);
+        setPreview({ path: selPath, lines });
+      })
       .catch(() => alive && setPreview(null));
     return () => {
       alive = false;
@@ -289,7 +316,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
             ) : (
               items.map((item, i) => (
                 <div
-                  key={mode + i + item.path}
+                  key={itemKey(item)}
                   className={"fnd-row" + (i === sel ? " is-sel" : "")}
                   onMouseMove={() => i !== sel && setSel(i)}
                   onMouseDown={(e) => {

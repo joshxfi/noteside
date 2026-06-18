@@ -4,7 +4,7 @@ use nucleo_matcher::{Config, Matcher, Utf32Str};
 use crate::models::{ContentHit, FileHit};
 use crate::notebook::NoteRecord;
 
-fn file_hit(r: &NoteRecord, score: u32, positions: Vec<u32>) -> FileHit {
+fn file_hit(r: &NoteRecord, score: u32, positions: Vec<u32>, title_positions: Vec<u32>) -> FileHit {
     FileHit {
         id: r.meta.id.clone(),
         path: r.meta.path.clone(),
@@ -13,11 +13,26 @@ fn file_hit(r: &NoteRecord, score: u32, positions: Vec<u32>) -> FileHit {
         pinned: r.meta.pinned,
         score,
         positions,
+        title_positions,
     }
 }
 
-/// Fuzzy match over note paths (Telescope/fzf-style), powered by nucleo. With an
-/// empty query, returns everything pinned-first then most-recent.
+fn fuzzy_match(
+    pattern: &Pattern,
+    matcher: &mut Matcher,
+    haystack: &str,
+    buf: &mut Vec<char>,
+    indices: &mut Vec<u32>,
+) -> Option<(u32, Vec<u32>)> {
+    let hay = Utf32Str::new(haystack, buf);
+    indices.clear();
+    pattern
+        .indices(hay, matcher, indices)
+        .map(|score| (score, indices.clone()))
+}
+
+/// Fuzzy match over note paths and titles (Telescope/fzf-style), powered by
+/// nucleo. With an empty query, returns everything pinned-first then most-recent.
 pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<FileHit> {
     let q = query.trim();
     if q.is_empty() {
@@ -31,7 +46,7 @@ pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<Fil
         return all
             .into_iter()
             .take(limit)
-            .map(|r| file_hit(r, 0, Vec::new()))
+            .map(|r| file_hit(r, 0, Vec::new(), Vec::new()))
             .collect();
     }
 
@@ -39,20 +54,40 @@ pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<Fil
     let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
     let mut buf: Vec<char> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
-    let mut scored: Vec<(u32, Vec<u32>, &NoteRecord)> = Vec::new();
+    let mut scored: Vec<(u32, Vec<u32>, Vec<u32>, &NoteRecord)> = Vec::new();
 
     for r in records {
-        let hay = Utf32Str::new(&r.meta.path, &mut buf);
-        indices.clear();
-        if let Some(score) = pattern.indices(hay, &mut matcher, &mut indices) {
-            scored.push((score, indices.clone(), r));
+        let path_match = fuzzy_match(&pattern, &mut matcher, &r.meta.path, &mut buf, &mut indices);
+        let title_match = fuzzy_match(
+            &pattern,
+            &mut matcher,
+            &r.meta.title,
+            &mut buf,
+            &mut indices,
+        );
+        if path_match.is_none() && title_match.is_none() {
+            continue;
         }
+        let path_score = path_match.as_ref().map_or(0, |m| m.0);
+        let title_score = title_match.as_ref().map_or(0, |m| m.0.saturating_add(16));
+        scored.push((
+            path_score.max(title_score),
+            path_match.map_or_else(Vec::new, |m| m.1),
+            title_match.map_or_else(Vec::new, |m| m.1),
+            r,
+        ));
     }
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then(b.3.meta.pinned.cmp(&a.3.meta.pinned))
+            .then(b.3.meta.updated.cmp(&a.3.meta.updated))
+    });
     scored
         .into_iter()
         .take(limit)
-        .map(|(score, positions, r)| file_hit(r, score, positions))
+        .map(|(score, positions, title_positions, r)| {
+            file_hit(r, score, positions, title_positions)
+        })
         .collect()
 }
 
@@ -188,11 +223,21 @@ mod tests {
     use crate::models::NoteMeta;
 
     fn rec(path: &str, body: &str, pinned: bool, updated: i64) -> NoteRecord {
+        rec_with_title(path, path, body, pinned, updated)
+    }
+
+    fn rec_with_title(
+        path: &str,
+        title: &str,
+        body: &str,
+        pinned: bool,
+        updated: i64,
+    ) -> NoteRecord {
         NoteRecord {
             meta: NoteMeta {
                 id: path.into(),
                 path: path.into(),
-                title: path.into(),
+                title: title.into(),
                 tags: vec![],
                 created: None,
                 updated,
@@ -204,7 +249,11 @@ mod tests {
 
     #[test]
     fn fuzzy_empty_query_returns_all_pinned_then_recent() {
-        let recs = vec![rec("a.md", "", false, 1), rec("b.md", "", true, 0), rec("c.md", "", false, 2)];
+        let recs = vec![
+            rec("a.md", "", false, 1),
+            rec("b.md", "", true, 0),
+            rec("c.md", "", false, 2),
+        ];
         let hits = fuzzy_files(&recs, "", 10);
         assert_eq!(hits.len(), 3);
         assert_eq!(hits[0].path, "b.md"); // pinned first
@@ -214,11 +263,26 @@ mod tests {
 
     #[test]
     fn fuzzy_matches_subsequence_and_excludes_non_matches() {
-        let recs = vec![rec("welcome.md", "", false, 0), rec("keymap.md", "", false, 0)];
+        let recs = vec![
+            rec("welcome.md", "", false, 0),
+            rec("keymap.md", "", false, 0),
+        ];
         let hits = fuzzy_files(&recs, "wel", 10);
         assert_eq!(hits[0].path, "welcome.md");
         assert!(!hits[0].positions.is_empty());
         assert!(fuzzy_files(&recs, "zzzzz", 10).is_empty());
+    }
+
+    #[test]
+    fn fuzzy_matches_title_with_separate_title_positions() {
+        let recs = vec![
+            rec_with_title("daily/2026-06-18.md", "Release Checklist", "", false, 0),
+            rec_with_title("ideas/perf.md", "Performance Notes", "", false, 0),
+        ];
+        let hits = fuzzy_files(&recs, "rel", 10);
+        assert_eq!(hits[0].path, "daily/2026-06-18.md");
+        assert!(hits[0].positions.is_empty());
+        assert!(!hits[0].title_positions.is_empty());
     }
 
     #[test]

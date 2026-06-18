@@ -51,7 +51,7 @@ function titleFromBody(text: string): string | null {
   return null;
 }
 
-function base(r: Rec): Omit<FileHit, "score" | "positions"> {
+function base(r: Rec): Omit<FileHit, "score" | "positions" | "titlePositions"> {
   return {
     id: r.meta.id,
     path: r.meta.path,
@@ -86,12 +86,25 @@ function fileSearch(query: string): FileHit[] {
       .sort(
         (a, b) => Number(b.meta.pinned) - Number(a.meta.pinned) || b.meta.updated - a.meta.updated,
       )
-      .map((r) => ({ ...base(r), score: 0, positions: [] }));
+      .map((r) => ({ ...base(r), score: 0, positions: [], titlePositions: [] }));
   }
   const scored: { h: FileHit; s: number }[] = [];
   for (const r of all) {
-    const m = subseq(r.meta.path.toLowerCase(), q);
-    if (m) scored.push({ h: { ...base(r), score: m.score, positions: m.positions }, s: m.score });
+    const pathMatch = subseq(r.meta.path.toLowerCase(), q);
+    const titleMatch = subseq(r.meta.title.toLowerCase(), q);
+    if (!pathMatch && !titleMatch) continue;
+    const pathScore = pathMatch?.score ?? 0;
+    const titleScore = titleMatch ? titleMatch.score + 16 : 0;
+    const score = Math.max(pathScore, titleScore);
+    scored.push({
+      h: {
+        ...base(r),
+        score,
+        positions: pathMatch?.positions ?? [],
+        titlePositions: titleMatch?.positions ?? [],
+      },
+      s: score,
+    });
   }
   scored.sort((a, b) => b.s - a.s);
   return scored.map((x) => x.h);
@@ -166,6 +179,11 @@ export const mockBackend: Backend = {
     return metas();
   },
   async readNote(path): Promise<NoteDoc> {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    return { ...r.meta, body: r.body };
+  },
+  async previewNote(path): Promise<NoteDoc> {
     const r = recs.get(path);
     if (!r) throw new Error(`no such note: ${path}`);
     return { ...r.meta, body: r.body };

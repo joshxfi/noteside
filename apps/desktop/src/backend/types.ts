@@ -26,6 +26,7 @@ export interface FileHit {
   pinned: boolean;
   score: number;
   positions: number[]; // indices into `path`
+  titlePositions: number[]; // indices into `title`
 }
 
 export interface ContentHit {
@@ -53,6 +54,8 @@ export interface Backend {
   currentNotebook(): Promise<string | null>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
+  /** Preview text from the in-memory notebook index; opening still uses readNote. */
+  previewNote(path: string): Promise<NoteDoc>;
   /** Notes that link to `noteId` via [[wikilinks]] — scanned backend-side. */
   backlinks(noteId: string): Promise<Backlink[]>;
   saveNote(path: string, body: string): Promise<NoteMeta>;

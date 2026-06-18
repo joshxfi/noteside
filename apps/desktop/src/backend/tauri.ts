@@ -19,6 +19,7 @@ export const tauriBackend: Backend = {
   currentNotebook: () => invoke<string | null>("current_notebook"),
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
+  previewNote: (path) => invoke<NoteDoc>("preview_note", { path }),
   backlinks: (noteId) => invoke<Backlink[]>("backlinks", { id: noteId }),
   saveNote: (path, body) => invoke<NoteMeta>("save_note", { path, body }),
   createNote: (title) => invoke<NoteMeta>("create_note", { title: title ?? null }),

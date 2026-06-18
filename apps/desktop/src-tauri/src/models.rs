@@ -25,7 +25,8 @@ pub struct NoteDoc {
     pub body: String,
 }
 
-/// A fuzzy file/title match. `positions` index into `path` for highlighting.
+/// A fuzzy file/title match. `positions` index into `path`; `title_positions`
+/// index into `title`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileHit {
@@ -36,6 +37,7 @@ pub struct FileHit {
     pub pinned: bool,
     pub score: u32,
     pub positions: Vec<u32>,
+    pub title_positions: Vec<u32>,
 }
 
 /// A note that links to the current one (one reference line per source note).

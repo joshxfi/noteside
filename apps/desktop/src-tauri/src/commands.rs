@@ -81,6 +81,25 @@ pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteD
     })
 }
 
+/// Read preview text from the in-memory index. Opening/editing still uses
+/// `read_note`, which reads the authoritative file from disk.
+#[tauri::command]
+pub fn preview_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
+    let g = state.notebook.lock().unwrap();
+    if g.root.is_none() {
+        return Err(AppError::NoNotebook);
+    }
+    let rec = g
+        .records
+        .iter()
+        .find(|r| r.meta.path == path)
+        .ok_or_else(|| AppError::Msg("note is not in the notebook index".into()))?;
+    Ok(NoteDoc {
+        meta: rec.meta.clone(),
+        body: rec.body.clone(),
+    })
+}
+
 /// Atomically write the note and refresh its cached record. Returns fresh meta.
 #[tauri::command]
 pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -> Result<NoteMeta> {

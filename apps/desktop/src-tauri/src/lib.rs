@@ -11,9 +11,9 @@ mod commands;
 mod error;
 pub mod links;
 pub mod models;
+pub mod notebook;
 pub mod search;
 mod state;
-pub mod notebook;
 mod watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -42,6 +42,7 @@ pub fn run() {
             commands::current_notebook,
             commands::list_notes,
             commands::read_note,
+            commands::preview_note,
             commands::save_note,
             commands::create_note,
             commands::delete_note,
