@@ -103,13 +103,19 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..10) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..11) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => setCfg({ theme: cfg.theme === "light" ? "dark" : "light" }) },
     { cycle: (d) => cycleList(ACCENTS, cfg.accent, "accent", d) },
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
     { cycle: (d) => cycleList(UI_FONTS, cfg.uiFont, "uiFont", d) },
     { cycle: (d) => setCfg({ fontSize: Math.max(16, Math.min(28, cfg.fontSize + d)) }) },
+    {
+      cycle: (d) =>
+        setCfg({
+          uiScale: Math.max(0.9, Math.min(1.3, Math.round((cfg.uiScale + d * 0.05) * 20) / 20)),
+        }),
+    },
     {
       cycle: (d) =>
         setCfg({
@@ -126,7 +132,7 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
+    { cycle: () => onShortcuts() }, // idx 11 — opens the keymap editor (cheatsheet)
   ];
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -258,7 +264,34 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={5} focus={focus} setFocus={setFocus} label="Line height">
+          <Row
+            idx={5}
+            focus={focus}
+            setFocus={setFocus}
+            label="Interface size"
+            hint="scales the app, not the editor"
+          >
+            <div className="set-stepper">
+              <button
+                tabIndex={-1}
+                onClick={() =>
+                  setCfg({ uiScale: Math.max(0.9, Math.round((cfg.uiScale - 0.05) * 20) / 20) })
+                }
+              >
+                −
+              </button>
+              <span>{Math.round(cfg.uiScale * 100)}%</span>
+              <button
+                tabIndex={-1}
+                onClick={() =>
+                  setCfg({ uiScale: Math.min(1.3, Math.round((cfg.uiScale + 0.05) * 20) / 20) })
+                }
+              >
+                +
+              </button>
+            </div>
+          </Row>
+          <Row idx={6} focus={focus} setFocus={setFocus} label="Line height">
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -285,7 +318,7 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">Cursor</div>
-          <Row idx={6} focus={focus} setFocus={setFocus} label="Style">
+          <Row idx={7} focus={focus} setFocus={setFocus} label="Style">
             {(
               [
                 ["block", "Block"],
@@ -298,7 +331,7 @@ export function SettingsPanel({
               </Pill>
             ))}
           </Row>
-          <Row idx={7} focus={focus} setFocus={setFocus} label="Blink">
+          <Row idx={8} focus={focus} setFocus={setFocus} label="Blink">
             <button
               type="button"
               tabIndex={-1}
@@ -311,7 +344,7 @@ export function SettingsPanel({
 
           <div className="set-sec">Keys</div>
           <Row
-            idx={8}
+            idx={9}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -327,7 +360,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={9}
+            idx={10}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -362,7 +395,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={10}
+            idx={11}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"

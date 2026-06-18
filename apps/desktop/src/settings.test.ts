@@ -15,6 +15,7 @@ describe("config serialize/parse round-trip", () => {
       uiFont: "jetbrains",
       fontSize: 22,
       lineHeight: 1.9,
+      uiScale: 1.2,
       cursor: "bar",
       cursorBlink: false,
       livePreview: false,
@@ -29,6 +30,15 @@ describe("config serialize/parse round-trip", () => {
   it("round-trips bind lines (rebind + unbind)", () => {
     const parsed = parseConfig("bind Ctrl-j find\nbind none grep", CONFIG_DEFAULTS);
     expect(parsed.chords).toEqual({ find: "Ctrl-j", grep: "" });
+  });
+
+  it("round-trips uiScale and accepts %/decimal forms, clamped + snapped", () => {
+    const cfg: Config = { ...CONFIG_DEFAULTS, uiScale: 1.15 };
+    expect(serializeConfig(cfg)).toMatch(/^set ui-scale\s*=\s*115%$/m);
+    expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS).uiScale).toBe(1.15);
+    expect(parseConfig("set ui-scale = 1.1", CONFIG_DEFAULTS).uiScale).toBe(1.1);
+    expect(parseConfig("set ui-scale = 200%", CONFIG_DEFAULTS).uiScale).toBe(1.3); // clamp
+    expect(parseConfig("set ui-scale = 50%", CONFIG_DEFAULTS).uiScale).toBe(0.9); // clamp
   });
 
   it("distinguishes reset (no bind line → default) from unbind (bind none)", () => {
@@ -58,7 +68,7 @@ describe("config serialize/parse round-trip", () => {
     expect(big.fontSize).toBe(28);
     expect(big.lineHeight).toBe(2.1);
     const small = parseConfig("set font-size = 2\nset line-height = 0.2", CONFIG_DEFAULTS);
-    expect(small.fontSize).toBe(14);
+    expect(small.fontSize).toBe(16);
     expect(small.lineHeight).toBe(1.4);
   });
 

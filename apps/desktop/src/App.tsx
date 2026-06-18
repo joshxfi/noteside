@@ -379,6 +379,7 @@ export function App() {
     r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
+    r.style.setProperty("--ui-scale", String(cfg.uiScale));
     if (configLoaded.current) void backend.setConfig(cfg);
   }, [cfg]);
 

@@ -4,6 +4,9 @@
   --editor-font: var(--serif);
   --editor-size: 19px;
   --editor-lh: 1.75;
+  /* Interface-size knob: multiplies the chrome font-sizes (calc below). The
+     editor is immune — it sizes from --editor-size, never from --ui-scale. */
+  --ui-scale: 1;
   --accent-base: oklch(0.565 0.095 350);
 }
 
@@ -178,7 +181,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   letter-spacing: 0.04em;
   color: var(--ink-soft);
   pointer-events: none;
@@ -201,7 +204,7 @@ body {
   background: transparent;
   color: var(--ink-soft);
   cursor: pointer;
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-scale));
   line-height: 1;
   display: grid;
   place-items: center;
@@ -249,7 +252,7 @@ body {
 }
 .av-brandmark {
   font-family: var(--serif);
-  font-size: 25px;
+  font-size: calc(25px * var(--ui-scale));
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -268,7 +271,7 @@ body {
 }
 .av-brandsub {
   margin-top: 6px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ui-scale));
   letter-spacing: 0.04em;
   color: var(--ink-faint);
 }
@@ -319,7 +322,7 @@ body {
 }
 .av-item-title {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-scale));
   font-weight: 500;
   color: var(--ink);
   display: flex;
@@ -335,7 +338,7 @@ body {
   flex: none;
 }
 .av-item-meta {
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ui-scale));
   letter-spacing: 0.02em;
   color: var(--ink-faint);
   white-space: nowrap;
@@ -360,7 +363,7 @@ body {
   padding: 7px 8px;
   border-radius: 8px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--ink-soft);
 }
 .av-config:hover {
@@ -381,7 +384,7 @@ body {
 }
 .av-sidehints {
   padding: 0 8px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ui-scale));
   color: var(--ink-faint);
   display: flex;
   align-items: center;
@@ -528,7 +531,7 @@ body {
   align-items: center;
   justify-content: center;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   line-height: 1;
   color: var(--ink-soft);
   background: var(--paper);
@@ -556,7 +559,7 @@ body {
   align-items: center;
   padding: 0 18px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--ink-faint);
   border-top: 1px solid var(--rule-soft);
 }
@@ -589,7 +592,7 @@ body {
   display: flex;
   align-items: stretch;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
   letter-spacing: 0.03em;
   background: var(--paper-2);
   border-top: 1px solid var(--rule-soft);
@@ -687,11 +690,11 @@ body {
 }
 .av-empty-title {
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: calc(24px * var(--ui-scale));
   color: var(--ink);
 }
 .av-empty-sub {
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-scale));
   color: var(--ink-faint);
   max-width: 360px;
   line-height: 1.6;
@@ -714,7 +717,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   letter-spacing: 0.03em;
   background: var(--accent);
   color: var(--accent-ink);
@@ -808,14 +811,14 @@ body {
 .set-head h2 {
   margin: 0;
   font-family: var(--serif);
-  font-size: 21px;
+  font-size: calc(21px * var(--ui-scale));
   font-weight: 600;
   color: var(--ink);
 }
 .set-head p {
   margin: 4px 0 0;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ui-scale));
   letter-spacing: 0.01em;
   color: var(--ink-faint);
 }
@@ -827,7 +830,7 @@ body {
   border: 1px solid transparent;
   background: transparent;
   color: var(--ink-faint);
-  font-size: 19px;
+  font-size: calc(19px * var(--ui-scale));
   line-height: 1;
   cursor: pointer;
 }
@@ -841,7 +844,7 @@ body {
 }
 .set-sec {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--ui-scale));
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -873,7 +876,7 @@ body {
 }
 .set-rowlabel {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--ink);
   display: flex;
   flex-direction: column;
@@ -881,7 +884,7 @@ body {
   white-space: nowrap;
 }
 .set-rowhint {
-  font-size: 10px;
+  font-size: calc(10px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .set-rowctl {
@@ -901,7 +904,7 @@ body {
 }
 .set-pill {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   padding: 5px 11px;
   border-radius: 7px;
   border: 1px solid var(--rule);
@@ -951,7 +954,7 @@ body {
   border: none;
   background: var(--paper);
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-scale));
   cursor: pointer;
 }
 .set-stepper button:hover {
@@ -962,7 +965,7 @@ body {
   min-width: 56px;
   text-align: center;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--ink);
 }
 .set-switch {
@@ -996,7 +999,7 @@ body {
 .set-custom {
   width: 66px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   padding: 5px 9px;
   border-radius: 7px;
   border: 1px solid var(--rule);
@@ -1017,7 +1020,7 @@ body {
 }
 .set-select {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   padding: 6px 28px 6px 11px;
   border-radius: 8px;
   border: 1px solid var(--rule);
@@ -1042,11 +1045,11 @@ body {
   transform: translateY(-50%);
   pointer-events: none;
   color: var(--ink-faint);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 .set-note {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--ui-scale));
   line-height: 1.6;
   color: var(--ink-faint);
   margin: 12px 0 4px;
@@ -1064,7 +1067,7 @@ body {
 }
 .set-editfile {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--ink-soft);
   background: transparent;
   border: none;
@@ -1078,7 +1081,7 @@ body {
 }
 .set-done {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   padding: 7px 18px;
   border-radius: 8px;
   border: none;
@@ -1125,7 +1128,7 @@ body {
 }
 .fnd-promptchar {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -1135,7 +1138,7 @@ body {
   flex: 1;
   min-width: 0;
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-scale));
   background: transparent;
   border: none;
   outline: none;
@@ -1148,7 +1151,7 @@ body {
 .fnd-grepmode {
   flex: none;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--ui-scale));
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent);
@@ -1163,7 +1166,7 @@ body {
 }
 .fnd-tab {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   padding: 4px 10px;
   border-radius: 7px;
   border: 1px solid var(--rule);
@@ -1199,7 +1202,7 @@ body {
   border-radius: 7px;
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   white-space: nowrap;
   overflow: hidden;
   position: relative;
@@ -1213,7 +1216,7 @@ body {
   flex: none;
   text-align: center;
   font-weight: 600;
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 .git-modified {
   color: oklch(0.64 0.12 64);
@@ -1237,7 +1240,7 @@ body {
 }
 .fnd-path {
   color: var(--ink-faint);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1246,7 +1249,7 @@ body {
 .fnd-frec {
   flex: none;
   margin-left: auto;
-  font-size: 9px;
+  font-size: calc(9px * var(--ui-scale));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1264,7 +1267,7 @@ body {
 .fnd-loc {
   flex: none;
   color: var(--ink-faint);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 mark.fnd-hl {
   background: none;
@@ -1276,7 +1279,7 @@ mark.fnd-hl {
   text-align: center;
   color: var(--ink-faint);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 .fnd-preview {
   flex: 1;
@@ -1290,7 +1293,7 @@ mark.fnd-hl {
   padding: 9px 16px;
   border-bottom: 1px solid var(--rule-soft);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
   white-space: nowrap;
   overflow: hidden;
@@ -1301,7 +1304,7 @@ mark.fnd-hl {
   overflow-y: auto;
   padding: 14px 18px;
   font-family: var(--editor-font);
-  font-size: 14.5px;
+  font-size: calc(14.5px * var(--ui-scale));
   line-height: 1.62;
   color: var(--ink-soft);
 }
@@ -1320,7 +1323,7 @@ mark.fnd-hl {
   padding: 26px;
   color: var(--ink-faint);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 .fnd-foot {
   flex: none;
@@ -1331,7 +1334,7 @@ mark.fnd-hl {
   padding: 0 14px;
   border-top: 1px solid var(--rule-soft);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .fnd-hint b {
@@ -1384,42 +1387,42 @@ html.tauri .av-window {
 
 /* ── legibility: bump the smallest UI fonts (settings panel, status, meta) ── */
 .set-head p {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
 }
 .set-sec {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 .set-rowlabel {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .set-rowhint {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 .set-pill {
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-scale));
 }
 .set-stepper span {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .set-select {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .set-custom {
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-scale));
 }
 .set-note {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
 }
 .set-editfile,
 .set-done {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .av-status {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 .av-item-meta,
 .av-brandsub {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 /* legibility (cont.): the finder, command palette, backlinks + sidebar hints
    were never bumped — raise them to the same readable floor, keeping tiers
@@ -1429,15 +1432,15 @@ html.tauri .av-window {
 .fnd-prevempty,
 .bl-title,
 .bl-empty {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .fnd-promptchar {
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-scale));
 }
 .fnd-path,
 .pal-key,
 .pal-leader {
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 .fnd-tab,
 .fnd-foot,
@@ -1450,13 +1453,13 @@ html.tauri .av-window {
 .pal-foot,
 .bl-kicker,
 .bl-count {
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
 }
 .fnd-grepmode {
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
 }
 .av-sidehints {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
 }
 
 /* ── command palette (leader / which-key) ── */
@@ -1491,7 +1494,7 @@ html.tauri .av-window {
   padding: 13px 16px;
   border-bottom: 1px solid var(--rule-soft);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1504,7 +1507,7 @@ html.tauri .av-window {
   border: 1px solid var(--rule);
   border-radius: 5px;
   color: var(--accent);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
 }
 .pal-list {
   display: flex;
@@ -1538,7 +1541,7 @@ html.tauri .av-window {
   height: 22px;
   padding: 0 5px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--ink-soft);
   background: var(--paper-2);
   border: 1px solid var(--rule);
@@ -1550,11 +1553,11 @@ html.tauri .av-window {
   border-color: color-mix(in oklab, var(--rule), oklch(0.56 0.13 26) 40%);
 }
 .pal-label {
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
 }
 .pal-hint {
   margin-left: auto;
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .pal-confirm {
@@ -1564,12 +1567,12 @@ html.tauri .av-window {
   align-items: flex-start;
   padding: 22px 16px;
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: calc(16px * var(--ui-scale));
   color: var(--ink);
 }
 .pal-confirm .pal-keys {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .pal-confirm kbd {
@@ -1585,7 +1588,7 @@ html.tauri .av-window {
   padding: 9px 16px;
   border-top: 1px solid var(--rule-soft);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .pal-foot b {
@@ -1611,7 +1614,7 @@ html.tauri .av-window {
 }
 .cheat-subhead {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
   padding: 12px 18px 10px;
 }
@@ -1630,7 +1633,7 @@ html.tauri .av-window {
 }
 .cheat-grouphead {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1650,7 +1653,7 @@ html.tauri .av-window {
 }
 .cheat-ex {
   margin-left: 8px;
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .cheat-title {
@@ -1660,13 +1663,13 @@ html.tauri .av-window {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--ui-scale));
   color: var(--ink);
 }
 .cheat-key {
   flex: none;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--ink-soft);
   background: var(--paper-2);
   border: 1px solid var(--rule);
@@ -1694,7 +1697,7 @@ html.tauri .av-window {
   border: 0;
   color: var(--ink-faint);
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(13px * var(--ui-scale));
   line-height: 1;
   padding: 0 2px;
 }
@@ -1708,7 +1711,7 @@ html.tauri .av-window {
   gap: 8px 14px;
   padding: 2px 8px 8px 10px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--accent);
 }
 .cheat-cbtn {
@@ -1746,12 +1749,12 @@ html.tauri .av-window {
 .av-empty-keys {
   margin-top: 14px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .av-empty-keys kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-soft);
   background: var(--paper-2);
   border: 1px solid var(--rule);
@@ -1794,20 +1797,20 @@ html.tauri .av-window {
 }
 .bl-kicker {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
 }
 .bl-target {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: calc(16px * var(--ui-scale));
   color: var(--ink);
 }
 .bl-count {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
 .bl-list {
@@ -1837,12 +1840,12 @@ html.tauri .av-window {
 }
 .bl-title {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-scale));
   color: var(--accent);
 }
 .bl-line {
   font-family: var(--serif);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--ui-scale));
   color: var(--ink-soft);
   white-space: nowrap;
   overflow: hidden;
@@ -1851,7 +1854,7 @@ html.tauri .av-window {
 .bl-empty {
   padding: 30px 18px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--ui-scale));
   color: var(--ink-faint);
   text-align: center;
 }

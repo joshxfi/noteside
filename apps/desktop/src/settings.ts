@@ -21,6 +21,8 @@ export interface Config {
   uiFont: string;
   fontSize: number;
   lineHeight: number;
+  /** Interface-size multiplier — scales the UI chrome (not the editor). */
+  uiScale: number;
   cursor: "block" | "bar" | "underline";
   cursorBlink: boolean;
   /** Render markdown inline (Obsidian-style), hiding markup off the cursor line. */
@@ -77,6 +79,7 @@ export const CONFIG_DEFAULTS: Config = {
   uiFont: "plex-mono",
   fontSize: 19,
   lineHeight: 1.75,
+  uiScale: 1,
   cursor: "block",
   cursorBlink: true,
   livePreview: true,
@@ -111,6 +114,7 @@ export function serializeConfig(c: Config): string {
   L.push(`set ui-font      = ${uLabel}`);
   L.push(`set font-size    = ${c.fontSize}`);
   L.push(`set line-height  = ${c.lineHeight}`);
+  L.push(`set ui-scale     = ${Math.round(c.uiScale * 100)}%`);
   L.push("");
   L.push('" cursor');
   L.push(`set cursor       = ${c.cursor}`);
@@ -175,10 +179,16 @@ export function parseConfig(text: string, base: Config): Config {
         if (id) c.uiFont = id;
       } else if (key === "font-size") {
         const v = parseInt(val, 10);
-        if (!isNaN(v)) c.fontSize = Math.max(14, Math.min(28, v));
+        if (!isNaN(v)) c.fontSize = Math.max(16, Math.min(28, v));
       } else if (key === "line-height") {
         const v = parseFloat(val);
         if (!isNaN(v)) c.lineHeight = Math.max(1.4, Math.min(2.1, Math.round(v * 100) / 100));
+      } else if (key === "ui-scale" || key === "interface-size") {
+        const v = parseFloat(val); // accepts "110%", "110", or "1.1"
+        if (!isNaN(v)) {
+          const frac = v > 3 ? v / 100 : v;
+          c.uiScale = Math.max(0.9, Math.min(1.3, Math.round(frac * 20) / 20));
+        }
       } else if (key === "cursor") {
         const nv = norm(val);
         if (nv === "block" || nv === "bar" || nv === "underline") c.cursor = nv;
