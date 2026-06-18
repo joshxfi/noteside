@@ -250,6 +250,18 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       e.preventDefault();
       setSel((s) => Math.max(0, s - 1));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setSel(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setSel(items.length - 1);
+    } else if (e.key === "PageDown") {
+      e.preventDefault();
+      setSel((s) => Math.min(items.length - 1, s + 10));
+    } else if (e.key === "PageUp") {
+      e.preventDefault();
+      setSel((s) => Math.max(0, s - 10));
     } else if (e.key === "Enter") {
       e.preventDefault();
       open();
@@ -308,7 +320,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
         </div>
 
         <div className="fnd-body">
-          <div className="fnd-list" ref={listRef}>
+          <div className="fnd-list" ref={listRef} role="listbox" aria-label="Search results">
             {items.length === 0 ? (
               <div className="fnd-empty">
                 {query ? "no matches" : "type to search your notebook"}
@@ -317,6 +329,8 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
               items.map((item, i) => (
                 <div
                   key={itemKey(item)}
+                  role="option"
+                  aria-selected={i === sel}
                   className={"fnd-row" + (i === sel ? " is-sel" : "")}
                   onMouseMove={() => i !== sel && setSel(i)}
                   onMouseDown={(e) => {
