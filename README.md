@@ -89,25 +89,32 @@ Standard vim throughout. On top of that:
 Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
 `~/.notesiderc` and apply on `:w`.
 
-**Don't use vim?** Turn it off (`:set vim off`, or the settings panel) and the same
+**Don't use vim?** Turn it off (`set vim = off`, or the settings panel) and the same
 commands are conventional chords — always available, even with vim on:
 
-| Chord | Does                              |
-| ----- | --------------------------------- |
-| `⌘P`  | Find files & content              |
-| `⌘⇧P` | Searchable command palette        |
-| `⌘⇧F` | Content search (grep)             |
-| `⌘F`  | Find in the current note (toggle) |
-| `⌘N`  | New note                          |
-| `⌘S`  | Save note                         |
-| `⌘B`  | Toggle the sidebar                |
-| `⌘E`  | Toggle inline live-preview        |
-| `⌘⇧L` | Linked-references panel           |
-| `⌘,`  | Settings panel                    |
-| `⌘/`  | Keyboard cheatsheet               |
+| Chord        | Does                              |
+| ------------ | --------------------------------- |
+| `⌘P`         | Find files & content              |
+| `⌘⇧P`        | Searchable command palette        |
+| `⌘⇧F`        | Content search (grep)             |
+| `⌘F`         | Find in the current note (toggle) |
+| `F3` / `⇧F3` | Next / previous search match      |
+| `⌘N`         | New note                          |
+| `⌘S`         | Save note                         |
+| `⌘W`         | Close note                        |
+| `⌘⇧T`        | Reopen closed note                |
+| `⌘J` / `⌘K`  | Next / previous note              |
+| `⌥↵`         | Follow link under cursor          |
+| `⌘B`         | Toggle the sidebar                |
+| `⌘E`         | Toggle inline live-preview        |
+| `⌘⇧L`        | Linked-references panel           |
+| `⌘,`         | Settings panel                    |
+| `⌘/`         | Keyboard cheatsheet               |
 
-`⌘` is Cmd on macOS, Ctrl elsewhere. Remap any of them with `bind <chord> <command>`
-in `~/.notesiderc`.
+`⌘` is Cmd on macOS, Ctrl elsewhere. Every chord is customizable: `⌘/` opens the
+cheatsheet, which doubles as a **live keymap editor** (`j`/`k` to navigate, Enter to
+rebind, Del to unbind, `r` to reset) — or write `bind <chord> <command>` lines in
+`~/.notesiderc`. Either way, changes persist to that file.
 
 ## Documentation
 

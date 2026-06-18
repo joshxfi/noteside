@@ -136,7 +136,7 @@ const FEATURES = [
   {
     k: "keyboard, first-class",
     h: "Vim or ⌘-shortcuts — your call",
-    p: "Full modal vim if you want it — real modes, motions, operators, a command line. Don't want vim? Turn it off and run everything from ⌘-shortcuts, a searchable command palette, and ⌘F find. Either way, the mouse stays parked.",
+    p: "Full modal vim if you want it — real modes, motions, operators, a command line. Don't want vim? Turn it off and run everything from ⌘-shortcuts, a searchable command palette, and ⌘F find. Rebind any chord right from the cheatsheet (⌘/). Either way, the mouse stays parked.",
   },
   {
     k: "fast & lightweight",

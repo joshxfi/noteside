@@ -24,22 +24,28 @@ See [Search](/search) for the difference.
 Don't use vim? Turn it off (`set vim = off` in your `~/.notesiderc`, or the settings
 panel) and these are all you need. They stay available with vim on, too.
 
-| Chord | Command                           |
-| ----- | --------------------------------- |
-| `⌘P`  | Find files & content              |
-| `⌘⇧P` | Command palette (searchable)      |
-| `⌘⇧F` | Search note contents (grep)       |
-| `⌘F`  | Find in the current note (toggle) |
-| `⌘N`  | New note                          |
-| `⌘S`  | Save note                         |
-| `⌘B`  | Toggle the sidebar                |
-| `⌘E`  | Toggle inline live-preview        |
-| `⌘⇧L` | Linked references panel           |
-| `⌘,`  | Settings panel                    |
-| `⌘/`  | Keyboard cheatsheet               |
+| Chord        | Command                           |
+| ------------ | --------------------------------- |
+| `⌘P`         | Find files & content              |
+| `⌘⇧P`        | Command palette (searchable)      |
+| `⌘⇧F`        | Search note contents (grep)       |
+| `⌘F`         | Find in the current note (toggle) |
+| `F3` / `⇧F3` | Next / previous search match      |
+| `⌘N`         | New note                          |
+| `⌘S`         | Save note                         |
+| `⌘W`         | Close note                        |
+| `⌘⇧T`        | Reopen closed note                |
+| `⌘J` / `⌘K`  | Next / previous note              |
+| `⌥↵`         | Follow link under cursor          |
+| `⌘B`         | Toggle the sidebar                |
+| `⌘E`         | Toggle inline live-preview        |
+| `⌘⇧L`        | Linked references panel           |
+| `⌘,`         | Settings panel                    |
+| `⌘/`         | Keyboard cheatsheet               |
 
-`⌘` is Cmd on macOS, Ctrl elsewhere. Forgot one? `⌘/` opens the cheatsheet. Remap any
-chord with `bind <chord> <command>` in `~/.notesiderc` — see [Configuration](/configuration).
+`⌘` is Cmd on macOS, Ctrl elsewhere. Forgot one? `⌘/` opens the cheatsheet — which also
+**edits** them (see [Editing shortcuts](#editing-shortcuts) below). Or remap with
+`bind <chord> <command>` in `~/.notesiderc` — see [Configuration](/configuration).
 
 ## Vim commands
 
@@ -89,3 +95,16 @@ Three surfaces help you find your way:
 - **`<Space>` — which-key menu.** In vim normal mode, shows the leader keys above as
   you start typing.
 - **`⌘/` — cheatsheet.** A scannable overview of every chord and command.
+
+## Editing shortcuts
+
+The `⌘/` cheatsheet doubles as a **live keymap editor** — no config file needed. Open it
+(or **Settings → Keys → Edit keys**), focus a command with `j`/`k`, then:
+
+- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Replace / Cancel)
+- **Del** — unbind the command
+- **r** — reset it to its default
+- **Reset all keys** — restore every default (footer)
+
+Changes apply instantly and persist to `~/.notesiderc` as `bind` lines, so the file and
+the editor never drift.

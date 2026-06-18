@@ -21,6 +21,7 @@ set editor-font  = Newsreader
 set ui-font      = IBM Plex Mono
 set font-size    = 19
 set line-height  = 1.75
+set ui-scale     = 100%
 
 " cursor
 set cursor       = block
@@ -28,6 +29,7 @@ set cursor-blink = on
 
 " editor
 set live-preview = on
+set relative-numbers = off
 
 " keys
 set vim          = on
@@ -37,18 +39,20 @@ bind Ctrl-j find
 
 ## Settings
 
-| Setting        | Values                                                           |
-| -------------- | ---------------------------------------------------------------- |
-| `theme`        | `light` · `dark`                                                 |
-| `accent`       | `terracotta` · `ochre` · `sage` · `dusk` · `plum` · `monochrome` |
-| `editor-font`  | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono`   |
-| `ui-font`      | `IBM Plex Mono` · `JetBrains Mono` · `Space Mono`                |
-| `font-size`    | `14`–`28`                                                        |
-| `line-height`  | `1.4`–`2.1`                                                      |
-| `cursor`       | `block` · `bar` · `underline`                                    |
-| `cursor-blink` | `on` · `off`                                                     |
-| `live-preview` | `on` · `off`                                                     |
-| `vim`          | `on` · `off`                                                     |
+| Setting            | Values                                                           |
+| ------------------ | ---------------------------------------------------------------- |
+| `theme`            | `light` · `dark`                                                 |
+| `accent`           | `terracotta` · `ochre` · `sage` · `dusk` · `plum` · `monochrome` |
+| `editor-font`      | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono`   |
+| `ui-font`          | `IBM Plex Mono` · `JetBrains Mono` · `Space Mono`                |
+| `font-size`        | `16`–`28`                                                        |
+| `line-height`      | `1.4`–`2.1`                                                      |
+| `ui-scale`         | `90%`–`130%`                                                     |
+| `cursor`           | `block` · `bar` · `underline`                                    |
+| `cursor-blink`     | `on` · `off`                                                     |
+| `live-preview`     | `on` · `off`                                                     |
+| `relative-numbers` | `on` · `off`                                                     |
+| `vim`              | `on` · `off`                                                     |
 
 ## Appearance
 
@@ -57,14 +61,20 @@ bind Ctrl-j find
   `terracotta`, `ochre`, `sage`, `dusk`, `plum` (the default), or `monochrome`.
 - **Typography** — `editor-font` sets the writing surface (serif `Newsreader` or
   `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono`); `ui-font` sets the surrounding UI.
-  `font-size` (14–28) and `line-height` (1.4–2.1) tune the reading rhythm.
+  `font-size` (16–28) and `line-height` (1.4–2.1) tune the reading rhythm.
+- **Interface size** — `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
+  independently of the editor `font-size`.
+- **Line numbers** — `relative-numbers` shows a vim-style relative gutter; off (the
+  default) shows absolute numbers.
 
 ## Key mappings
 
 - **Vim mappings** — `nmap` / `imap` / `vmap` lines apply on `:w` (e.g. `imap jj <Esc>`).
 - **Chord rebinds** — `bind <chord> <command-id>` remaps a conventional chord;
-  `bind none <command-id>` unbinds it.
+  `bind none <command-id>` unbinds it. You can also rebind live in the cheatsheet
+  (`⌘/`) — see [Keybindings](/keybindings); it writes the same `bind` lines.
 
-The command ids are: `find`, `grep`, `search`, `commands`, `backlinks`, `new`,
-`save`, `saveQuit`, `quit`, `delete`, `follow`, `nav`, `togglePreview`, `settings`,
-`config`, `cheatsheet`. For example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.
+The command ids are: `find`, `grep`, `search`, `searchNext`, `searchPrev`, `commands`,
+`backlinks`, `new`, `save`, `saveQuit`, `quit`, `reopen`, `delete`, `follow`,
+`nextNote`, `prevNote`, `nav`, `togglePreview`, `settings`, `config`, `cheatsheet`. For
+example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.
