@@ -138,26 +138,26 @@ describe("command table", () => {
 
   describe("chord overrides (bind)", () => {
     it("effectiveChord applies a rebind, an unbind, and the default", () => {
-      expect(effectiveChord(COMMAND_BY_ID.find, { find: "Mod-y" })).toBe("Mod-y");
+      expect(effectiveChord(COMMAND_BY_ID.find, { find: "Mod-g" })).toBe("Mod-g");
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "" })).toBeUndefined();
       expect(effectiveChord(COMMAND_BY_ID.find, {})).toBe("Mod-p");
     });
     it("commandChordKeymap honors overrides", () => {
-      const km = commandChordKeymap(() => {}, { find: "Mod-y", grep: "" });
+      const km = commandChordKeymap(() => {}, { find: "Mod-g", grep: "" });
       const keys = km.map((b) => b.key);
-      expect(keys).toContain("Mod-y"); // find rebound
+      expect(keys).toContain("Mod-g"); // find rebound
       expect(keys).not.toContain("Mod-p"); // old find chord gone
       expect(keys).not.toContain("Mod-Shift-f"); // grep unbound
     });
     it("the global fallback respects an override", () => {
-      const map = makeGlobalChordMap({ find: "Mod-y" });
+      const map = makeGlobalChordMap({ find: "Mod-g" });
       const ctx = { enabled: true, editingTarget: false };
-      expect(resolveGlobalChord(ev("y", { meta: true }), ctx, map)).toBe("find");
+      expect(resolveGlobalChord(ev("g", { meta: true }), ctx, map)).toBe("find");
       expect(resolveGlobalChord(ev("p", { meta: true }), ctx, map)).toBe(null);
     });
     it("withChordOverrides reflects the rebind in the displayed chord", () => {
-      const [find] = withChordOverrides([COMMAND_BY_ID.find], { find: "Mod-y" });
-      expect(find.chord).toBe("Mod-y");
+      const [find] = withChordOverrides([COMMAND_BY_ID.find], { find: "Mod-g" });
+      expect(find.chord).toBe("Mod-g");
     });
   });
 
