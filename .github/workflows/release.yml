@@ -32,12 +32,12 @@ jobs:
       version: ${{ steps.semantic.outputs.new_release_version }}
       published: ${{ steps.semantic.outputs.new_release_published }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # semantic-release needs full history + tags
           persist-credentials: true # so @semantic-release/git can push
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24 # runner node for the bump script (exec prepareCmd)
 
@@ -79,13 +79,13 @@ jobs:
             args: ""
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: v${{ needs.release.outputs.version }} # the commit semantic-release just tagged
 
-      - uses: pnpm/action-setup@v4 # reads packageManager from package.json
+      - uses: pnpm/action-setup@v6 # reads packageManager from package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
