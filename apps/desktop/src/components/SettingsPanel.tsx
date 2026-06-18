@@ -159,9 +159,7 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
         <header className="set-head">
           <div>
             <h2>Settings</h2>
-            <p>
-              j/k to move · ←/→ to change · esc to close — tuned live, not saved between reloads
-            </p>
+            <p>j/k to move · ←/→ to change · esc to close — applied live and saved</p>
           </div>
           <button className="set-x" onClick={onClose} aria-label="close">
             ×
