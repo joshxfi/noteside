@@ -109,6 +109,7 @@ function NoteRow({
       ref={measureRef}
       data-index={index}
       className={"av-item" + (active ? " is-active" : "")}
+      aria-current={active ? "true" : undefined}
       onClick={() => onPick(note.id)}
       style={style}
     >
@@ -154,7 +155,7 @@ function VirtualNoteList({
   }, [activeIndex]);
 
   return (
-    <nav className="av-list" ref={scrollRef}>
+    <nav className="av-list" ref={scrollRef} aria-label="Notes">
       <div style={{ height: virt.getTotalSize(), position: "relative", width: "100%" }}>
         {virt.getVirtualItems().map((item) => {
           const n = notes[item.index];
@@ -210,7 +211,7 @@ function Sidebar({
           <div className="av-brandsub">notes for keyboard people</div>
         </div>
         {notes.length <= VIRTUAL_THRESHOLD ? (
-          <nav className="av-list">
+          <nav className="av-list" aria-label="Notes">
             {notes.map((n) => (
               <NoteRow
                 key={n.id}
@@ -545,6 +546,15 @@ export function App() {
     setRefocus((r) => r + 1);
   };
 
+  // Step to the adjacent note in the sidebar list (Mod-j / Mod-k). Clamps at the
+  // ends; opening flushes any pending save of the outgoing buffer.
+  const stepNote = (delta: number) => {
+    if (notes.length === 0) return;
+    const i = s.activeId ? notes.findIndex((n) => n.id === s.activeId) : -1;
+    const next = notes[Math.max(0, Math.min(notes.length - 1, i + delta))];
+    if (next && next.id !== s.activeId) void session.open(next.id);
+  };
+
   const onCommand = (c: AppCommand) => {
     if (c === "find") openFinder("all");
     else if (c === "grep") openFinder("content");
@@ -558,6 +568,9 @@ export function App() {
     else if (c === "delete") void deleteActive();
     else if (c === "togglePreview") togglePreview();
     else if (c === "backlinks") void openBacklinks();
+    else if (c === "reopen") session.reopenLast();
+    else if (c === "nextNote") stepNote(1);
+    else if (c === "prevNote") stepNote(-1);
   };
 
   // Run a command chosen from the searchable palette. App-level: AppCommands via

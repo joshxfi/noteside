@@ -18,6 +18,9 @@ export type AppCommand =
   | "commands"
   | "togglePreview"
   | "backlinks"
+  | "reopen"
+  | "nextNote"
+  | "prevNote"
   | "cheatsheet";
 
 export interface EditorHandlers {

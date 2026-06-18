@@ -9,7 +9,14 @@ import {
 } from "@codemirror/view";
 import { completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { closeSearchPanel, openSearchPanel, search, searchPanelOpen } from "@codemirror/search";
+import {
+  closeSearchPanel,
+  findNext,
+  findPrevious,
+  openSearchPanel,
+  search,
+  searchPanelOpen,
+} from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
@@ -18,6 +25,7 @@ import { type ChordOverrides, type Command, commandChordKeymap } from "./command
 import { activeLineHighlight } from "./activeLine";
 import { livePreview } from "./livePreview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
+import { wikilinkAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
 
 const MODE_LABEL: Record<string, string> = {
@@ -162,6 +170,17 @@ export function Editor(props: EditorProps) {
         // Mod-f toggles the find panel: close it if it's open, otherwise open it.
         if (searchPanelOpen(v.state)) closeSearchPanel(v);
         else openSearchPanel(v);
+      } else if (cmd.editor === "follow" && v) {
+        // Non-vim equivalent of `gf` / `:follow`: resolve the [[wikilink]] under
+        // the cursor from the raw line text (works regardless of live-preview).
+        const head = v.state.selection.main.head;
+        const ln = v.state.doc.lineAt(head);
+        const target = wikilinkAt(ln.text, head - ln.from);
+        if (target) p.onFollowLink(target);
+      } else if (cmd.editor === "searchNext" && v) {
+        findNext(v);
+      } else if (cmd.editor === "searchPrev" && v) {
+        findPrevious(v);
       }
     };
 

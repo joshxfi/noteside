@@ -11,7 +11,14 @@ import type { KeyBinding } from "@codemirror/view";
 import type { AppCommand } from "./exCommands";
 
 /** Editor-scoped actions that need live editor state (not plain AppCommands). */
-export type EditorAction = "save" | "quit" | "saveQuit" | "follow" | "search";
+export type EditorAction =
+  | "save"
+  | "quit"
+  | "saveQuit"
+  | "follow"
+  | "search"
+  | "searchNext"
+  | "searchPrev";
 
 export interface Command {
   id: string;
@@ -137,11 +144,21 @@ export const COMMANDS: Command[] = [
     id: "quit",
     title: "Close note",
     group: "Note",
+    chord: "Mod-w",
     ex: ["quit", "q"],
     leader: "q",
     editor: "quit",
     needsNote: true,
     paletteHint: ":q",
+  },
+  {
+    id: "reopen",
+    title: "Reopen closed note",
+    group: "Note",
+    chord: "Mod-Shift-t",
+    ex: ["reopen"],
+    command: "reopen",
+    paletteHint: "last closed",
   },
   {
     id: "delete",
@@ -157,10 +174,25 @@ export const COMMANDS: Command[] = [
     id: "follow",
     title: "Follow link under cursor",
     group: "Note",
+    chord: "Alt-Enter",
     ex: ["follow"],
     editor: "follow",
     needsNote: true,
     inPalette: false,
+  },
+  {
+    id: "nextNote",
+    title: "Next note",
+    group: "Note",
+    chord: "Mod-j",
+    command: "nextNote",
+  },
+  {
+    id: "prevNote",
+    title: "Previous note",
+    group: "Note",
+    chord: "Mod-k",
+    command: "prevNote",
   },
   // ── View ──────────────────────────────────────────────────────────
   {
