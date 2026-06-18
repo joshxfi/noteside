@@ -65,14 +65,19 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     rowRefs.current[focus]?.scrollIntoView({ block: "nearest" });
   }, [focus]);
 
-  // chord===null → reset (drop the override, fall back to the table default);
-  // ""        → unbind (emits `bind none <id>`); string → bind.
-  const setChord = (id: string, chord: string | null) => {
-    const next = { ...overrides };
-    if (chord === null) delete next[id];
+  // Apply one chord into a base overrides object. Reset (null), capturing the
+  // command's own table default, or unbinding a command that has no default all
+  // collapse to "no override" — so ~/.notesiderc stays free of redundant lines.
+  // ("" on a command that HAS a default is a genuine unbind → `bind none <id>`.)
+  const applyChord = (id: string, chord: string | null, base: ChordOverrides): ChordOverrides => {
+    const def = commands.find((c) => c.id === id)?.chord;
+    const next = { ...base };
+    if (chord === null || chord === def || (chord === "" && def === undefined)) delete next[id];
     else next[id] = chord;
-    onSetOverrides(next);
+    return next;
   };
+  const setChord = (id: string, chord: string | null) =>
+    onSetOverrides(applyChord(id, chord, overrides));
 
   const commitCapture = (id: string, chord: string) => {
     const other = chordConflict(overrides, chord, id);
@@ -83,8 +88,13 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
 
   const replaceConflict = () => {
     if (!conflict) return;
-    // Atomic: the displaced command becomes unbound (visibly), this one takes the chord.
-    onSetOverrides({ ...overrides, [conflict.otherId]: "", [flat[focus].id]: conflict.chord });
+    // Atomic: the displaced command becomes unbound, this one takes the chord.
+    const next = applyChord(
+      flat[focus].id,
+      conflict.chord,
+      applyChord(conflict.otherId, "", overrides),
+    );
+    onSetOverrides(next);
     setConflict(null);
   };
 
@@ -181,9 +191,15 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
             <div key={g} className="cheat-group">
               <div className="cheat-grouphead">{g}</div>
               {rows.map(({ c, i }) => {
-                const slot = recording && i === focus ? null : slotFor(c, overrides);
+                const recordingThisRow = recording && i === focus;
+                const slot = recordingThisRow ? null : slotFor(c, overrides);
                 const overridden = c.id in overrides;
                 const rowConflict = conflict && i === focus ? conflict : null;
+                const ariaLabel = rowConflict
+                  ? `${c.title}: ${chordLabel(rowConflict.chord)} is used by ${rowConflict.otherTitle}. Enter to replace, Esc to cancel.`
+                  : recordingThisRow
+                    ? `${c.title}, recording — press a key combination`
+                    : `${c.title}, ${slot && slot.kind === "bound" ? "bound to " + slot.label : "no chord"}. Enter to rebind.`;
                 return (
                   <div
                     key={c.id}
@@ -193,7 +209,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                   >
                     <div
                       role="listitem"
-                      aria-label={`${c.title}, ${slot?.kind === "bound" ? "bound to " + slot.label : "no chord"}; press Enter to rebind`}
+                      aria-label={ariaLabel}
                       className={"cheat-row" + (i === focus ? " is-focus" : "")}
                       onMouseMove={() => i !== focus && !recording && setFocus(i)}
                       onClick={() => {
@@ -221,6 +237,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       {i === focus && !recording && overridden && (
                         <button
                           type="button"
+                          tabIndex={-1}
                           className="cheat-reset"
                           aria-label="reset to default"
                           onClick={(e) => {
@@ -238,11 +255,17 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                           ⚠ {chordLabel(rowConflict.chord)} is used by{" "}
                           <b>{rowConflict.otherTitle}</b>
                         </span>
-                        <button type="button" className="cheat-cbtn" onClick={replaceConflict}>
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          className="cheat-cbtn"
+                          onClick={replaceConflict}
+                        >
                           <b>Enter</b> replace
                         </button>
                         <button
                           type="button"
+                          tabIndex={-1}
                           className="cheat-cbtn"
                           onClick={() => setConflict(null)}
                         >
@@ -261,12 +284,13 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
             <span className="cheat-confirm">
               Reset all keys to defaults?{" "}
               <span className="cheat-note">(vim maps in ~/.notesiderc unaffected)</span>{" "}
-              <button type="button" className="pal-foot-close" onClick={resetAll}>
+              <button type="button" tabIndex={-1} className="pal-foot-close" onClick={resetAll}>
                 <b>Enter</b> reset
               </button>{" "}
               ·{" "}
               <button
                 type="button"
+                tabIndex={-1}
                 className="pal-foot-close"
                 onClick={() => setConfirmReset(false)}
               >
@@ -275,7 +299,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
             </span>
           ) : (
             <>
-              <button type="button" className="pal-foot-close" onClick={onClose}>
+              <button type="button" tabIndex={-1} className="pal-foot-close" onClick={onClose}>
                 <b>Esc</b> close
               </button>
               <button
