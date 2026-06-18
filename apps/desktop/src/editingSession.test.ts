@@ -115,6 +115,18 @@ describe("editingSession", () => {
     expect(bodies.get("a.md")).toBe("new text");
   });
 
+  it("change() with a clean dirty flag cancels a pending autosave", async () => {
+    const { session, bodies, calls } = makeSession({ "a.md": "old" });
+    await session.open("a.md");
+    session.change(() => "edited", true);
+    expect(session.getSnapshot().dirty).toBe(true);
+    session.change(() => "old", false);
+    expect(session.getSnapshot().dirty).toBe(false);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("a.md")).toBe("old");
+    expect(calls.filter((c) => c === "save:a.md")).toEqual([]);
+  });
+
   it("commit bail-out: a keystroke that leaves the snapshot field-identical does not notify", async () => {
     const { session } = makeSession({ "a.md": "base" });
     await session.open("a.md");

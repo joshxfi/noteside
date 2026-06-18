@@ -209,8 +209,13 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   function change(text: string | (() => string), dirty?: boolean): void {
     if (activeId === null || activeId === CONFIG_ID) return; // config never autosaves
     const seq = ++editSeq;
-    autosaver.schedule(activeId, text, seq); // pinned to the buffer being edited
-    noteDirty = dirty ?? (typeof text === "function" ? text() : text) !== noteSaved;
+    const nextDirty = dirty ?? (typeof text === "function" ? text() : text) !== noteSaved;
+    if (nextDirty) {
+      autosaver.schedule(activeId, text, seq); // pinned to the buffer being edited
+    } else {
+      autosaver.cancel(); // undo-to-saved should not land a redundant autosave
+    }
+    noteDirty = nextDirty;
     commit();
   }
 

@@ -28,6 +28,7 @@ const MODE_LABEL: Record<string, string> = {
 };
 
 const WORD_COUNT_DELAY_MS = 180;
+const DIRTY_CHECK_DELAY_MS = 220;
 
 defineExCommands();
 
@@ -71,6 +72,7 @@ export function Editor(props: EditorProps) {
   const savedRef = useRef(props.savedText);
   savedRef.current = props.savedText;
   const wordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mode, setMode] = useState(vimMode ? "normal" : "insert");
   const [stat, setStat] = useState({ words: 0, line: 1, col: 1, pct: "All", dirty: false });
@@ -83,6 +85,12 @@ export function Editor(props: EditorProps) {
       if (wordTimerRef.current !== null) {
         clearTimeout(wordTimerRef.current);
         wordTimerRef.current = null;
+      }
+    };
+    const clearDirtyTimer = () => {
+      if (dirtyTimerRef.current !== null) {
+        clearTimeout(dirtyTimerRef.current);
+        dirtyTimerRef.current = null;
       }
     };
     const cursorStat = (state: EditorState) => {
@@ -120,9 +128,19 @@ export function Editor(props: EditorProps) {
         setStat((s) => ({ ...s, words: countWords(state) }));
       }, WORD_COUNT_DELAY_MS);
     };
-    const isDirtyAfterChange = (state: EditorState) => {
-      const saved = savedRef.current;
-      return state.doc.length !== saved.length || state.doc.toString() !== saved;
+    const scheduleExactCleanCheck = (state: EditorState) => {
+      clearDirtyTimer();
+      if (state.doc.length !== savedRef.current.length) return;
+      dirtyTimerRef.current = setTimeout(() => {
+        dirtyTimerRef.current = null;
+        const view = viewRef.current;
+        if (!view || view.state.doc.length !== savedRef.current.length) return;
+        const dirty = view.state.doc.toString() !== savedRef.current;
+        if (!dirty) {
+          propsRef.current.onChange(() => view.state.doc.toString(), false);
+          setStat((s) => (s.dirty ? { ...s, dirty: false } : s));
+        }
+      }, DIRTY_CHECK_DELAY_MS);
     };
     const onVimMode = (e: { mode?: string }) => {
       if (e?.mode) setMode(e.mode);
@@ -191,9 +209,9 @@ export function Editor(props: EditorProps) {
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
           const state = u.state;
-          const dirty = isDirtyAfterChange(state);
-          propsRef.current.onChange(() => state.doc.toString(), dirty);
-          setCursorStat(state, dirty);
+          propsRef.current.onChange(() => state.doc.toString(), true);
+          setCursorStat(state, true);
+          scheduleExactCleanCheck(state);
           scheduleWordCount(state);
         } else if (u.selectionSet) {
           setCursorStat(u.state);
@@ -233,6 +251,7 @@ export function Editor(props: EditorProps) {
 
     return () => {
       clearWordTimer();
+      clearDirtyTimer();
       cm?.off("vim-mode-change", onVimMode);
       setActiveHandlers(null);
       view.destroy();
