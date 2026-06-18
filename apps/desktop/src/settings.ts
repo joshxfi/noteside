@@ -23,6 +23,8 @@ export interface Config {
   lineHeight: number;
   /** Interface-size multiplier — scales the UI chrome (not the editor). */
   uiScale: number;
+  /** Show relative line numbers in the gutter (off = absolute). */
+  relativeNumbers: boolean;
   cursor: "block" | "bar" | "underline";
   cursorBlink: boolean;
   /** Render markdown inline (Obsidian-style), hiding markup off the cursor line. */
@@ -80,6 +82,7 @@ export const CONFIG_DEFAULTS: Config = {
   fontSize: 19,
   lineHeight: 1.75,
   uiScale: 1,
+  relativeNumbers: false,
   cursor: "block",
   cursorBlink: true,
   livePreview: true,
@@ -122,6 +125,7 @@ export function serializeConfig(c: Config): string {
   L.push("");
   L.push('" editor');
   L.push(`set live-preview = ${c.livePreview ? "on" : "off"}`);
+  L.push(`set relative-numbers = ${c.relativeNumbers ? "on" : "off"}`);
   L.push("");
   L.push('" keys');
   L.push(`set vim          = ${c.vimMode ? "on" : "off"}`);
@@ -195,6 +199,8 @@ export function parseConfig(text: string, base: Config): Config {
       } else if (key === "cursor-blink") c.cursorBlink = /^(on|true|yes|1)$/i.test(val);
       else if (key === "live-preview" || key === "preview")
         c.livePreview = /^(on|true|yes|1)$/i.test(val);
+      else if (key === "relative-numbers" || key === "relativenumber" || key === "rnu")
+        c.relativeNumbers = /^(on|true|yes|1)$/i.test(val);
       else if (key === "vim" || key === "vim-mode") c.vimMode = /^(on|true|yes|1)$/i.test(val);
     }
   }

@@ -103,7 +103,7 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..11) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => setCfg({ theme: cfg.theme === "light" ? "dark" : "light" }) },
     { cycle: (d) => cycleList(ACCENTS, cfg.accent, "accent", d) },
@@ -125,6 +125,7 @@ export function SettingsPanel({
           ),
         }),
     },
+    { cycle: () => setCfg({ relativeNumbers: !cfg.relativeNumbers }) },
     {
       cycle: (d) =>
         cycleList([{ id: "block" }, { id: "bar" }, { id: "underline" }], cfg.cursor, "cursor", d),
@@ -132,7 +133,7 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 11 — opens the keymap editor (cheatsheet)
+    { cycle: () => onShortcuts() }, // idx 12 — opens the keymap editor (cheatsheet)
   ];
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -326,9 +327,25 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
+          <Row
+            idx={7}
+            focus={focus}
+            setFocus={setFocus}
+            label="Relative line numbers"
+            hint="off = absolute"
+          >
+            <button
+              type="button"
+              tabIndex={-1}
+              className={"set-switch" + (cfg.relativeNumbers ? " is-on" : "")}
+              onClick={() => setCfg({ relativeNumbers: !cfg.relativeNumbers })}
+            >
+              <span className="set-knob" />
+            </button>
+          </Row>
 
           <div className="set-sec">Cursor</div>
-          <Row idx={7} focus={focus} setFocus={setFocus} label="Style">
+          <Row idx={8} focus={focus} setFocus={setFocus} label="Style">
             {(
               [
                 ["block", "Block"],
@@ -341,7 +358,7 @@ export function SettingsPanel({
               </Pill>
             ))}
           </Row>
-          <Row idx={8} focus={focus} setFocus={setFocus} label="Blink">
+          <Row idx={9} focus={focus} setFocus={setFocus} label="Blink">
             <button
               type="button"
               tabIndex={-1}
@@ -354,7 +371,7 @@ export function SettingsPanel({
 
           <div className="set-sec">Keys</div>
           <Row
-            idx={9}
+            idx={10}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -370,7 +387,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={10}
+            idx={11}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -405,7 +422,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={11}
+            idx={12}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"

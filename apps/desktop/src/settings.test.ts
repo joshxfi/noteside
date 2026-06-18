@@ -16,6 +16,7 @@ describe("config serialize/parse round-trip", () => {
       fontSize: 22,
       lineHeight: 1.9,
       uiScale: 1.2,
+      relativeNumbers: true,
       cursor: "bar",
       cursorBlink: false,
       livePreview: false,

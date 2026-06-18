@@ -31,7 +31,6 @@ import { useEditingSession } from "./useEditingSession";
 import { useGlobalChords } from "./useGlobalChords";
 import { isTauri, windowControl } from "./useWindowControls";
 
-const RELATIVE_NUMBERS = true;
 const AUTOSAVE_MS = 800;
 
 type Status = "boot" | "no-notebook" | "ready";
@@ -694,14 +693,21 @@ export function App() {
               <NotebookPicker onPick={() => void pickNotebook()} />
             ) : showEditor ? (
               <Editor
-                key={s.editorKey + ":" + vimSuffix + ":" + (previewOn ? "p" : "s")}
+                key={
+                  s.editorKey +
+                  ":" +
+                  vimSuffix +
+                  ":" +
+                  (previewOn ? "p" : "s") +
+                  (cfg.relativeNumbers ? ":rn" : "")
+                }
                 notePath={s.activeId as string}
                 fileLabel={s.title ?? ""}
                 initialText={s.initialText}
                 savedText={s.savedText}
                 vimMode={cfg.vimMode}
                 cursorBlink={cfg.cursorBlink}
-                relativeNumbers={RELATIVE_NUMBERS}
+                relativeNumbers={cfg.relativeNumbers}
                 chordOverrides={cfg.chords}
                 preview={previewOn}
                 linkTargets={[...new Set(notes.map((n) => n.title))]}
