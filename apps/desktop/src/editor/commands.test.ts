@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AppCommand } from "./exCommands";
 import {
+  chordConflict,
   chordLabel,
   COMMAND_BY_ID,
   COMMANDS,
@@ -158,6 +159,26 @@ describe("command table", () => {
     it("withChordOverrides reflects the rebind in the displayed chord", () => {
       const [find] = withChordOverrides([COMMAND_BY_ID.find], { find: "Mod-g" });
       expect(find.chord).toBe("Mod-g");
+    });
+  });
+
+  describe("chordConflict (in-app keymap editor)", () => {
+    it("flags a chord already used by another command's default", () => {
+      // 'new' defaults to Mod-n — binding anything else to Mod-n clashes with it
+      expect(chordConflict({}, "Mod-n", "find")?.id).toBe("new");
+    });
+    it("returns undefined for a free chord", () => {
+      expect(chordConflict({}, "Mod-y", "find")).toBeUndefined();
+    });
+    it("excludes the command being edited (re-binding to its own chord is no clash)", () => {
+      expect(chordConflict({}, "Mod-p", "find")).toBeUndefined();
+    });
+    it("checks EFFECTIVE chords — override vs override", () => {
+      expect(chordConflict({ grep: "Mod-y" }, "Mod-y", "find")?.id).toBe("grep");
+    });
+    it("an unbound ('') override frees that command's default chord", () => {
+      // 'new' unbound → Mod-n is no longer taken
+      expect(chordConflict({ new: "" }, "Mod-n", "find")).toBeUndefined();
     });
   });
 

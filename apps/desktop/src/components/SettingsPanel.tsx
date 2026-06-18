@@ -103,7 +103,7 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..9) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..10) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => setCfg({ theme: cfg.theme === "light" ? "dark" : "light" }) },
     { cycle: (d) => cycleList(ACCENTS, cfg.accent, "accent", d) },
@@ -126,6 +126,7 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
+    { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
   ];
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -360,17 +361,23 @@ export function SettingsPanel({
             Type the sequence in insert mode to drop back to normal — the keys are removed as you
             go, just like a real <code>jj</code> mapping.
           </p>
+          <Row
+            idx={10}
+            focus={focus}
+            setFocus={setFocus}
+            label="Keyboard shortcuts"
+            hint="rebind any chord"
+          >
+            <button type="button" tabIndex={-1} className="set-editfile" onClick={onShortcuts}>
+              Edit keys&nbsp;→
+            </button>
+          </Row>
         </div>
 
         <footer className="set-foot">
-          <div className="set-footlinks">
-            <button className="set-editfile" onClick={onEditFile}>
-              Edit&nbsp;<code>~/.notesiderc</code>&nbsp;→
-            </button>
-            <button className="set-editfile" onClick={onShortcuts}>
-              Keyboard shortcuts
-            </button>
-          </div>
+          <button className="set-editfile" onClick={onEditFile}>
+            Edit&nbsp;<code>~/.notesiderc</code>&nbsp;→
+          </button>
           <button className="set-done" onClick={onClose}>
             Done
           </button>

@@ -31,6 +31,17 @@ describe("config serialize/parse round-trip", () => {
     expect(parsed.chords).toEqual({ find: "Ctrl-j", grep: "" });
   });
 
+  it("distinguishes reset (no bind line → default) from unbind (bind none)", () => {
+    // unbind: "" → emits `bind none <id>` → round-trips back to ""
+    const unbound = serializeConfig({ ...CONFIG_DEFAULTS, chords: { find: "" } });
+    expect(unbound).toMatch(/^bind none find$/m);
+    expect(parseConfig(unbound, CONFIG_DEFAULTS).chords).toEqual({ find: "" });
+    // reset: key absent → NO bind line → parses back absent (the table default applies)
+    const reset = serializeConfig({ ...CONFIG_DEFAULTS, chords: {} });
+    expect(reset).not.toMatch(/^bind \S/m);
+    expect(parseConfig(reset, CONFIG_DEFAULTS).chords).toEqual({});
+  });
+
   it("collects nmap/vmap lines into keymaps (not the escMap imap)", () => {
     const parsed = parseConfig("imap jj <Esc>\nnmap <Space>w :w<CR>\nvmap > >gv", CONFIG_DEFAULTS);
     expect(parsed.escMap).toBe("jj");

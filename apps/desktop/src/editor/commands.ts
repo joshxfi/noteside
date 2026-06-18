@@ -325,6 +325,19 @@ export function withChordOverrides(commands: Command[], overrides?: ChordOverrid
   return commands.map((c) => ({ ...c, chord: effectiveChord(c, overrides) }));
 }
 
+/** The command whose EFFECTIVE chord equals `chord` (excluding `exceptId`), or undefined.
+ *  The in-app keymap editor uses this to catch a clash before committing a rebind —
+ *  it checks against effective chords (defaults + overrides), not just table defaults. */
+export function chordConflict(
+  overrides: ChordOverrides | undefined,
+  chord: string,
+  exceptId: string,
+  commands: Command[] = COMMANDS,
+): Command | undefined {
+  if (!chord) return undefined;
+  return commands.find((c) => c.id !== exceptId && effectiveChord(c, overrides) === chord);
+}
+
 /**
  * Build the always-on CM6 chord keymap from the table. `dispatch` runs a command
  * in the editor's context (AppCommands via onCommand, editor actions via onSave/etc).

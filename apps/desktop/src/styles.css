@@ -1062,11 +1062,6 @@ body {
   padding: 13px 20px;
   border-top: 1px solid var(--rule-soft);
 }
-.set-footlinks {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
 .set-editfile {
   font-family: var(--mono);
   font-size: 12px;
@@ -1577,11 +1572,18 @@ html.tauri .av-window {
 .cheat-panel {
   width: min(680px, 100%);
 }
-.cheat-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 24px;
-  padding: 12px 16px;
+.cheat-subhead {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: 0 18px 8px;
+}
+.cheat-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 12px;
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
 }
 .cheat-group {
   display: flex;
@@ -1601,7 +1603,18 @@ html.tauri .av-window {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.cheat-row.is-focus {
+  background: var(--active-line);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.cheat-ex {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--ink-faint);
 }
 .cheat-title {
   flex: 1;
@@ -1623,6 +1636,73 @@ html.tauri .av-window {
   border-radius: 6px;
   box-shadow: 0 1px 0 var(--rule);
   padding: 1px 7px;
+}
+.cheat-key.is-recording {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+  font-style: italic;
+}
+.cheat-key.is-unbound,
+.cheat-key.is-none {
+  color: var(--ink-faint);
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+.cheat-reset {
+  flex: none;
+  background: none;
+  border: 0;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.cheat-reset:hover {
+  color: var(--ink);
+}
+.cheat-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 2px 8px 8px 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.cheat-cbtn {
+  font: inherit;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.cheat-cbtn:hover {
+  color: var(--ink-soft);
+}
+.cheat-cbtn b {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.cheat-foot {
+  justify-content: space-between;
+}
+.cheat-resetall {
+  margin-left: auto;
+}
+.cheat-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cheat-note {
+  color: var(--ink-faint);
 }
 
 /* empty-state keyboard hint */

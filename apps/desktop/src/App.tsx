@@ -747,7 +747,9 @@ export function App() {
         )}
         {cheatsheetOpen && (
           <Cheatsheet
-            commands={withChordOverrides(cheatsheetCommands, cfg.chords)}
+            commands={cheatsheetCommands}
+            overrides={cfg.chords}
+            onSetOverrides={(chords) => setCfgPatch({ chords })}
             onClose={closeCheatsheet}
           />
         )}
