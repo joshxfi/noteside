@@ -24,6 +24,7 @@ jobs:
   release:
     name: Version & changelog
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write # commit the changelog/version bump + push the tag
       issues: write # used by @semantic-release/github
@@ -59,6 +60,7 @@ jobs:
     name: Build · ${{ matrix.label }}
     needs: release
     if: needs.release.outputs.published == 'true' && !inputs.dry_run
+    timeout-minutes: 45 # cross-platform tauri bundling on a cold cache
     permissions:
       contents: write # upload assets to the release
     strategy:
@@ -83,7 +85,8 @@ jobs:
         with:
           ref: v${{ needs.release.outputs.version }} # the commit semantic-release just tagged
 
-      - uses: pnpm/action-setup@v6 # reads packageManager from package.json
+      # pnpm/action-setup reads the pnpm version from packageManager in package.json
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
         with:
@@ -107,7 +110,7 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: tauri-apps/tauri-action@v1
+      - uses: tauri-apps/tauri-action@v0.6 # latest line; there is no v1 tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

@@ -2,7 +2,7 @@ name: CI
 
 # Quality gate in front of the release pipeline. Runs on every PR and on pushes
 # to main. The same checks AGENTS.md names as the gates: typecheck + lint +
-# format + the JS and Rust test suites, plus a Rust compile check.
+# format + the JS and Rust test suites, plus clippy and the web-bundle build.
 
 on:
   pull_request:
@@ -19,8 +19,9 @@ concurrency:
 
 jobs:
   web:
-    name: Typecheck, lint, format & test
+    name: Typecheck, lint, format, test & build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
@@ -33,19 +34,25 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
+      - run: pnpm build # web bundles for all apps — catches bundler/prerender breakage typecheck can't
 
   rust:
-    name: Rust check & test
-    runs-on: ubuntu-22.04
+    name: Rust fmt, clippy & test
+    runs-on: ubuntu-22.04 # matches the release pipeline's Linux target (webkit2gtk-4.1)
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+      - run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+      # clippy compiles the crate, so it doubles as the build/compile check.
+      - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
