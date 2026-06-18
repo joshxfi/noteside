@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { GITHUB, RELEASES, useDownloads } from "./downloads";
+import type { Cta } from "./downloads";
 import { LogoMark, Wordmark } from "./logo";
 
-const GITHUB = "https://github.com/joshxfi/noteside";
-const RELEASES = `${GITHUB}/releases`;
 const AUTHOR = "https://github.com/joshxfi";
+
+// Direct file downloads save in place; page links open in a new tab.
+const linkProps = (c: Cta) =>
+  c.download ? { rel: "noopener" } : { target: "_blank", rel: "noopener noreferrer" };
 // The docs site (docs.noteside.app in prod). Override with VITE_DOCS_URL — e.g.
 // http://localhost:3002 when running `pnpm dev:docs` locally.
 const DOCS = import.meta.env.VITE_DOCS_URL ?? "https://docs.noteside.app";
@@ -161,6 +165,7 @@ const sectionH2 =
 
 export function App() {
   const step = useKeycast();
+  const dl = useDownloads();
   useScrollReveal();
 
   return (
@@ -219,13 +224,8 @@ export function App() {
             everyday shortcuts you already know.
           </p>
           <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
-            <a
-              className="btn btn-primary"
-              href={`${RELEASES}/latest`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download for desktop
+            <a className="btn btn-primary" href={dl.primary.href} {...linkProps(dl.primary)}>
+              {dl.primary.label}
             </a>
             <a className="btn btn-ghost" href="#demo">
               Try the live demo
@@ -234,7 +234,25 @@ export function App() {
           <p className="font-mono text-[12.5px] text-ink-faint">
             Free forever · open source ·{" "}
             <b className="font-semibold text-ink-soft">macOS, Windows &amp; Linux</b>
+            {dl.version ? <> · {dl.version}</> : null}
           </p>
+          {(dl.primary.note || dl.alternates.length > 0) && (
+            <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 font-mono text-[12.5px] text-ink-faint">
+              {dl.primary.note ? <span className="text-ink-soft">{dl.primary.note}</span> : null}
+              {dl.alternates.map((alt, i) => (
+                <Fragment key={alt.label}>
+                  {i > 0 || dl.primary.note ? <span aria-hidden="true">·</span> : null}
+                  <a
+                    className="inline-block py-0.5 text-ink-soft underline underline-offset-2 hover:text-accent"
+                    href={alt.href}
+                    {...linkProps(alt)}
+                  >
+                    {alt.label}
+                  </a>
+                </Fragment>
+              ))}
+            </p>
+          )}
         </section>
 
         <section className="pt-10 pb-24" id="demo">
