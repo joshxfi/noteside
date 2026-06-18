@@ -1421,6 +1421,43 @@ html.tauri .av-window {
 .av-brandsub {
   font-size: 11px;
 }
+/* legibility (cont.): the finder, command palette, backlinks + sidebar hints
+   were never bumped — raise them to the same readable floor, keeping tiers
+   (names/primary 13.5 > secondary 12.5 > meta/hints 12 > small-caps eyebrows 11). */
+.fnd-row,
+.fnd-empty,
+.fnd-prevempty,
+.bl-title,
+.bl-empty {
+  font-size: 13.5px;
+}
+.fnd-promptchar {
+  font-size: 13px;
+}
+.fnd-path,
+.pal-key,
+.pal-leader {
+  font-size: 12.5px;
+}
+.fnd-tab,
+.fnd-foot,
+.fnd-loc,
+.fnd-git,
+.fnd-frec,
+.fnd-prevhead,
+.pal-head,
+.pal-hint,
+.pal-foot,
+.bl-kicker,
+.bl-count {
+  font-size: 12px;
+}
+.fnd-grepmode {
+  font-size: 11px;
+}
+.av-sidehints {
+  font-size: 11.5px;
+}
 
 /* ── command palette (leader / which-key) ── */
 .pal-scrim {
