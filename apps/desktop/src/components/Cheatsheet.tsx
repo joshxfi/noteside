@@ -58,9 +58,9 @@ export function Cheatsheet({ commands, onClose }: { commands: Command[]; onClose
           ))}
         </div>
         <div className="pal-foot">
-          <span>
-            <b>⎋</b> close
-          </span>
+          <button type="button" className="pal-foot-close" onClick={onClose}>
+            <b>Esc</b> close
+          </button>
         </div>
       </div>
     </div>

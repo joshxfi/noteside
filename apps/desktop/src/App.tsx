@@ -725,6 +725,10 @@ export function App() {
             setCfg={setCfgPatch}
             onClose={closeSettings}
             onEditFile={openConfig}
+            onShortcuts={() => {
+              setSettingsOpen(false);
+              setCheatsheetOpen(true);
+            }}
           />
         )}
         {finder && (

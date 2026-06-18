@@ -68,9 +68,16 @@ export interface SettingsPanelProps {
   setCfg: (patch: Partial<Config>) => void;
   onClose: () => void;
   onEditFile: () => void;
+  onShortcuts: () => void;
 }
 
-export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPanelProps) {
+export function SettingsPanel({
+  cfg,
+  setCfg,
+  onClose,
+  onEditFile,
+  onShortcuts,
+}: SettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState(0);
   const [customEsc, setCustomEsc] = useState(
@@ -356,9 +363,14 @@ export function SettingsPanel({ cfg, setCfg, onClose, onEditFile }: SettingsPane
         </div>
 
         <footer className="set-foot">
-          <button className="set-editfile" onClick={onEditFile}>
-            Edit&nbsp;<code>~/.notesiderc</code>&nbsp;→
-          </button>
+          <div className="set-footlinks">
+            <button className="set-editfile" onClick={onEditFile}>
+              Edit&nbsp;<code>~/.notesiderc</code>&nbsp;→
+            </button>
+            <button className="set-editfile" onClick={onShortcuts}>
+              Keyboard shortcuts
+            </button>
+          </div>
           <button className="set-done" onClick={onClose}>
             Done
           </button>

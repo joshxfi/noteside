@@ -366,7 +366,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
                 <b>⇧⇥</b> grep mode ·{" "}
               </>
             ) : null}
-            <b>⎋</b> close
+            <b>Esc</b> close
           </span>
           <span className="fnd-count">
             {items.length} {items.length === 1 ? "result" : "results"}

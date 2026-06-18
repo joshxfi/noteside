@@ -99,7 +99,7 @@ export function CommandPalette({
             <b>key</b> run
           </span>
           <span>
-            <b>⎋</b> close
+            <b>Esc</b> close
           </span>
         </div>
       </div>

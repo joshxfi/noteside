@@ -1062,6 +1062,11 @@ body {
   padding: 13px 20px;
   border-top: 1px solid var(--rule-soft);
 }
+.set-footlinks {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
 .set-editfile {
   font-family: var(--mono);
   font-size: 12px;
@@ -1554,6 +1559,18 @@ html.tauri .av-window {
 .pal-foot b {
   color: var(--ink-soft);
   font-weight: 600;
+}
+/* The cheatsheet footer's close is a real (clickable) button styled as the hint. */
+.pal-foot-close {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.pal-foot-close:hover {
+  color: var(--ink-soft);
 }
 
 /* keyboard cheatsheet (Mod-/) — a wider, multi-column reference */

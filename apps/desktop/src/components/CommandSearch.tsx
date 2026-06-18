@@ -105,7 +105,7 @@ export function CommandSearch({
           <div className="fnd-list" ref={listRef}>
             {confirm ? (
               <div className="fnd-empty">
-                {confirm.title}? &nbsp;<b>↵</b> yes · <b>n</b> no · <b>⎋</b> cancel
+                {confirm.title}? &nbsp;<b>↵</b> yes · <b>n</b> no · <b>Esc</b> cancel
               </div>
             ) : items.length === 0 ? (
               <div className="fnd-empty">no commands</div>
@@ -130,7 +130,7 @@ export function CommandSearch({
 
         <div className="fnd-foot">
           <span className="fnd-hint">
-            <b>↑↓</b> move · <b>↵</b> run · <b>⎋</b> close
+            <b>↑↓</b> move · <b>↵</b> run · <b>Esc</b> close
           </span>
           <span className="fnd-count">
             {items.length} {items.length === 1 ? "command" : "commands"}
