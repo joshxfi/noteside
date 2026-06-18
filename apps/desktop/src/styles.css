@@ -71,6 +71,36 @@ button:focus-visible,
   }
 }
 
+/* Scrollbars — thin, quiet, and derived from the ink palette so they fit the warm
+   design in both themes (the OS default cool-grey bar clashed). The transparent
+   border + padding-box clip floats a slim pill thumb in a transparent track.
+   scrollbar-color/width cover the landing demo in standards browsers; the
+   ::-webkit pseudo-elements cover the app's webview. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--ink-faint), transparent 45%) transparent;
+}
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--ink-faint), transparent 45%);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink-faint), transparent 18%);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html,
 body {
   height: 100%;
