@@ -1,15 +1,15 @@
-// App.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
+// app.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { backend, type NoteMeta } from "./backend";
-import { Editor } from "./editor/Editor";
-import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/exCommands";
-import { Finder } from "./components/Finder";
-import { SettingsPanel } from "./components/SettingsPanel";
-import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
-import { Backlinks } from "./components/Backlinks";
-import { CommandSearch } from "./components/CommandSearch";
-import { Cheatsheet } from "./components/Cheatsheet";
+import { Editor } from "./editor/editor";
+import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/ex-commands";
+import { Finder } from "./components/finder";
+import { SettingsPanel } from "./components/settings-panel";
+import { CommandPalette, type PaletteAction } from "./components/command-palette";
+import { Backlinks } from "./components/backlinks";
+import { CommandSearch } from "./components/command-search";
+import { Cheatsheet } from "./components/cheatsheet";
 import {
   cheatsheetCommands,
   chordLabel,
@@ -27,9 +27,9 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
-import { useEditingSession } from "./useEditingSession";
-import { useGlobalChords } from "./useGlobalChords";
-import { isTauri, windowControl } from "./useWindowControls";
+import { useEditingSession } from "./use-editing-session";
+import { useGlobalChords } from "./use-global-chords";
+import { isTauri, windowControl } from "./use-window-controls";
 
 const AUTOSAVE_MS = 800;
 

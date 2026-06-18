@@ -8,7 +8,7 @@
 // the chord matcher is reused by both the editor keymap and the document-level
 // fallback for the no-note-open state.
 import type { KeyBinding } from "@codemirror/view";
-import type { AppCommand } from "./exCommands";
+import type { AppCommand } from "./ex-commands";
 
 /** Editor-scoped actions that need live editor state (not plain AppCommands). */
 export type EditorAction =

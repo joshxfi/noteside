@@ -1,6 +1,6 @@
 // CodeMirror integration for `[[wikilinks]]`: a decoration plugin that styles
 // them as links and (in live-preview, off the cursor line) hides the `[[ ]]`
-// syntax — mirroring livePreview.ts — plus a `[[`-triggered autocompletion over
+// syntax — mirroring live-preview.ts — plus a `[[`-triggered autocompletion over
 // the notebook's note titles. The document is never rewritten, so `gf` and vim
 // motions still operate on the literal `[[Target]]` text.
 import {
@@ -18,7 +18,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { parseWikilinks } from "../links";
-import { activeLines } from "./livePreview";
+import { activeLines } from "./live-preview";
 
 const linkMark = Decoration.mark({ class: "cm-wikilink" });
 const hide = Decoration.replace({});

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CONFIG_ID, createEditingSession, type EditingSessionDeps } from "./editingSession";
+import { CONFIG_ID, createEditingSession, type EditingSessionDeps } from "./editing-session";
 import type { Backend, NoteDoc, NoteMeta } from "./backend/types";
 
 // A Map-backed fake of the consumed backend slice. Records the exact call order

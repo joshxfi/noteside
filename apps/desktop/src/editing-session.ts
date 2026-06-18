@@ -1,9 +1,9 @@
-// editingSession.ts — the editing session: the deep module that owns the whole
+// editing-session.ts — the editing session: the deep module that owns the whole
 // per-buffer editing loop (working/saved/dirty, autosave, open/save/quit, the
 // config buffer kind, external reconcile, and the editor remount key) behind a
 // small verb-set. Framework-free on purpose — it never imports React, so the
-// orchestration that used to be smeared (and untested) across App.tsx is unit-
-// testable in the node env. See editingSession.test.ts.
+// orchestration that used to be smeared (and untested) across app.tsx is unit-
+// testable in the node env. See editing-session.test.ts.
 import { type Autosave, createAutosave } from "./autosave";
 import type { Backend, NoteDoc, NoteMeta } from "./backend/types";
 

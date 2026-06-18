@@ -178,12 +178,6 @@ pnpm --filter @noteside/desktop tauri icon src-tauri/app-icon.png
 pnpm tauri build                                                   # native installers
 ```
 
-> **Heads up — pnpm 11 supply-chain gate.** pnpm 11 refuses dependency versions
-> published in the last ~24h (`minimumReleaseAge`, a built-in default we keep as a
-> baseline). If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`,
-> a dependency was just published — wait for it to age, or allowlist that one
-> package under `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
-
 ## How it works
 
 - **Files-as-truth core** (`apps/desktop/src-tauri/src/`). `open_notebook` scans the
@@ -221,10 +215,7 @@ Contributions are welcome. Before opening a PR, run the gates:
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:rust
 ```
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org) — the type
-drives the automated version bump and changelog (`feat:` → minor, `fix:` → patch). To
-learn how the codebase fits together start with **[AGENTS.md](AGENTS.md)**; see
-**[CONTRIBUTING.md](CONTRIBUTING.md)** for the conventions in full.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org) — the type drives the automated version bump and changelog (`feat:` → minor, `fix:` → patch). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the conventions in full.
 
 ## License
 

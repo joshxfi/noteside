@@ -1,5 +1,5 @@
 // Noteside Brand Guide — faithful port of the design file.
-import { Wordmark } from "./Logo";
+import { Wordmark } from "./logo";
 
 // The mark at an explicit size (the guide hand-tunes each step).
 function Bmark({

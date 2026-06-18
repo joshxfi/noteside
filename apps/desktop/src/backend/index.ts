@@ -1,4 +1,4 @@
-import { isTauri } from "../useWindowControls";
+import { isTauri } from "../use-window-controls";
 import { mockBackend } from "./mock";
 import { tauriBackend } from "./tauri";
 import type { Backend } from "./types";

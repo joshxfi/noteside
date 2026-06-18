@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AppCommand } from "./exCommands";
+import type { AppCommand } from "./ex-commands";
 import {
   chordConflict,
   chordLabel,

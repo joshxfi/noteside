@@ -20,10 +20,10 @@ import {
 import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
-import { type AppCommand, defineExCommands, setActiveHandlers } from "./exCommands";
+import { type AppCommand, defineExCommands, setActiveHandlers } from "./ex-commands";
 import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
-import { activeLineHighlight } from "./activeLine";
-import { livePreview } from "./livePreview";
+import { activeLineHighlight } from "./active-line";
+import { livePreview } from "./live-preview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
 import { wikilinkAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";

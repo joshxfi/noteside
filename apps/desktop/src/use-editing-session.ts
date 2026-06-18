@@ -1,15 +1,15 @@
-// useEditingSession.ts — the paper-thin React adapter over the framework-free
+// use-editing-session.ts — the paper-thin React adapter over the framework-free
 // editing session store. It creates the store ONCE (stable identity) and routes
 // the live callbacks through a deps ref, so the store closures never go stale
 // while React re-renders. The store itself holds no React — that's what keeps
-// the editing loop node-testable (see editingSession.test.ts).
+// the editing loop node-testable (see editing-session.test.ts).
 import { useRef, useState, useSyncExternalStore } from "react";
 import {
   createEditingSession,
   type EditingSession,
   type EditingSessionDeps,
   type SessionSnapshot,
-} from "./editingSession";
+} from "./editing-session";
 
 export function useEditingSession(deps: EditingSessionDeps): {
   session: EditingSession;

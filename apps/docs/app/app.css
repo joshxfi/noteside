@@ -64,7 +64,7 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* ── logo lockup (nav) — mirrors apps/brand/src/Logo.tsx ───────────────────── */
+/* ── logo lockup (nav) — mirrors apps/brand/src/logo.tsx ───────────────────── */
 .ns-logo {
   display: inline-flex;
   align-items: center;

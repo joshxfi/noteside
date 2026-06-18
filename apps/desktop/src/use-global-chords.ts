@@ -10,7 +10,7 @@
 // focus (the editor's own keymap handles those, so we never double-dispatch).
 import { useEffect, useRef } from "react";
 import { type ChordOverrides, makeGlobalChordMap, resolveGlobalChord } from "./editor/commands";
-import type { AppCommand } from "./editor/exCommands";
+import type { AppCommand } from "./editor/ex-commands";
 
 export function useGlobalChords(opts: {
   enabled: boolean;

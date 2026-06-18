@@ -1,5 +1,5 @@
 // settings.ts — config model + the ~/.notesiderc serialize/parse logic.
-// The SettingsPanel component lives in components/SettingsPanel.tsx and consumes
+// The SettingsPanel component lives in components/settings-panel.tsx and consumes
 // the metadata + helpers exported here.
 
 export interface AccentOption {

@@ -1,4 +1,4 @@
-// Noteside nav lockup — mirrors apps/brand/src/Logo.tsx: a serif "N" mark with a
+// Noteside nav lockup — mirrors apps/brand/src/logo.tsx: a serif "N" mark with a
 // plum block cursor, followed by the "Noteside" wordmark with the cursor trailing,
 // as if it's still being typed. Styling lives in app.css so it themes with the
 // Fumadocs color variables (light nav / dark nav).

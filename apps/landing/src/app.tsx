@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { LogoMark, Wordmark } from "./Logo";
+import { LogoMark, Wordmark } from "./logo";
 
 const GITHUB = "https://github.com/joshxfi/noteside";
 const RELEASES = `${GITHUB}/releases`;
