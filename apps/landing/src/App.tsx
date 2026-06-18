@@ -219,8 +219,13 @@ export function App() {
             everyday shortcuts you already know.
           </p>
           <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
-            <a className="btn btn-primary" href={DOCS}>
-              Read the docs
+            <a
+              className="btn btn-primary"
+              href={`${RELEASES}/latest`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Download for desktop
             </a>
             <a className="btn btn-ghost" href="#demo">
               Try the live demo
@@ -228,9 +233,7 @@ export function App() {
           </div>
           <p className="font-mono text-[12.5px] text-ink-faint">
             Free forever · open source ·{" "}
-            <b className="font-semibold text-ink-soft">
-              macOS, Windows &amp; Linux · build from source today
-            </b>
+            <b className="font-semibold text-ink-soft">macOS, Windows &amp; Linux</b>
           </p>
         </section>
 

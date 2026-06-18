@@ -36,9 +36,9 @@ back it up, sync it, or walk away with it. Nothing leaves your machine.
 It's built on **CodeMirror 6 + a real vim engine** inside a native **Tauri**
 window, with a Rust core that treats your files as the source of truth.
 
-> **Status:** pre-1.0 and moving fast. The editor, search, wikilinks, live
-> preview, and the files-as-truth backend all work today; see the
-> [roadmap](#roadmap).
+> **Install:** download a build for macOS, Windows, or Linux from
+> [Releases](https://github.com/joshxfi/noteside/releases/latest), or build from
+> source (below). Builds aren't code-signed yet — see the [roadmap](#roadmap).
 
 ## Highlights
 

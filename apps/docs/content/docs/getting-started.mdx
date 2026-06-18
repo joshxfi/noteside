@@ -3,15 +3,30 @@ title: Getting started
 description: Install Noteside, open a notebook, and write your first note.
 ---
 
-Noteside is pre-1.0, so for now you run it from source.
+Noteside is a native desktop app for macOS, Windows, and Linux. Download a build,
+or run it from source.
 
-## Prerequisites
+## Install
+
+Grab the latest installer for your platform from [GitHub
+Releases](https://github.com/joshxfi/noteside/releases/latest):
+
+- **macOS** — `.dmg` (a separate build for Apple Silicon and Intel)
+- **Windows** — the `.msi` or `.exe` setup
+- **Linux** — `.AppImage`, `.deb`, or `.rpm`
+
+<Callout title="First launch">
+  The builds aren't code-signed yet, so your OS shows a one-time prompt. On macOS, right-click
+  the app and choose **Open** (or System Settings → Privacy & Security → **Open Anyway**). On
+  Windows, click **More info → Run anyway**. Signing is on the roadmap.
+</Callout>
+
+## Build from source
+
+Prefer to run from source, or want to hack on Noteside? You'll need:
 
 - **Node 24** and **pnpm 11** — run `corepack enable` (the repo pins both)
 - **Rust** (stable) + the [Tauri 2 system dependencies](https://v2.tauri.app/start/prerequisites/)
-  to run or build the desktop app
-
-## Run it
 
 ```bash
 pnpm install
@@ -24,7 +39,7 @@ pnpm dev:desktop    # the desktop app — native window + Vite HMR
   touch disk in this mode.
 </Callout>
 
-To build a native installer instead: `pnpm tauri build`.
+To build your own installer: `pnpm tauri build`.
 
 ## Open a notebook
 
