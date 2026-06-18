@@ -109,7 +109,7 @@ export function SettingsPanel({
     { cycle: (d) => cycleList(ACCENTS, cfg.accent, "accent", d) },
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
     { cycle: (d) => cycleList(UI_FONTS, cfg.uiFont, "uiFont", d) },
-    { cycle: (d) => setCfg({ fontSize: Math.max(14, Math.min(28, cfg.fontSize + d)) }) },
+    { cycle: (d) => setCfg({ fontSize: Math.max(16, Math.min(28, cfg.fontSize + d)) }) },
     {
       cycle: (d) =>
         setCfg({
@@ -245,7 +245,7 @@ export function SettingsPanel({
             <div className="set-stepper">
               <button
                 tabIndex={-1}
-                onClick={() => setCfg({ fontSize: Math.max(14, cfg.fontSize - 1) })}
+                onClick={() => setCfg({ fontSize: Math.max(16, cfg.fontSize - 1) })}
               >
                 −
               </button>
