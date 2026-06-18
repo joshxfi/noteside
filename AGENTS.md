@@ -8,6 +8,7 @@ Noteside — an offline & **keyboard-first** notes desktop app (full vim _and_ c
 
 - `apps/desktop` — Tauri 2 + React 19 + Vite + TypeScript (the app)
 - `apps/landing` — Vite + React 19 + TypeScript + Tailwind v4 (the site)
+- `apps/docs` — Fumadocs on React Router 7 (SPA, prerendered) — the documentation site at **docs.noteside.app** (`:3002` via `pnpm dev:docs`)
 - `apps/brand` — Vite + React + Tailwind, the standalone **brand guide** (internal reference only; not deployed, not linked from the landing). Runs on `:3001` via `pnpm dev:brand`; has its own `Logo.tsx` copy + `styles.css` (the brand CSS).
 
 ## Commands
@@ -20,7 +21,7 @@ pnpm dev              # everything: landing (:3000) + desktop Tauri window
 pnpm dev:landing      # landing only
 pnpm dev:desktop      # desktop only — runs `tauri dev` (needs Rust + Tauri system deps)
 pnpm typecheck        # tsc --noEmit across the workspace  ← primary verification gate
-pnpm build            # web bundles for both apps (Vite)
+pnpm build            # web bundles for all apps (Vite; docs via react-router)
 pnpm lint             # oxlint (root; config .oxlintrc.json)   — pnpm lint:fix to autofix
 pnpm format           # oxfmt (writes in place; root; config .oxfmtrc.json) — pnpm format:check to verify
 ```
@@ -56,7 +57,7 @@ Lint/format are oxc, run from the repo root (not per-package, not through Turbo)
 
 **The `~/.notesiderc` config buffer is a synthetic note.** `activeId === "config"` swaps the editor onto `configText` instead of a real note; `:w` runs `parseConfig` (settings.ts) and applies it. `settings.ts` round-trips `Config ⇄ text` via `serializeConfig`/`parseConfig`; the in-app `SettingsPanel` and the config buffer are two editors over the same `Config`. Config changes are applied by writing CSS custom properties (`--accent-base`, `--editor-font`, `--editor-size`, etc.) onto `document.documentElement` in an effect in `App.tsx`.
 
-**Search lives behind the `backend/` seam.** The `Backend` interface (`src/backend/types.ts`) exposes `searchFiles(query) → FileHit[]` and `searchContent(query, mode) → ContentHit[]`. The Tauri adapter (`backend/tauri.ts`) `invoke()`s the Rust commands `search_files`/`search_content` (`src-tauri/src/search.rs`: nucleo `fuzzy_files` for path/title matching, a `content_search` scan for plain/regex/fuzzy), and the in-memory `mock.ts` backs browser dev + the landing demo. `Finder` only talks to the `Backend` interface, so it's identical in both modes — and search stays fully in-memory (no database).
+**Search lives behind the `backend/` seam.** The `Backend` interface (`src/backend/types.ts`) exposes `searchFiles(query) → FileHit[]` and `searchContent(query, mode) → ContentHit[]`. The Tauri adapter (`backend/tauri.ts`) `invoke()`s the Rust commands `search_files`/`search_content` (`src-tauri/src/search.rs`: nucleo `fuzzy_files` for path matching (titles are returned but not matched), a `content_search` scan for plain/regex/fuzzy), and the in-memory `mock.ts` backs browser dev + the landing demo. `Finder` only talks to the `Backend` interface, so it's identical in both modes — and search stays fully in-memory (no database).
 
 **`links.ts` is the wikilink seam — pure, CodeMirror-free.** `parseWikilinks` / `resolveLink` (title → exact filename → filename-slug → title-slug, ordered so ties are deterministic and empty/punctuation targets never match) / `wikilinkAt` (link under a cursor, half-open end) / `computeBacklinks`. The editor side (`editor/wikilinks.ts`) styles `[[links]]` and hides the `[[ ]]` syntax in live-preview using the _same_ reveal-on-cursor-line model as `livePreview.ts` (and exports `activeLines` from there), plus `[[`-autocomplete over note titles. `gf` / `:follow` (exCommands → `App.onFollowLink`) opens the resolved note; the backlinks panel (`<Space>l` / `:backlinks`) is `backend.readAllNotes()` + `computeBacklinks`. Wikilinks are **not** lezer-markdown nodes — they're regex-scanned and never rewritten, so vim motions stay on the literal `[[Target]]` text. To move "jump to line" reliably, `openNote` bumps `navSeq` (part of the Editor remount `key`) on every nav.
 
