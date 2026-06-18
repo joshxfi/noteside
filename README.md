@@ -8,7 +8,7 @@
   <strong>Notes for keyboard people.</strong><br/>
   An offline, local-first notebook you drive entirely from the keyboard — full vim, or
   the conventional shortcuts you already know. Your notes stay as plain Markdown files
-  on your disk. No account, no cloud, nothing between you and the page.
+  on your disk.
 </p>
 
 <p align="center">
@@ -38,7 +38,8 @@ window, with a Rust core that treats your files as the source of truth.
 
 > **Install:** download a build for macOS, Windows, or Linux from
 > [Releases](https://github.com/joshxfi/noteside/releases/latest), or build from
-> source (below). Builds aren't code-signed yet — see the [roadmap](#roadmap).
+> source (below). Builds aren't code-signed yet, so the first launch needs a
+> one-time OS confirmation.
 
 ## Highlights
 
@@ -205,26 +206,18 @@ The hot paths are benchmarked (`cargo bench`, `pnpm bench`). On a modern laptop:
 - The note sidebar **virtualizes** past 100 notes (only visible rows mount).
 - Backlinks are computed in Rust, not by shipping every note body to the UI.
 
-## Roadmap
-
-Working today: vim and conventional-shortcut editing, files-as-truth storage +
-watcher, fuzzy/content search, the command palette, inline live-preview, wikilinks +
-backlinks, themes, and the live `~/.notesiderc`.
-
-Next: wikilink niceties (create-on-follow, unresolved-link styling), richer preview
-(images, tables), vendored offline fonts, and signed/auto-updating releases.
-
 ## Contributing
 
-Issues and PRs are welcome. Before opening a PR, please run the gates:
+Contributions are welcome. Before opening a PR, run the gates:
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:rust
 ```
 
-The codebase is kept `oxfmt`-formatted (`pnpm format`). TypeScript is strict
-(`verbatimModuleSyntax` — use `import type`), and the desktop app intentionally does
-**not** use `<React.StrictMode>` (it would double-fire the editor's action flush).
+Commits follow [Conventional Commits](https://www.conventionalcommits.org) — the type
+drives the automated version bump and changelog (`feat:` → minor, `fix:` → patch). To
+learn how the codebase fits together start with **[AGENTS.md](AGENTS.md)**; see
+**[CONTRIBUTING.md](CONTRIBUTING.md)** for the conventions in full.
 
 ## License
 
