@@ -1,9 +1,9 @@
 // data.ts — the note "notebook". Each note carries a path, git status and a
 // frecency score so the fuzzy finder has something real to rank and annotate.
 //
-// This is the in-memory seed used by the prototype/demo. When the Rust backend
-// lands, these come from scanning the user's notebook folder (Markdown files +
-// frontmatter) and git status; the shape stays the same.
+// This is the in-memory seed used by browser dev / the landing demo. In the real
+// Tauri backend these come from scanning the user's notebook folder (Markdown
+// files + frontmatter) and git status; the shape stays the same.
 
 import type { Note } from "./types";
 
