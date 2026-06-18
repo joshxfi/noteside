@@ -1,0 +1,56 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "polish", "release": "patch" },
+          { "type": "refactor", "release": "patch" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "perf", "section": "Performance" },
+            { "type": "polish", "section": "Polish" },
+            { "type": "refactor", "section": "Refactors" },
+            { "type": "docs", "section": "Documentation" },
+            { "type": "chore", "hidden": true },
+            { "type": "test", "hidden": true },
+            { "type": "ci", "hidden": true },
+            { "type": "build", "hidden": true }
+          ]
+        }
+      }
+    ],
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    ["@semantic-release/exec", { "prepareCmd": "node scripts/bump-version.mjs ${nextRelease.version}" }],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "CHANGELOG.md",
+          "package.json",
+          "apps/desktop/package.json",
+          "apps/landing/package.json",
+          "apps/docs/package.json",
+          "apps/brand/package.json",
+          "apps/desktop/src-tauri/tauri.conf.json",
+          "apps/desktop/src-tauri/Cargo.toml",
+          "apps/desktop/src-tauri/Cargo.lock"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    ["@semantic-release/github", { "successComment": false, "failComment": false }]
+  ]
+}
