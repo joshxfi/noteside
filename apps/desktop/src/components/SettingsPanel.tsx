@@ -327,13 +327,7 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row
-            idx={7}
-            focus={focus}
-            setFocus={setFocus}
-            label="Relative line numbers"
-            hint="off = absolute"
-          >
+          <Row idx={7} focus={focus} setFocus={setFocus} label="Relative line numbers">
             <button
               type="button"
               tabIndex={-1}
