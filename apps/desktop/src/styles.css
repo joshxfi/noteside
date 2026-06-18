@@ -49,6 +49,29 @@
 * {
   box-sizing: border-box;
 }
+
+/* Keyboard focus indicator — :focus-visible so it shows for keyboard users, not
+   mouse clicks. Panels and inputs keep their own (outline:none + accent border)
+   focus styling defined further down. */
+button:focus-visible,
+[role="option"]:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Respect the OS "reduce motion" setting: neutralize the cursor blink, toast
+   slide-in, and panel rise without removing their end state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
 html,
 body {
   height: 100%;
