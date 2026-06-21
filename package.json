@@ -19,12 +19,14 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
+    "prepare": "lefthook install",
     "tauri": "pnpm --filter @noteside/desktop tauri",
     "demo:build": "pnpm --filter @noteside/desktop build:web && rm -rf apps/landing/public/demo && cp -r apps/desktop/dist apps/landing/public/demo",
     "build:landing": "pnpm demo:build && pnpm --filter @noteside/landing build",
     "og:build": "bash apps/desktop/scripts/og-build.sh"
   },
   "devDependencies": {
+    "lefthook": "^2.1.9",
     "oxfmt": "0.54.0",
     "oxlint": "^1.69.0",
     "turbo": "^2.5.0",
