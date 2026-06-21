@@ -253,6 +253,19 @@ export function App() {
               ))}
             </p>
           )}
+          {dl.os === "mac" && (
+            <p className="mt-2 font-mono text-[12.5px] text-ink-faint">
+              Unsigned build — macOS shows a one-time warning on first launch.{" "}
+              <a
+                className="underline underline-offset-2 hover:text-accent"
+                href={`${DOCS}/getting-started`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                How to open it ↗
+              </a>
+            </p>
+          )}
         </section>
 
         <section className="pt-10 pb-24" id="demo">

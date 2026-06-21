@@ -16,10 +16,22 @@ Releases](https://github.com/joshxfi/noteside/releases/latest):
 - **Linux** — `.AppImage`, `.deb`, or `.rpm`
 
 <Callout title="First launch">
-  The builds aren't code-signed yet, so your OS shows a one-time prompt. On macOS, right-click the
-  app and choose **Open** (or System Settings → Privacy & Security → **Open Anyway**). On Windows,
-  click **More info → Run anyway**. Signing is on the roadmap.
+  The builds aren't code-signed yet, so your OS shows a one-time warning on first launch. The app
+  isn't broken — your system just can't verify an unsigned download. Signing is on the roadmap.
 </Callout>
+
+**macOS** reports the app as _"damaged and can't be opened."_ It isn't damaged — that's Gatekeeper
+refusing an unsigned, quarantined download (more strictly on Apple Silicon). Drag **Noteside** into
+`/Applications`, then clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Noteside.app
+```
+
+It opens normally after that. Right-click → **Open** does _not_ clear the "damaged" message — only
+removing the quarantine flag does.
+
+**Windows** — click **More info → Run anyway** on the SmartScreen prompt.
 
 ## Build from source
 

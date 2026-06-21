@@ -221,7 +221,10 @@ function writeCache(release: Release) {
   }
 }
 
-export function useDownloads(): Downloads {
+// Returns the asset selection plus the detected `os`, so the UI can show
+// OS-specific hints (e.g. the macOS Gatekeeper first-launch note) — including in
+// the no-asset fallback, where `buildDownloads` alone wouldn't reveal the OS.
+export function useDownloads(): Downloads & { os: OS } {
   const [os] = useState<OS>(currentOS);
   const [macArch, setMacArch] = useState<MacArch>("unknown");
   const [release, setRelease] = useState<Release | null>(readCache);
@@ -259,5 +262,5 @@ export function useDownloads(): Downloads {
     };
   }, [os]);
 
-  return buildDownloads(os, macArch, release);
+  return { ...buildDownloads(os, macArch, release), os };
 }
