@@ -6,9 +6,11 @@ overrides:
   vite@7>esbuild: 0.28.1
 
 # pnpm 11 gates dependency build scripts; esbuild (Vite's bundler) needs its
-# install script to set up its platform binary.
+# install script to set up its platform binary, and lefthook's postinstall wires
+# up the git-hooks binary used by the `prepare` script (see root package.json).
 allowBuilds:
   esbuild: true
+  lefthook: true
 
 # Supply-chain hardening: refuse dependency versions published less than this
 # many minutes ago — mitigates compromised-then-yanked npm packages. 1440 (1 day)

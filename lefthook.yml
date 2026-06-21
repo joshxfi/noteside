@@ -1,0 +1,26 @@
+# Git hooks (lefthook). Installed automatically by the root package.json
+# "prepare" script, which runs `lefthook install` after `pnpm install` — so every
+# contributor gets the hooks on clone, no extra setup.
+#
+# pre-commit formats staged files with oxfmt and re-stages the result, so commits
+# are always oxfmt-clean and the CI `format:check` gate can't fail on formatting.
+# CI remains the backstop for anyone who commits with `--no-verify`.
+#
+# Bypass once: `git commit --no-verify` (or `LEFTHOOK=0 git commit …`).
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: oxfmt
+      # oxfmt's supported source types. `exclude` mirrors .oxfmtrc.json's
+      # ignorePatterns so generated/vendored files are never reformatted (dist is
+      # gitignored, but kept here for safety; CHANGELOG.md is generated).
+      glob: "*.{js,cjs,mjs,jsx,ts,cts,mts,tsx,json,jsonc,css,md,mdx}"
+      exclude:
+        - "CHANGELOG.md"
+        - "**/dist/**"
+        - "apps/landing/public/demo/**"
+      # `pnpm exec` resolves the workspace-local oxfmt binary cross-platform —
+      # lefthook does not add node_modules/.bin to PATH.
+      run: pnpm exec oxfmt {staged_files}
+      stage_fixed: true
