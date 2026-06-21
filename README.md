@@ -38,8 +38,10 @@ window, with a Rust core that treats your files as the source of truth.
 
 > **Install:** download a build for macOS, Windows, or Linux from
 > [Releases](https://github.com/joshxfi/noteside/releases/latest), or build from
-> source (below). Builds aren't code-signed yet, so the first launch needs a
-> one-time OS confirmation.
+> source (below). Builds aren't code-signed yet — macOS flags them as _"damaged"_
+> on first launch (Gatekeeper blocking an unsigned download, not real damage).
+> [Getting started](https://docs.noteside.app/getting-started) has the one-line
+> fix. Signing is on the roadmap.
 
 ## Highlights
 
