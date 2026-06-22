@@ -10,6 +10,7 @@ import { CommandPalette, type PaletteAction } from "./components/command-palette
 import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
+import { Onboarding } from "./components/onboarding";
 import {
   cheatsheetCommands,
   chordLabel,
@@ -24,6 +25,7 @@ import {
   CONFIG_DEFAULTS,
   type Config,
   fontStack,
+  isFirstLaunch,
   parseConfig,
   serializeConfig,
 } from "./settings";
@@ -346,6 +348,8 @@ export function App() {
   const [refocus, setRefocus] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
+  // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
+  const [onboarding, setOnboarding] = useState(false);
 
   const configLoaded = useRef(false);
 
@@ -404,15 +408,25 @@ export function App() {
   // boot: load config, then last notebook
   useEffect(() => {
     (async () => {
+      let stored: Partial<Config> | null = null;
       try {
-        const stored = await backend.getConfig();
+        stored = await backend.getConfig();
         if (stored) setCfg((c) => ({ ...c, ...stored }));
       } catch {
         /* defaults */
       }
       configLoaded.current = true;
+      let last: string | null = null;
       try {
-        const last = await backend.getLastNotebook();
+        last = await backend.getLastNotebook();
+      } catch {
+        /* no remembered notebook */
+      }
+      // A brand-new user (no stored config, no notebook) gets the one-time
+      // vim/plain-keyboard choice before anything else. Picking it persists the
+      // config, so the gate never fires again.
+      if (isFirstLaunch(stored, last)) setOnboarding(true);
+      try {
         if (last) await openNotebook(last);
         else setStatus("no-notebook");
       } catch {
@@ -497,6 +511,15 @@ export function App() {
     setRefocus((r) => r + 1);
   };
   const setCfgPatch = (patch: Partial<Config>) => setCfg((c) => ({ ...c, ...patch }));
+
+  // Resolve the first-launch choice: set vim on/off and dismiss the gate. Writing
+  // cfg (configLoaded is true by boot's end) persists it, so it never shows again.
+  const finishOnboarding = (vim: boolean) => {
+    setOnboarding(false);
+    setCfg((c) => ({ ...c, vimMode: vim }));
+    flash(vim ? "vim mode on" : "plain keyboard mode");
+    setRefocus((r) => r + 1);
+  };
   const toggleNav = () => {
     setNavOpen((v) => !v);
     setRefocus((r) => r + 1);
@@ -584,6 +607,7 @@ export function App() {
   // overlay is open so it never steals keys from a panel that owns its own focus.
   useGlobalChords({
     enabled: !(
+      onboarding ||
       finder ||
       paletteOpen ||
       cmdSearchOpen ||
@@ -685,7 +709,9 @@ export function App() {
             />
           )}
           <main className="av-main">
-            {status === "boot" ? (
+            {onboarding ? (
+              <Onboarding onChoose={finishOnboarding} />
+            ) : status === "boot" ? (
               <div className="av-empty">
                 <div className="av-empty-glyph">▌</div>
               </div>
