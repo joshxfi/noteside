@@ -208,3 +208,14 @@ export function parseConfig(text: string, base: Config): Config {
 }
 
 export const byIdHelper = byId;
+
+/**
+ * First launch = the user has never stored a config *and* has no remembered
+ * notebook. Gates the one-time onboarding choice (vim vs. plain keyboard); once
+ * a choice is made the config is persisted, so `stored` is non-null thereafter
+ * and existing users (who always have a last notebook) never see it.
+ */
+export const isFirstLaunch = (
+  stored: Partial<Config> | null,
+  lastNotebook: string | null,
+): boolean => !stored && !lastNotebook;
