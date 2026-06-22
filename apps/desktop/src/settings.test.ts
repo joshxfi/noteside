@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type Config, CONFIG_DEFAULTS, parseConfig, serializeConfig } from "./settings";
+import {
+  type Config,
+  CONFIG_DEFAULTS,
+  isFirstLaunch,
+  parseConfig,
+  serializeConfig,
+} from "./settings";
 
 describe("config serialize/parse round-trip", () => {
   it("round-trips the defaults exactly", () => {
@@ -77,5 +83,21 @@ describe("config serialize/parse round-trip", () => {
     const parsed = parseConfig('" a comment\nset bogus = 1\nset theme = dark', CONFIG_DEFAULTS);
     expect(parsed.theme).toBe("dark");
     expect(parsed.accent).toBe(CONFIG_DEFAULTS.accent);
+  });
+});
+
+describe("isFirstLaunch", () => {
+  it("is true only with no stored config and no last notebook", () => {
+    expect(isFirstLaunch(null, null)).toBe(true);
+  });
+
+  it("is false once a config has been stored (choice already made)", () => {
+    expect(isFirstLaunch({ vimMode: false }, null)).toBe(false);
+    expect(isFirstLaunch({}, null)).toBe(false); // an empty object still counts as stored
+  });
+
+  it("is false for an existing user with a remembered notebook", () => {
+    expect(isFirstLaunch(null, "/notes")).toBe(false);
+    expect(isFirstLaunch({ vimMode: true }, "/notes")).toBe(false);
   });
 });
