@@ -777,16 +777,7 @@ body {
   margin-top: auto;
   padding-top: 4px;
 }
-.ob kbd {
-  font-family: var(--mono);
-  font-size: calc(11px * var(--ui-scale));
-  color: var(--ink-soft);
-  background: var(--paper-2);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  box-shadow: 0 1px 0 var(--rule);
-  padding: 1px 6px;
-}
+/* the card kbds share the empty-state keycap look — see `.av-empty-keys kbd` */
 .ob-hint {
   margin-top: 18px;
 }
@@ -1824,7 +1815,8 @@ html.tauri .av-window {
   font-size: calc(11.5px * var(--ui-scale));
   color: var(--ink-faint);
 }
-.av-empty-keys kbd {
+.av-empty-keys kbd,
+.ob kbd {
   font-family: var(--mono);
   font-size: calc(11px * var(--ui-scale));
   color: var(--ink-soft);
