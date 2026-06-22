@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { chordLabel } from "../editor/commands";
 
 export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
-  // Vim is Noteside's identity, so it's the highlighted default for keyboard pickers.
+  // Vim is Noteside's identity, so it's the default keyboard highlight. `sel` is a
+  // keyboard-only cursor (arrows/h/l); a mouse click picks its card directly.
   const [sel, setSel] = useState<0 | 1>(0); // 0 = vim, 1 = plain keyboard
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -26,10 +27,10 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
       onChoose(sel === 0);
     } else if (k === "v") {
       e.preventDefault();
-      onChoose(true); // straight to vim
-    } else if (k === "n" || k === "p") {
+      onChoose(true); // v → straight to vim
+    } else if (k === "p") {
       e.preventDefault();
-      onChoose(false); // straight to plain keyboard
+      onChoose(false); // p → straight to plain keyboard
     }
   };
 
@@ -48,9 +49,9 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
         <button
           type="button"
           role="radio"
+          tabIndex={-1}
           aria-checked={sel === 0}
           className={"ob-card" + (sel === 0 ? " is-sel" : "")}
-          onMouseEnter={() => setSel(0)}
           onClick={() => onChoose(true)}
         >
           <span className="ob-card-name">Vim</span>
@@ -68,9 +69,9 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
         <button
           type="button"
           role="radio"
+          tabIndex={-1}
           aria-checked={sel === 1}
           className={"ob-card" + (sel === 1 ? " is-sel" : "")}
-          onMouseEnter={() => setSel(1)}
           onClick={() => onChoose(false)}
         >
           <span className="ob-card-name">Plain keyboard</span>
@@ -86,7 +87,8 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
         </button>
       </div>
       <div className="av-empty-keys ob-hint">
-        <kbd>←</kbd> <kbd>→</kbd> choose · <kbd>↵</kbd> confirm · or click
+        <kbd>←</kbd> <kbd>→</kbd> move · <kbd>↵</kbd> confirm · <kbd>v</kbd> / <kbd>p</kbd> pick ·
+        or click
       </div>
     </div>
   );

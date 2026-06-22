@@ -517,7 +517,7 @@ export function App() {
   const finishOnboarding = (vim: boolean) => {
     setOnboarding(false);
     setCfg((c) => ({ ...c, vimMode: vim }));
-    flash(vim ? "vim mode on" : "plain keyboard mode");
+    flash(vim ? "vim mode on" : "plain keyboard mode on");
     setRefocus((r) => r + 1);
   };
   const toggleNav = () => {
