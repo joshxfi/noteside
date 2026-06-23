@@ -1,3 +1,21 @@
+## [1.1.0](https://github.com/joshxfi/noteside/compare/v1.0.0...v1.1.0) (2026-06-23)
+
+### Features
+
+* **desktop:** detect a genuine first launch (isFirstLaunch helper) ([382c67e](https://github.com/joshxfi/noteside/commit/382c67e506ece9e42cd9fa61b23e60cfcb65ede8))
+* **desktop:** first-launch vim vs. plain-keyboard onboarding choice ([4884aae](https://github.com/joshxfi/noteside/commit/4884aae4c3254aec2ace3811365e74ba7652ba31))
+* **landing:** one-click downloads for the visitor's OS ([3876bf0](https://github.com/joshxfi/noteside/commit/3876bf09a8cebf640a39b226ee4e826754ab009e))
+
+### Polish
+
+* **desktop:** tighten onboarding focus, copy, and CSS ([6b61006](https://github.com/joshxfi/noteside/commit/6b610061c9364832bfb3ea5e666942006d5fdb1c))
+* **desktop:** trim onboarding hint to arrows + confirm ([e734436](https://github.com/joshxfi/noteside/commit/e734436e4dec2af99535d11ce94f87ed6c1a5090))
+* **landing:** tidy the hero download CTA, hide demo on mobile ([12183ae](https://github.com/joshxfi/noteside/commit/12183ae36412eb7e198293c85db6aaeb6b118cb1))
+
+### Documentation
+
+* explain the macOS "damaged" Gatekeeper warning on first launch ([39dea52](https://github.com/joshxfi/noteside/commit/39dea521ef1e4eef8d5fabbbaae7da67629ec1b6))
+
 ## 1.0.0 (2026-06-18)
 
 ### Features
