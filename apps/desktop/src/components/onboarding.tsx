@@ -87,8 +87,7 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
         </button>
       </div>
       <div className="av-empty-keys ob-hint">
-        <kbd>←</kbd> <kbd>→</kbd> move · <kbd>↵</kbd> confirm · <kbd>v</kbd> / <kbd>p</kbd> pick ·
-        or click
+        <kbd>←</kbd> <kbd>→</kbd> move · <kbd>↵</kbd> confirm
       </div>
     </div>
   );
