@@ -227,48 +227,57 @@ export function App() {
             <a className="btn btn-primary" href={dl.primary.href} {...linkProps(dl.primary)}>
               {dl.primary.label}
             </a>
-            <a className="btn btn-ghost" href="#demo">
+            <a className="btn btn-ghost max-sm:hidden" href="#demo">
               Try the live demo
             </a>
           </div>
-          <p className="font-mono text-[12.5px] text-ink-faint">
-            Free forever · open source ·{" "}
-            <b className="font-semibold text-ink-soft">macOS, Windows &amp; Linux</b>
-            {dl.version ? <> · {dl.version}</> : null}
+          <p className="mx-auto flex max-w-[46rem] flex-wrap items-center justify-center gap-x-2 gap-y-1 font-mono text-[12.5px] text-ink-faint">
+            <span>Free forever · open source</span>
+            {dl.platforms.map((p) => (
+              <Fragment key={p.os}>
+                <span aria-hidden="true">·</span>
+                <a
+                  className={
+                    "underline underline-offset-2 hover:text-accent " +
+                    (p.os === dl.os ? "font-semibold text-ink-soft" : "text-ink-soft")
+                  }
+                  href={p.href}
+                  {...linkProps(p)}
+                >
+                  {p.label}
+                </a>
+              </Fragment>
+            ))}
+            {dl.version ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <a
+                  className="underline underline-offset-2 hover:text-accent"
+                  href={dl.allDownloads.href}
+                  title="All downloads"
+                  {...linkProps(dl.allDownloads)}
+                >
+                  {dl.version}
+                </a>
+              </>
+            ) : null}
           </p>
-          {(dl.primary.note || dl.alternates.length > 0) && (
-            <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 font-mono text-[12.5px] text-ink-faint">
-              {dl.primary.note ? <span className="text-ink-soft">{dl.primary.note}</span> : null}
-              {dl.alternates.map((alt, i) => (
-                <Fragment key={alt.label}>
-                  {i > 0 || dl.primary.note ? <span aria-hidden="true">·</span> : null}
-                  <a
-                    className="inline-block py-0.5 text-ink-soft underline underline-offset-2 hover:text-accent"
-                    href={alt.href}
-                    {...linkProps(alt)}
-                  >
-                    {alt.label}
-                  </a>
-                </Fragment>
-              ))}
-            </p>
-          )}
           {dl.os === "mac" && (
-            <p className="mt-2 font-mono text-[12.5px] text-ink-faint">
-              Unsigned build — macOS shows a one-time warning on first launch.{" "}
+            <p className="mx-auto mt-4 max-w-[32rem] font-mono text-[11px] leading-[1.5] text-ink-faint">
+              macOS shows a one-time warning for unsigned apps.{" "}
               <a
-                className="underline underline-offset-2 hover:text-accent"
+                className="whitespace-nowrap underline underline-offset-2 hover:text-accent"
                 href={`${DOCS}/getting-started`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                How to open it ↗
+                How to open ↗
               </a>
             </p>
           )}
         </section>
 
-        <section className="pt-10 pb-24" id="demo">
+        <section className="pt-10 pb-24 max-sm:hidden" id="demo">
           <div className="reveal relative mx-auto aspect-[1120/740] w-[min(1120px,94vw)] overflow-hidden rounded-[18px] border border-rule-soft bg-paper-2 shadow-[var(--shadow)]">
             <iframe
               className="absolute inset-0 block h-full w-full border-0"
@@ -356,7 +365,7 @@ export function App() {
                 <a className="whitespace-nowrap hover:text-accent" href="#get">
                   Get started
                 </a>
-                <a className="whitespace-nowrap hover:text-accent" href="#demo">
+                <a className="whitespace-nowrap hover:text-accent max-sm:hidden" href="#demo">
                   Live demo
                 </a>
                 <a className="whitespace-nowrap hover:text-accent" href="#features">
