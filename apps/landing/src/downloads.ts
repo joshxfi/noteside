@@ -32,10 +32,24 @@ export interface Cta {
   download: boolean;
 }
 
+/** One platform's primary download, for the inline "macOS · Windows · Linux"
+ *  links. Shaped to satisfy `Cta` (label/href/download) so `linkProps` works on it,
+ *  plus `os` so the UI can mark the visitor's own platform. */
+export interface PlatformLink {
+  os: "mac" | "windows" | "linux";
+  label: string;
+  href: string;
+  download: boolean;
+}
+
 export interface Downloads {
   primary: Cta;
   alternates: Cta[];
   version: string | null;
+  /** One direct download per platform (most common variant), in mac/windows/linux order. */
+  platforms: PlatformLink[];
+  /** The Releases page ("All downloads ↗") — the escape hatch for other arches/variants. */
+  allDownloads: Cta;
 }
 
 // --- platform detection (browser-only; callers pass navigator fields in) ---
@@ -121,6 +135,25 @@ function indexAssets(assets: ReleaseAsset[]): Partial<Record<Kind, string>> {
   return out;
 }
 
+const PLATFORM_LABEL = { mac: "macOS", windows: "Windows", linux: "Linux" } as const;
+
+// One direct download per platform (the dominant variant) for the inline platform
+// links. Until the release loads — or if a platform's asset is missing — the link
+// points at the Releases page instead, so it's always clickable and never dead.
+function platformLinks(a: Partial<Record<Kind, string>>): PlatformLink[] {
+  const pick = {
+    mac: a.macArm ?? a.macX64,
+    windows: a.winExe ?? a.winMsi,
+    linux: a.linuxAppImage ?? a.linuxDeb ?? a.linuxRpm,
+  };
+  return (["mac", "windows", "linux"] as const).map((os) => ({
+    os,
+    label: PLATFORM_LABEL[os],
+    href: pick[os] ?? LATEST_PAGE,
+    download: !!pick[os],
+  }));
+}
+
 export function buildDownloads(os: OS, macArch: MacArch, release: Release | null): Downloads {
   const version = release?.tag_name ?? null;
   const a = release ? indexAssets(release.assets) : {};
@@ -135,17 +168,20 @@ export function buildDownloads(os: OS, macArch: MacArch, release: Release | null
   // loads, so the button always shows the right OS label from first paint.
   const page = (label: string): Cta => ({ label, href: LATEST_PAGE, download: false });
   const allDownloads = page("All downloads ↗");
+  // Fields common to every branch — the inline platform links, the Releases-page
+  // escape hatch, and the version.
+  const base = { version, platforms: platformLinks(a), allDownloads };
 
   if (os === "mac") {
     const intel = macArch === "x64";
     const primaryUrl = intel ? (a.macX64 ?? a.macArm) : (a.macArm ?? a.macX64);
     if (!primaryUrl)
-      return { version, primary: page("Download for macOS"), alternates: [allDownloads] };
+      return { ...base, primary: page("Download for macOS"), alternates: [allDownloads] };
     const note = primaryUrl === a.macArm ? "Apple Silicon" : "Intel";
     const otherUrl = primaryUrl === a.macArm ? a.macX64 : a.macArm;
     const otherLabel = primaryUrl === a.macArm ? "Intel Mac" : "Apple Silicon";
     return {
-      version,
+      ...base,
       primary: file(primaryUrl, "Download for macOS", note),
       alternates: [...(otherUrl ? [file(otherUrl, otherLabel)] : []), allDownloads],
     };
@@ -154,9 +190,9 @@ export function buildDownloads(os: OS, macArch: MacArch, release: Release | null
   if (os === "windows") {
     const primaryUrl = a.winExe ?? a.winMsi;
     if (!primaryUrl)
-      return { version, primary: page("Download for Windows"), alternates: [allDownloads] };
+      return { ...base, primary: page("Download for Windows"), alternates: [allDownloads] };
     return {
-      version,
+      ...base,
       primary: file(primaryUrl, "Download for Windows"),
       alternates: [
         ...(a.winExe && a.winMsi ? [file(a.winMsi, ".msi installer")] : []),
@@ -168,7 +204,7 @@ export function buildDownloads(os: OS, macArch: MacArch, release: Release | null
   if (os === "linux") {
     const primaryUrl = a.linuxAppImage ?? a.linuxDeb ?? a.linuxRpm;
     if (!primaryUrl)
-      return { version, primary: page("Download for Linux"), alternates: [allDownloads] };
+      return { ...base, primary: page("Download for Linux"), alternates: [allDownloads] };
     const note =
       primaryUrl === a.linuxAppImage ? "AppImage" : primaryUrl === a.linuxDeb ? ".deb" : ".rpm";
     const alternates: Cta[] = [];
@@ -180,22 +216,16 @@ export function buildDownloads(os: OS, macArch: MacArch, release: Release | null
       if (url && url !== primaryUrl) alternates.push(file(url, label));
     }
     return {
-      version,
+      ...base,
       primary: file(primaryUrl, "Download for Linux", note),
       alternates: [...alternates, allDownloads],
     };
   }
 
   // Genuinely unknown OS (mobile, unrecognised UA) → a generic button to the
-  // Releases page, plus one direct link per platform once assets are known.
-  const alternates: Cta[] = [];
-  const mac = a.macArm ?? a.macX64;
-  const win = a.winExe ?? a.winMsi;
-  const linux = a.linuxAppImage ?? a.linuxDeb ?? a.linuxRpm;
-  if (mac) alternates.push(file(mac, "macOS"));
-  if (win) alternates.push(file(win, "Windows"));
-  if (linux) alternates.push(file(linux, "Linux"));
-  return { version, primary: page("Download for desktop"), alternates };
+  // Releases page; the inline platform links (in `base`) still give one direct
+  // download per platform once assets are known.
+  return { ...base, primary: page("Download for desktop"), alternates: [allDownloads] };
 }
 
 // --- caching: one API call per session, refreshed in the background ---
