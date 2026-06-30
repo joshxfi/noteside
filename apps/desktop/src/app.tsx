@@ -29,6 +29,7 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
+import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
 import { isTauri, windowControl } from "./use-window-controls";
@@ -484,6 +485,12 @@ export function App() {
     if (hit) void session.open(hit.id);
     else flash(`no note: ${target}`);
   };
+  // open an external URL under the cursor (gf / gx / :follow / Mod-click)
+  const onOpenUrl = (url: string) => {
+    void openExternal(url).then((ok) => {
+      if (!ok) flash(`can't open: ${url}`);
+    });
+  };
   const openBacklinks = async () => {
     if (s.status !== "note" || !s.activeId) {
       flash("open a note first");
@@ -744,6 +751,7 @@ export function App() {
                 onQuit={() => session.quit()}
                 onCommand={onCommand}
                 onFollowLink={onFollowLink}
+                onOpenUrl={onOpenUrl}
               />
             ) : (
               <EmptyState hasClosed={!!s.lastNoteId} onReopen={() => session.reopenLast()} />

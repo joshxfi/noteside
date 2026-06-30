@@ -67,7 +67,12 @@ export const nsTheme = EditorView.theme({
     textDecoration: "underline",
     textDecorationColor: "color-mix(in oklab, var(--accent), transparent 55%)",
     textUnderlineOffset: "3px",
+  },
+  // The "clickable" affordance is only true while Mod is held (Mod-click opens),
+  // so surface the pointer cursor + brighter underline only then.
+  "&.cm-mod-active .cm-wikilink": {
     cursor: "pointer",
+    textDecorationColor: "var(--accent)",
   },
   // vim command line (the transient `:` / `/` panel)
   ".cm-panels": {

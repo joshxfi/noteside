@@ -3,7 +3,7 @@
 // editor is currently mounted via a module-level handler registry.
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
-import { wikilinkAt } from "../links";
+import { urlAt, wikilinkAt } from "../links";
 import { COMMANDS, type Command } from "./commands";
 
 export type AppCommand =
@@ -30,6 +30,7 @@ export interface EditorHandlers {
   saveQuit: () => void;
   command: (c: AppCommand) => void;
   followLink: (target: string) => void;
+  openUrl: (url: string) => void;
 }
 
 let active: EditorHandlers | null = null;
@@ -91,15 +92,23 @@ export function setUserKeymaps(lines: string[]) {
   }
 }
 
-// `:follow` (and `gf`): jump to the note named by the [[wikilink]] under the
-// cursor. Reads the raw line/column, so it works regardless of live-preview.
+// `:follow` (and `gf` / `gx`): open whatever is under the cursor — a [[wikilink]]
+// jumps to its note, otherwise an http(s)/mailto URL (bare or a markdown
+// `[text](url)` target) opens in the browser. Reads the raw line/column, so it
+// works regardless of live-preview.
 function runFollow() {
   const v = active?.view;
   if (!active || !v) return;
   const head = v.state.selection.main.head;
   const ln = v.state.doc.lineAt(head);
-  const target = wikilinkAt(ln.text, head - ln.from);
-  if (target) active.followLink(target);
+  const col = head - ln.from;
+  const target = wikilinkAt(ln.text, col);
+  if (target) {
+    active.followLink(target);
+    return;
+  }
+  const url = urlAt(ln.text, col);
+  if (url) active.openUrl(url);
 }
 
 function runEx(c: Command) {
@@ -122,8 +131,10 @@ export function defineExCommands() {
     for (const name of c.ex) Vim.defineEx(name, name, () => runEx(c));
   }
 
-  // `gf` follows the wikilink under the cursor; `<Space>` opens the leader palette.
+  // `gf`/`gx` follow the link under the cursor (wikilink → note, else open the
+  // URL); `<Space>` opens the leader palette.
   Vim.map("gf", ":follow<CR>", "normal");
+  Vim.map("gx", ":follow<CR>", "normal");
   Vim.map("<Space>", ":palette<CR>", "normal");
 
   // Highlight all matches of the last search (vim :set hlsearch); :noh clears.
