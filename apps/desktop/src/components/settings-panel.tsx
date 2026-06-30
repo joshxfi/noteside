@@ -9,6 +9,9 @@ import {
   ESC_PRESETS,
   UI_FONTS,
 } from "../settings";
+import { checkForUpdate, RELEASES_LATEST, type UpdateCheck } from "../check-update";
+import { openExternal } from "../open-external";
+import { useAppVersion } from "../use-app-version";
 
 function Pill({
   active,
@@ -83,10 +86,54 @@ export function SettingsPanel({
   const [customEsc, setCustomEsc] = useState(
     ESC_PRESETS.some((p) => p.value === cfg.escMap) ? "" : cfg.escMap,
   );
+  const version = useAppVersion();
+  const [about, setAbout] = useState<{ kind: "idle" | "checking" } | UpdateCheck>({ kind: "idle" });
 
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
+
+  const runCheck = async () => {
+    setAbout({ kind: "checking" });
+    setAbout(await checkForUpdate(version));
+  };
+  // The About row's keyboard/click action: once an update is found (or the check
+  // failed) it opens the releases page; otherwise it (re-)runs the check.
+  const onAboutAction = () => {
+    if (about.kind === "available" || about.kind === "error") void openExternal(RELEASES_LATEST);
+    else void runCheck();
+  };
+  const aboutControl = () => {
+    switch (about.kind) {
+      case "checking":
+        return <span className="set-updnote">Checking…</span>;
+      case "current":
+        return <span className="set-updnote">You're up to date</span>;
+      case "available":
+        return (
+          <button
+            type="button"
+            tabIndex={-1}
+            className="set-editfile set-update"
+            onClick={onAboutAction}
+          >
+            v{about.latest} available — download&nbsp;→
+          </button>
+        );
+      case "error":
+        return (
+          <button type="button" tabIndex={-1} className="set-editfile" onClick={onAboutAction}>
+            Couldn't check — open releases&nbsp;→
+          </button>
+        );
+      default:
+        return (
+          <button type="button" tabIndex={-1} className="set-editfile" onClick={onAboutAction}>
+            Check for updates&nbsp;→
+          </button>
+        );
+    }
+  };
 
   // each row knows how to cycle its value with the keyboard
   const cycleList = (
@@ -134,6 +181,7 @@ export function SettingsPanel({
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
     { cycle: () => onShortcuts() }, // idx 12 — opens the keymap editor (cheatsheet)
+    { cycle: onAboutAction }, // idx 13 — About: check for updates / open releases
   ];
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -425,6 +473,11 @@ export function SettingsPanel({
             <button type="button" tabIndex={-1} className="set-editfile" onClick={onShortcuts}>
               Edit keys&nbsp;→
             </button>
+          </Row>
+
+          <div className="set-sec">About</div>
+          <Row idx={13} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+            {aboutControl()}
           </Row>
         </div>
 
