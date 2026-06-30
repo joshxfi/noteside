@@ -1,3 +1,14 @@
+## [1.2.0](https://github.com/joshxfi/noteside/compare/v1.1.0...v1.2.0) (2026-06-30)
+
+### Features
+
+* **desktop:** open external URLs under the cursor ([b27eee0](https://github.com/joshxfi/noteside/commit/b27eee09fd65b2b6904259806ac3f82668e606f4))
+* **desktop:** show app version + check for updates in Settings ([df03f39](https://github.com/joshxfi/noteside/commit/df03f395dd6f6f7326272aa9efef4ac21dabb59d))
+
+### Bug Fixes
+
+* **desktop:** apply cursor style and blink settings live ([c753b9a](https://github.com/joshxfi/noteside/commit/c753b9ac0779514c43f30119063740acda69accd))
+
 ## [1.1.0](https://github.com/joshxfi/noteside/compare/v1.0.0...v1.1.0) (2026-06-23)
 
 ### Features

@@ -1,6 +1,6 @@
 {
   "name": "noteside",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Noteside — notes for keyboard people. Offline & keyboard-first notes (vim or shortcuts).",
   "license": "MIT",
