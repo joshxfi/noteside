@@ -39,6 +39,46 @@ export function wikilinkAt(line: string, col: number): string | null {
   return null;
 }
 
+// External links the follow command can open in the browser: bare http(s)/mailto
+// URLs and markdown `[text](url)` targets. Only these schemes are ever returned,
+// so a relative markdown target (`./note.md`) is treated as "not a URL".
+const URL_SCHEME = /^(?:https?|mailto):/i;
+const MD_LINK = /\[[^\]\n]*\]\(([^()\s]+)\)/g;
+const BARE_URL = /(?:https?:\/\/|mailto:)[^\s<>[\]()]+/gi;
+
+// Drop trailing punctuation a URL wouldn't really end with — sentence marks, and
+// a closing paren only when it has no matching open paren inside the URL.
+function trimUrl(url: string): string {
+  let u = url;
+  while (u.length > 0) {
+    const last = u[u.length - 1];
+    if (".,;:!?'\"".includes(last)) u = u.slice(0, -1);
+    else if (last === ")" && !u.includes("(")) u = u.slice(0, -1);
+    else break;
+  }
+  return u;
+}
+
+/** The openable external URL at column `col` within a single line, or null.
+ *  Markdown `[text](url)` takes precedence over the bare scan so the whole
+ *  `[…](…)` span (the visible text included) opens its url; same half-open
+ *  column rule as `wikilinkAt`. */
+export function urlAt(line: string, col: number): string | null {
+  const md = new RegExp(MD_LINK.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = md.exec(line))) {
+    if (col >= m.index && col < m.index + m[0].length) {
+      return URL_SCHEME.test(m[1]) ? m[1] : null;
+    }
+  }
+  const bare = new RegExp(BARE_URL.source, "gi");
+  while ((m = bare.exec(line))) {
+    const url = trimUrl(m[0]);
+    if (col >= m.index && col < m.index + url.length) return url;
+  }
+  return null;
+}
+
 const norm = (s: string) => s.trim().toLowerCase();
 const slug = (s: string) =>
   norm(s)

@@ -25,7 +25,7 @@ import { type ChordOverrides, type Command, commandChordKeymap } from "./command
 import { activeLineHighlight } from "./active-line";
 import { livePreview } from "./live-preview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
-import { wikilinkAt } from "../links";
+import { urlAt, wikilinkAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
 
 const MODE_LABEL: Record<string, string> = {
@@ -37,6 +37,13 @@ const MODE_LABEL: Record<string, string> = {
 
 const WORD_COUNT_DELAY_MS = 180;
 const DIRTY_CHECK_DELAY_MS = 220;
+
+// The "open link" click modifier: Cmd on macOS, Ctrl elsewhere — matching how CM
+// resolves `Mod-` chords, so mac Ctrl-click stays a context-menu gesture.
+const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
+const modActive = (e: { metaKey: boolean; ctrlKey: boolean }): boolean =>
+  IS_MAC ? e.metaKey : e.ctrlKey;
+const isModKey = (key: string): boolean => key === (IS_MAC ? "Meta" : "Control");
 
 // The always-on chord keymap lives in a Compartment so a rebind (cfg.chords)
 // can be re-applied to the LIVE editor without a remount (CM wires keymaps at
@@ -69,6 +76,27 @@ export interface EditorProps {
   onCommand: (c: AppCommand) => void;
   /** Follow the wikilink target under the cursor (`gf` / `:follow`). */
   onFollowLink: (target: string) => void;
+  /** Open an external URL under the cursor in the system browser. */
+  onOpenUrl: (url: string) => void;
+}
+
+// Resolve the link at a document offset and dispatch it: a [[wikilink]] follows
+// to its note, otherwise an external URL opens in the browser. Shared by the
+// `follow` chord and Mod-click. Reads raw line text, so live-preview is moot.
+function openLinkAt(view: EditorView, pos: number, p: EditorProps): boolean {
+  const ln = view.state.doc.lineAt(pos);
+  const col = pos - ln.from;
+  const target = wikilinkAt(ln.text, col);
+  if (target) {
+    p.onFollowLink(target);
+    return true;
+  }
+  const url = urlAt(ln.text, col);
+  if (url) {
+    p.onOpenUrl(url);
+    return true;
+  }
+  return false;
 }
 
 function relFmt(n: number, state: EditorState): string {
@@ -179,12 +207,9 @@ export function Editor(props: EditorProps) {
         if (searchPanelOpen(v.state)) closeSearchPanel(v);
         else openSearchPanel(v);
       } else if (cmd.editor === "follow" && v) {
-        // Non-vim equivalent of `gf` / `:follow`: resolve the [[wikilink]] under
-        // the cursor from the raw line text (works regardless of live-preview).
-        const head = v.state.selection.main.head;
-        const ln = v.state.doc.lineAt(head);
-        const target = wikilinkAt(ln.text, head - ln.from);
-        if (target) p.onFollowLink(target);
+        // Non-vim equivalent of `gf` / `:follow`: open the link under the cursor
+        // (wikilink → note, else external URL → browser).
+        openLinkAt(v, v.state.selection.main.head, p);
       } else if (cmd.editor === "searchNext" && v) {
         findNext(v);
       } else if (cmd.editor === "searchPrev" && v) {
@@ -228,6 +253,31 @@ export function Editor(props: EditorProps) {
       Prec.high(keymap.of(completionKeymap)),
       EditorView.lineWrapping,
       nsTheme,
+      // Mod-click (Cmd/Ctrl) opens the link under the pointer — a wikilink or an
+      // external URL — leaving plain click for cursor placement. A `cm-mod-active`
+      // class (toggled while Mod is held) reveals the link cursor only then, so
+      // the pointer affordance is honest; blur clears any lingering state.
+      EditorView.domEventHandlers({
+        mousedown(e, view) {
+          if (e.button !== 0 || !modActive(e)) return false;
+          const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+          if (pos == null || !openLinkAt(view, pos, propsRef.current)) return false;
+          e.preventDefault();
+          return true;
+        },
+        keydown(e, view) {
+          if (isModKey(e.key)) view.dom.classList.add("cm-mod-active");
+          return false;
+        },
+        keyup(e, view) {
+          if (isModKey(e.key)) view.dom.classList.remove("cm-mod-active");
+          return false;
+        },
+        blur(_e, view) {
+          view.dom.classList.remove("cm-mod-active");
+          return false;
+        },
+      }),
       // Always-on app chords (both vim and non-vim) — Mod- combos can't collide
       // with vim's bare-key normal mode. Derived from the command table.
       chordKeymap.of(
@@ -273,6 +323,7 @@ export function Editor(props: EditorProps) {
       },
       command: (c) => propsRef.current.onCommand(c),
       followLink: (t) => propsRef.current.onFollowLink(t),
+      openUrl: (u) => propsRef.current.onOpenUrl(u),
     });
 
     const cm = getCM(view);
