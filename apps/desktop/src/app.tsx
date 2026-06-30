@@ -733,6 +733,7 @@ export function App() {
                 savedText={s.savedText}
                 vimMode={cfg.vimMode}
                 cursorBlink={cfg.cursorBlink}
+                cursor={cfg.cursor}
                 relativeNumbers={cfg.relativeNumbers}
                 chordOverrides={cfg.chords}
                 preview={previewOn}

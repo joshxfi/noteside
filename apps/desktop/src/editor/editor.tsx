@@ -42,6 +42,10 @@ const DIRTY_CHECK_DELAY_MS = 220;
 // can be re-applied to the LIVE editor without a remount (CM wires keymaps at
 // mount; a remount would also steal focus from the open shortcut editor).
 const chordKeymap = new Compartment();
+// drawSelection lives in its own Compartment too, so toggling cursor-blink
+// reconfigures the live editor (same no-remount reason). Both CM's bar caret and
+// vim's block cursor read this drawSelection config for their blink rate.
+const selectionComp = new Compartment();
 
 defineExCommands();
 
@@ -53,6 +57,8 @@ export interface EditorProps {
   savedText: string;
   vimMode: boolean;
   cursorBlink: boolean;
+  /** Caret shape for insert / non-vim mode (vim normal mode is always a block). */
+  cursor: "block" | "bar" | "underline";
   relativeNumbers: boolean;
   /** Non-vim chord overrides (`bind` lines), applied to the chord keymap at mount. */
   chordOverrides?: ChordOverrides;
@@ -201,7 +207,7 @@ export function Editor(props: EditorProps) {
       lineNumbers(relativeNumbers ? { formatNumber: relFmt } : undefined),
       activeLineHighlight,
       highlightActiveLineGutter(),
-      drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
+      selectionComp.of(drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {})),
       history(),
       // in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
       // theme styling. The default panel handles type / Enter (next) / Esc (close).
@@ -309,6 +315,17 @@ export function Editor(props: EditorProps) {
     });
   }, [props.chordOverrides]);
 
+  // Re-apply cursor-blink to the live editor (no remount → no focus theft).
+  // Reconfiguring the facet makes both CM's cursorLayer and vim's block-cursor
+  // plugin re-read the blink rate, so the change takes effect immediately.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: selectionComp.reconfigure(
+        drawSelection(props.cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
+      ),
+    });
+  }, [props.cursorBlink]);
+
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -319,7 +336,7 @@ export function Editor(props: EditorProps) {
   }, [props.savedText]);
 
   return (
-    <div className="av-editor">
+    <div className="av-editor" data-cursor={props.cursor}>
       <div className="av-cm" ref={hostRef} />
       <div className="av-status">
         <div className={"av-mode " + (vimMode ? "mode-" + mode : "mode-text")}>

@@ -809,25 +809,6 @@ body {
   }
 }
 
-/* ── cursor styles ────────────────────────────────────────── */
-.av-editor.cs-bar .av-cursor {
-  background: transparent;
-  color: inherit;
-  border-radius: 0;
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.av-editor.cs-underline .av-cursor {
-  background: transparent;
-  color: inherit;
-  border-radius: 0;
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-.av-editor.no-blink .av-cursor,
-.av-editor.no-blink .av-caret {
-  animation: none;
-  opacity: 1;
-}
-
 /* ── settings panel ───────────────────────────────────────── */
 .set-scrim {
   position: absolute;
@@ -1446,6 +1427,26 @@ html.tauri .av-window {
 }
 .av-cm .cm-cursor {
   border-left-color: var(--accent);
+}
+/* Caret shape from cfg.cursor (data-cursor on .av-editor). Scoped with
+   :not(.cm-fat-cursor) so vim's intrinsic normal/visual block stays a block —
+   this governs the insert-mode and non-vim caret only. */
+.av-editor[data-cursor="bar"] .cm-cursor:not(.cm-fat-cursor) {
+  border-left: 2px solid var(--accent);
+  border-bottom: none;
+  background: transparent;
+}
+.av-editor[data-cursor="underline"] .cm-cursor:not(.cm-fat-cursor) {
+  border-left: none;
+  border-bottom: 2px solid var(--accent);
+  background: transparent;
+  width: 0.55em;
+}
+.av-editor[data-cursor="block"] .cm-cursor:not(.cm-fat-cursor) {
+  border-left: none;
+  border-bottom: none;
+  background: color-mix(in oklab, var(--accent), transparent 55%);
+  width: 0.55em;
 }
 
 /* ── legibility: bump the smallest UI fonts (settings panel, status, meta) ── */
