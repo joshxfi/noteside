@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import pkg from "./package.json";
 
 // @tauri-apps/cli sets TAURI_DEV_HOST when developing over the network.
 const host = process.env.TAURI_DEV_HOST;
@@ -7,6 +8,9 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/  — tuned per Tauri's Vite guide.
 export default defineConfig({
   plugins: [react()],
+  // Build-time app version (kept in lockstep with tauri.conf.json by
+  // scripts/bump-version.mjs) — the web/demo fallback for useAppVersion().
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // Relative base so the same build can be served standalone AND embedded
   // in the landing page's <iframe> from /demo/.
   base: "./",

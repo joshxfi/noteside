@@ -1142,6 +1142,18 @@ body {
 .set-editfile:hover {
   color: var(--ink);
 }
+.set-updnote {
+  font-family: var(--mono);
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--ink-faint);
+}
+.set-update {
+  color: var(--accent);
+}
+.set-update:hover {
+  color: var(--accent);
+  filter: brightness(1.05);
+}
 .set-done {
   font-family: var(--mono);
   font-size: calc(12.5px * var(--ui-scale));
@@ -1477,6 +1489,7 @@ html.tauri .av-window {
   font-size: calc(11.5px * var(--ui-scale));
 }
 .set-editfile,
+.set-updnote,
 .set-done {
   font-size: calc(13.5px * var(--ui-scale));
 }
