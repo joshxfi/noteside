@@ -33,13 +33,25 @@ const ramp = (): Base16Palette => ({
 });
 
 describe("theme registry", () => {
-  it("ships the two Noteside builtins plus the 14 curated schemes", () => {
-    expect(THEMES).toHaveLength(16);
+  it("ships the two Noteside builtins first, then the curated base16 schemes", () => {
+    expect(THEMES.length).toBeGreaterThanOrEqual(30);
+    // builtins lead the list (the default no-override render path)
+    expect(THEMES[0].kind).toBe("builtin");
+    expect(THEMES[1].kind).toBe("builtin");
     const ids = THEMES.map((t) => t.id);
-    expect(ids).toContain("noteside-light");
-    expect(ids).toContain("noteside-dark");
-    expect(ids).toContain("catppuccin-mocha");
-    expect(ids).toContain("gruvbox-dark");
+    for (const id of [
+      "noteside-light",
+      "noteside-dark",
+      "catppuccin-mocha",
+      "gruvbox-dark",
+      "dracula",
+      "github-light",
+    ]) {
+      expect(ids).toContain(id);
+    }
+    // a healthy mix of both polarities for the two-column picker
+    expect(THEMES.filter((t) => t.mode === "dark").length).toBeGreaterThanOrEqual(10);
+    expect(THEMES.filter((t) => t.mode === "light").length).toBeGreaterThanOrEqual(10);
   });
 
   it("gives every theme a 3-color preview and a valid mode", () => {
