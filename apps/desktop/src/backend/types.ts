@@ -59,6 +59,9 @@ export interface Backend {
   /** Notes that link to `noteId` via [[wikilinks]] — scanned backend-side. */
   backlinks(noteId: string): Promise<Backlink[]>;
   saveNote(path: string, body: string): Promise<NoteMeta>;
+  /** Rename a note's file so its slug matches its title. No-op (returns the current
+   *  meta) when the filename already represents the title. Title-based [[links]] survive. */
+  renameNote(path: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
   deleteNote(path: string): Promise<void>;
   searchFiles(query: string): Promise<FileHit[]>;

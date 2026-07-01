@@ -37,13 +37,16 @@ export interface SessionSnapshot {
 
 export interface EditingSessionDeps {
   /** Read once at creation; must be stable. */
-  backend: Pick<Backend, "readNote" | "saveNote" | "listNotes">;
+  backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes">;
   /** Transient toast channel (App's flash): I/O failures + the "reloaded from disk" notice. */
   notify(message: string): void;
   /** A config buffer was saved (`:w`) — App parses, applies, and persists. */
   onConfigApply(text: string): void;
   /** A note was persisted — App updates that row in the sidebar list in place. */
   onNoteSaved(meta: NoteMeta): void;
+  /** A note's file was renamed to match its title (on explicit save) — App swaps the
+   *  old sidebar row (`oldId`) for the new meta. The active buffer's id migrates here. */
+  onNoteRenamed(oldId: string, meta: NoteMeta): void;
   /** An external change refreshed the whole list — App replaces the sidebar list. */
   onNotesChanged(notes: NoteMeta[]): void;
   /** Read once at creation. Default 800ms. */
@@ -82,7 +85,7 @@ export interface EditingSession {
 }
 
 export function createEditingSession(deps: EditingSessionDeps): EditingSession {
-  const { backend, notify, onConfigApply, onNoteSaved, onNotesChanged } = deps;
+  const { backend, notify, onConfigApply, onNoteSaved, onNoteRenamed, onNotesChanged } = deps;
 
   // ---- internal state (was App's scattered useState + activeIdRef/doSaveRef) ----
   let activeId: string | null = null; // note path | CONFIG_ID | null — the discriminant + note id
@@ -120,9 +123,11 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       savedText: isConfig ? configSaved : noteSaved,
       dirty: noteDirty,
       gotoLine: isConfig ? 0 : gotoLine,
-      editorKey: isConfig
-        ? `config-${configKey}`
-        : `${activeId}:${gotoLine}:${reloadNonce}:${navSeq}`,
+      // Deliberately NOT keyed on activeId: navSeq already bumps on every open, so
+      // this stays unique per mount — while a rename-on-save (which changes activeId
+      // but not navSeq) keeps the key stable, so the editor repoints without a
+      // remount (no cursor jump).
+      editorKey: isConfig ? `config-${configKey}` : `${gotoLine}:${reloadNonce}:${navSeq}`,
     };
   }
   let snapshot: SessionSnapshot = build();
@@ -182,6 +187,28 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     deps.autosaveMs ?? DEFAULT_AUTOSAVE_MS,
   );
 
+  // Explicit save (`:w` / Mod-s) only — never autosave, so a title being typed
+  // doesn't churn the filesystem. After the body is on disk, ask the backend to
+  // rename the file to match the title's slug (no-op when it already matches). The
+  // active buffer's id migrates in place; because editorKey excludes activeId there
+  // is no remount (cursor preserved), and title-based [[links]] resolve unchanged.
+  async function maybeRename(id: string): Promise<void> {
+    if (!id || id === CONFIG_ID || activeId !== id) return; // switched away → skip
+    let meta: NoteMeta;
+    try {
+      meta = await backend.renameNote(id);
+    } catch (e) {
+      notify(`rename failed: ${e}`);
+      return;
+    }
+    if (meta.id === id) return; // filename already matched the title
+    if (activeId === id) activeId = meta.id;
+    if (lastNoteId === id) lastNoteId = meta.id;
+    noteTitle = meta.title;
+    onNoteRenamed(id, meta);
+    commit();
+  }
+
   async function open(id: string, line = 0): Promise<void> {
     autosaver.flush(); // land the outgoing buffer's queued save BEFORE reading the next
     const token = ++loadToken;
@@ -226,7 +253,8 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       onConfigApply(text);
       commit();
     } else if (activeId) {
-      void persistNote(activeId, text, editSeq);
+      const id = activeId;
+      void persistNote(id, text, editSeq).then(() => maybeRename(id));
     }
   }
 

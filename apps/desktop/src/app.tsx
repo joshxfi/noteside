@@ -373,6 +373,7 @@ export function App() {
       flash("config applied");
     },
     onNoteSaved: (meta) => setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n))),
+    onNoteRenamed: (oldId, meta) => setNotes((ns) => ns.map((n) => (n.id === oldId ? meta : n))),
     onNotesChanged: setNotes,
   });
 

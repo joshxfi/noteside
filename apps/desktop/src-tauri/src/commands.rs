@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use tauri::{AppHandle, State};
@@ -143,6 +143,47 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
     .await?;
     let mut g = state.notebook.lock().unwrap();
     g.record_own_write(meta.clone(), initial, Instant::now());
+    Ok(meta)
+}
+
+/// Rename a note's file so its slug matches its (frontmatter/heading-derived) title.
+/// No-op when the filename already represents the title (returns the current meta).
+/// Wikilinks resolve by title, so title-based `[[links]]` keep working across the move.
+#[tauri::command]
+pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
+    let root = {
+        let g = state.notebook.lock().unwrap();
+        g.root.clone().ok_or(AppError::NoNotebook)?
+    };
+    let rel = path.clone();
+    let (renamed, meta, body) = blocking(move || {
+        let old_abs = notebook::safe_note_path(&root, &rel)
+            .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+        let body = std::fs::read_to_string(&old_abs)
+            .map_err(|e| AppError::Msg(format!("read failed: {e}")))?;
+        // Derive the title exactly as the index does, then slugify it.
+        let title = notebook::parse_meta(rel.clone(), &body, 0).title;
+        let slug = notebook::slugify(&title);
+        let stem = Path::new(&rel).file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if notebook::stem_matches_slug(stem, &slug) {
+            let meta = notebook::parse_meta(rel.clone(), &body, notebook::mtime_millis(&old_abs));
+            return Ok((false, meta, body));
+        }
+        let new_abs = notebook::unique_note_path(&root, &slug);
+        std::fs::rename(&old_abs, &new_abs)
+            .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
+        let new_rel = notebook::rel_path(&root, &new_abs);
+        let meta = notebook::parse_meta(new_rel, &body, notebook::mtime_millis(&new_abs));
+        Ok((true, meta, body))
+    })
+    .await?;
+    let mut g = state.notebook.lock().unwrap();
+    if renamed {
+        g.record_own_rename(&path, meta.clone(), body, Instant::now());
+    } else {
+        // Refresh the in-memory meta (title may have changed) without a move.
+        g.record_own_write(meta.clone(), body, Instant::now());
+    }
     Ok(meta)
 }
 

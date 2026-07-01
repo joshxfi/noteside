@@ -22,6 +22,7 @@ export const tauriBackend: Backend = {
   previewNote: (path) => invoke<NoteDoc>("preview_note", { path }),
   backlinks: (noteId) => invoke<Backlink[]>("backlinks", { id: noteId }),
   saveNote: (path, body) => invoke<NoteMeta>("save_note", { path, body }),
+  renameNote: (path) => invoke<NoteMeta>("rename_note", { path }),
   createNote: (title) => invoke<NoteMeta>("create_note", { title: title ?? null }),
   deleteNote: (path) => invoke<void>("delete_note", { path }),
   searchFiles: (query) => invoke<FileHit[]>("search_files", { query }),
