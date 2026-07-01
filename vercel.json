@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm build:landing",
   "outputDirectory": "apps/landing/dist",
-  "framework": null
+  "framework": null,
+  "rewrites": [{ "source": "/((?!assets/|demo/|.*\\.).*)", "destination": "/index.html" }]
 }
