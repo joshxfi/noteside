@@ -22,6 +22,9 @@
     },
     "test:rust": {
       "cache": false
+    },
+    "e2e": {
+      "cache": false
     }
   }
 }
