@@ -134,6 +134,10 @@ body {
   padding: clamp(12px, 3vw, 40px);
 }
 .av-window {
+  /* Containing block for the overlay scrims (settings/finder/palette/backlinks,
+     all position:absolute inset:0). Without this they resolve to the viewport and
+     escape the window's rounded `overflow: hidden`, squaring off the corners. */
+  position: relative;
   width: min(1120px, 100%);
   height: min(740px, 100%);
   background: var(--paper);
