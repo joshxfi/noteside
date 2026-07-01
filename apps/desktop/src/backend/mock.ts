@@ -51,6 +51,23 @@ function titleFromBody(text: string): string | null {
   return null;
 }
 
+function slugify(title: string): string {
+  return (
+    title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "untitled"
+  );
+}
+// Mirrors notebook::stem_matches_slug — a filename already representing this slug
+// exactly or as a `<slug>-N` collision variant.
+function stemMatchesSlug(stem: string, slug: string): boolean {
+  if (stem === slug) return true;
+  const rest = stem.startsWith(slug + "-") ? stem.slice(slug.length + 1) : null;
+  return rest !== null && /^\d+$/.test(rest);
+}
+
 function base(r: Rec): Omit<FileHit, "score" | "positions" | "titlePositions"> {
   return {
     id: r.meta.id,
@@ -200,6 +217,22 @@ export const mockBackend: Backend = {
       ? { ...existing.meta, title, updated: Date.now() }
       : { id: path, path, title, tags: [], created: null, updated: Date.now(), pinned: false };
     recs.set(path, { meta, body });
+    return meta;
+  },
+  async renameNote(path) {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    const title = titleFromBody(r.body);
+    if (!title) return r.meta; // no heading → the filename is the identity
+    const slug = slugify(title);
+    const stem = path.replace(/\.md$/, "");
+    if (stemMatchesSlug(stem, slug)) return r.meta; // filename already matches
+    let newPath = `${slug}.md`;
+    let n = 2;
+    while (recs.has(newPath)) newPath = `${slug}-${n++}.md`;
+    const meta: NoteMeta = { ...r.meta, id: newPath, path: newPath, title, updated: Date.now() };
+    recs.delete(path);
+    recs.set(newPath, { meta, body: r.body });
     return meta;
   },
   async createNote(title) {

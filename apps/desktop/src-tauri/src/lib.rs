@@ -46,6 +46,7 @@ pub fn run() {
             commands::preview_note,
             commands::save_note,
             commands::create_note,
+            commands::rename_note,
             commands::delete_note,
             commands::search_files,
             commands::search_content,

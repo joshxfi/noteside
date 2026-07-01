@@ -17,7 +17,17 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
     updated: 0,
     pinned: false,
   });
-  const backend: Pick<Backend, "readNote" | "saveNote" | "listNotes"> = {
+  const titleOf = (body: string): string | null =>
+    body
+      .split("\n")
+      .map((l) =>
+        l
+          .trim()
+          .replace(/^#+\s*/, "")
+          .trim(),
+      )
+      .find(Boolean) ?? null;
+  const backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes"> = {
     async readNote(id: string): Promise<NoteDoc> {
       calls.push(`read:${id}`); // recorded at call time, before any delay (call-order stays stable)
       const d = delays[id] ?? 0;
@@ -31,6 +41,27 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
       if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
       bodies.set(id, body);
       return metaOf(id);
+    },
+    // Mimics the real command: slug the body's title; rename the file if the
+    // filename doesn't already represent it. Returns the (possibly new) meta.
+    async renameNote(id: string): Promise<NoteMeta> {
+      calls.push(`rename:${id}`);
+      const title = titleOf(bodies.get(id) ?? "");
+      if (!title) return metaOf(id);
+      const slug =
+        title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "untitled";
+      const stem = id.replace(/\.md$/, "");
+      const numbered = stem.startsWith(`${slug}-`) && /^\d+$/.test(stem.slice(slug.length + 1));
+      if (stem === slug || numbered) return metaOf(id);
+      let newId = `${slug}.md`;
+      let n = 2;
+      while (bodies.has(newId)) newId = `${slug}-${n++}.md`;
+      bodies.set(newId, bodies.get(id) as string);
+      bodies.delete(id);
+      return { ...metaOf(newId), title };
     },
     async listNotes(): Promise<NoteMeta[]> {
       calls.push("list");
@@ -49,6 +80,7 @@ function makeSession(
   const notices: string[] = [];
   const configApplied: string[] = [];
   const savedMetas: NoteMeta[] = [];
+  const renamed: { oldId: string; meta: NoteMeta }[] = [];
   const notesChanged: NoteMeta[][] = [];
   const session = createEditingSession({
     backend: fb.backend,
@@ -56,10 +88,11 @@ function makeSession(
     notify: (m) => notices.push(m),
     onConfigApply: (t) => configApplied.push(t),
     onNoteSaved: (m) => savedMetas.push(m),
+    onNoteRenamed: (oldId, m) => renamed.push({ oldId, meta: m }),
     onNotesChanged: (l) => notesChanged.push(l),
     ...over,
   });
-  return { session, notices, configApplied, savedMetas, notesChanged, ...fb };
+  return { session, notices, configApplied, savedMetas, renamed, notesChanged, ...fb };
 }
 
 describe("editingSession", () => {
@@ -331,5 +364,47 @@ describe("editingSession", () => {
     session.cancelAutosave();
     await vi.advanceTimersByTimeAsync(800);
     expect(bodies.get("a.md")).toBe("A"); // the queued save never fired
+  });
+
+  it("explicit save renames the file to match the title, migrating the id without a remount", async () => {
+    const { session, calls, renamed, bodies } = makeSession({ "untitled.md": "# Untitled\n\n" });
+    await session.open("untitled.md");
+    const keyBefore = session.getSnapshot().editorKey;
+    session.change("# Hello World\n\nbody"); // type a real title
+    session.save("# Hello World\n\nbody"); // :w
+    await vi.advanceTimersByTimeAsync(0); // flush persist + rename microtasks
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("hello-world.md"); // id migrated to the slugged filename
+    expect(s.editorKey).toBe(keyBefore); // key unchanged → editor repoints, no remount
+    expect(bodies.has("hello-world.md")).toBe(true);
+    expect(bodies.has("untitled.md")).toBe(false);
+    expect(calls).toContain("rename:untitled.md");
+    expect(renamed).toEqual([
+      {
+        oldId: "untitled.md",
+        meta: expect.objectContaining({ id: "hello-world.md", title: "Hello World" }),
+      },
+    ]);
+  });
+
+  it("explicit save does not rename when the filename already matches the title", async () => {
+    const { session, calls, renamed } = makeSession({ "hello.md": "# Hello\n" });
+    await session.open("hello.md");
+    session.save("# Hello\n");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.getSnapshot().activeId).toBe("hello.md");
+    expect(calls).toContain("rename:hello.md"); // it asked the backend…
+    expect(renamed).toEqual([]); // …but nothing migrated
+  });
+
+  it("autosave never triggers a rename (only explicit save does)", async () => {
+    const { session, calls, renamed } = makeSession({ "untitled.md": "# Untitled\n" });
+    await session.open("untitled.md");
+    session.change("# Hello World\n\nbody");
+    await vi.advanceTimersByTimeAsync(800); // autosave fires
+    expect(calls).toContain("save:untitled.md");
+    expect(calls).not.toContain("rename:untitled.md"); // autosave did NOT rename
+    expect(renamed).toEqual([]);
+    expect(session.getSnapshot().activeId).toBe("untitled.md");
   });
 });

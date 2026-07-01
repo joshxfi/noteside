@@ -57,6 +57,21 @@ impl NotebookState {
         self.suppress_until = Some(now + SUPPRESS);
     }
 
+    /// Record our own rename: drop the old-path record, upsert the new-path record
+    /// (with refreshed meta + body), and arm the echo-suppression window so the
+    /// watcher ignores the move (which surfaces as a delete + create).
+    pub fn record_own_rename(&mut self, old_path: &str, meta: NoteMeta, body: String, now: Instant) {
+        let records = Arc::make_mut(&mut self.records);
+        records.retain(|r| r.meta.path != old_path);
+        if let Some(rec) = records.iter_mut().find(|r| r.meta.path == meta.path) {
+            rec.meta = meta;
+            rec.body = body;
+        } else {
+            records.push(NoteRecord { meta, body });
+        }
+        self.suppress_until = Some(now + SUPPRESS);
+    }
+
     /// Record our own delete: drop the record and arm the suppression window.
     pub fn record_own_delete(&mut self, path: &str, now: Instant) {
         let records = Arc::make_mut(&mut self.records);

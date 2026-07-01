@@ -27,6 +27,7 @@ export function useEditingSession(deps: EditingSessionDeps): {
       notify: (m) => depsRef.current.notify(m),
       onConfigApply: (t) => depsRef.current.onConfigApply(t),
       onNoteSaved: (m) => depsRef.current.onNoteSaved(m),
+      onNoteRenamed: (id, m) => depsRef.current.onNoteRenamed(id, m),
       onNotesChanged: (l) => depsRef.current.onNotesChanged(l),
     }),
   );

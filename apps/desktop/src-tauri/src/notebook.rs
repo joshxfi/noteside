@@ -228,6 +228,19 @@ pub fn slugify(title: &str) -> String {
     }
 }
 
+/// True if a filename `stem` already represents `slug` — either exactly, or as a
+/// `<slug>-N` collision variant. Lets rename-on-save skip a file that is already a
+/// correct name (so we don't churn `hello-2.md` → `hello-3.md` needlessly).
+pub fn stem_matches_slug(stem: &str, slug: &str) -> bool {
+    if stem == slug {
+        return true;
+    }
+    match stem.strip_prefix(slug).and_then(|r| r.strip_prefix('-')) {
+        Some(rest) => !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()),
+        None => false,
+    }
+}
+
 /// Pick a unique `<slug>.md` (or `<slug>-N.md`) path within the notebook root.
 pub fn unique_note_path(root: &Path, slug: &str) -> PathBuf {
     let first = root.join(format!("{slug}.md"));
@@ -275,6 +288,16 @@ mod tests {
         assert_eq!(slugify("  Spaces  & punctuation!! "), "spaces-punctuation");
         assert_eq!(slugify(""), "untitled");
         assert_eq!(slugify("---"), "untitled");
+    }
+
+    #[test]
+    fn stem_matches_slug_exact_and_numbered() {
+        assert!(stem_matches_slug("hello-world", "hello-world"));
+        assert!(stem_matches_slug("hello-world-2", "hello-world")); // collision variant
+        assert!(stem_matches_slug("untitled-17", "untitled"));
+        assert!(!stem_matches_slug("hello-world", "hello")); // different slug
+        assert!(!stem_matches_slug("hello-world-x", "hello-world")); // suffix not numeric
+        assert!(!stem_matches_slug("hello", "hello-world"));
     }
 
     #[test]
