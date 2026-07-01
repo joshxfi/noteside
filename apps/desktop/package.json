@@ -14,6 +14,8 @@
     "test:watch": "vitest",
     "bench": "vitest bench --run",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -40,6 +42,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tauri-apps/cli": "^2.5.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

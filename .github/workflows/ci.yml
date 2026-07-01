@@ -56,3 +56,31 @@ jobs:
       # clippy compiles the crate, so it doubles as the build/compile check.
       - run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+  e2e:
+    name: Playwright e2e (web build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Cache the browser binaries; the lockfile hash busts it on a Playwright bump.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # WebKit ≈ the macOS/Linux production webview; --with-deps pulls its system libs.
+      - run: pnpm --filter @noteside/desktop exec playwright install --with-deps chromium webkit
+      - run: pnpm e2e # turbo → desktop `playwright test`; the config starts vite on :1420
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: apps/desktop/playwright-report
+          retention-days: 7

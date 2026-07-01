@@ -8,6 +8,13 @@ dist/
 .turbo/
 apps/landing/public/demo/
 
+# playwright / e2e
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/.playwright/
+.playwright-mcp/
+
 # rust / tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
