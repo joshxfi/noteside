@@ -1,17 +1,14 @@
 import { Fragment, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { GITHUB, RELEASES, useDownloads } from "./downloads";
+import { useDownloads } from "./downloads";
 import type { Cta } from "./downloads";
-import { LogoMark, Wordmark } from "./logo";
-
-const AUTHOR = "https://github.com/joshxfi";
+import { LogoMark } from "./logo";
+import { DOCS, SiteFooter, SiteHeader } from "./chrome";
+import { useHead } from "./head";
 
 // Direct file downloads save in place; page links open in a new tab.
 const linkProps = (c: Cta) =>
   c.download ? { rel: "noopener" } : { target: "_blank", rel: "noopener noreferrer" };
-// The docs site (docs.noteside.app in prod). Override with VITE_DOCS_URL — e.g.
-// http://localhost:3002 when running `pnpm dev:docs` locally.
-const DOCS = import.meta.env.VITE_DOCS_URL ?? "https://docs.noteside.app";
 
 // The live demo embeds the desktop app's web build. In dev, point at the
 // desktop Vite server (started by `turbo dev`); in prod, at /demo, populated by
@@ -164,52 +161,14 @@ const sectionH2 =
   "font-serif font-medium text-[clamp(1.9rem,4vw,2.9rem)] tracking-[-0.02em] max-w-[20ch] mx-auto leading-[1.08] text-balance";
 
 export function App() {
+  useHead("Noteside — notes for keyboard people", "https://noteside.app/");
   const step = useKeycast();
   const dl = useDownloads();
   useScrollReveal();
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-rule-soft bg-paper/88 backdrop-blur-[10px]">
-        <div className="wrap flex h-[62px] items-center gap-[22px]">
-          <a
-            className="inline-block whitespace-nowrap font-serif text-[22px] font-semibold tracking-[-0.01em]"
-            href="#top"
-          >
-            <Wordmark />
-          </a>
-          <nav className="ml-3.5 flex gap-[22px] font-mono text-[13px] text-ink-soft max-sm:hidden">
-            <a className="whitespace-nowrap hover:text-ink" href="#features">
-              Features
-            </a>
-            <a className="whitespace-nowrap hover:text-ink" href="#demo">
-              Demo
-            </a>
-            <a className="whitespace-nowrap hover:text-ink" href="#keys">
-              Keys
-            </a>
-            <a className="whitespace-nowrap hover:text-ink" href={DOCS}>
-              Docs
-            </a>
-            <a
-              className="whitespace-nowrap hover:text-ink"
-              href={GITHUB}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              GitHub ↗
-            </a>
-          </nav>
-          <div className="ml-auto flex items-center gap-3">
-            <a className="btn btn-ghost" href={DOCS}>
-              Documentation
-            </a>
-            <a className="btn btn-primary" href="#get">
-              Get started
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main id="top">
         <section className="wrap pt-[92px] pb-10 text-center max-sm:pt-16 max-sm:pb-[30px]">
@@ -345,81 +304,7 @@ export function App() {
         </section>
       </main>
 
-      <footer className="border-t border-rule-soft bg-paper-2 pt-[54px] pb-[60px]">
-        <div className="wrap">
-          <div className="flex flex-wrap items-start justify-between gap-7">
-            <div className="flex flex-col gap-1 font-serif text-2xl font-semibold">
-              <Wordmark />
-              <span className="font-mono text-[11px] font-normal tracking-[0.03em] text-ink-faint">
-                notes for keyboard people
-              </span>
-            </div>
-            <div className="flex gap-[30px] font-mono text-[13px] text-ink-soft">
-              <div className="flex flex-col gap-2.5">
-                <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
-                  Product
-                </span>
-                <a className="whitespace-nowrap hover:text-accent" href={DOCS}>
-                  Documentation
-                </a>
-                <a className="whitespace-nowrap hover:text-accent" href="#get">
-                  Get started
-                </a>
-                <a className="whitespace-nowrap hover:text-accent max-sm:hidden" href="#demo">
-                  Live demo
-                </a>
-                <a className="whitespace-nowrap hover:text-accent" href="#features">
-                  Features
-                </a>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                <span className="text-[11px] tracking-[0.12em] uppercase whitespace-nowrap text-ink-faint">
-                  Open source
-                </span>
-                <a
-                  className="whitespace-nowrap hover:text-accent"
-                  href={GITHUB}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  GitHub
-                </a>
-                <a
-                  className="whitespace-nowrap hover:text-accent"
-                  href={RELEASES}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Releases
-                </a>
-                <a
-                  className="whitespace-nowrap hover:text-accent"
-                  href={`${GITHUB}/issues`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Issues
-                </a>
-              </div>
-            </div>
-          </div>
-          <div className="mt-[30px] flex w-full flex-wrap justify-between gap-4 border-t border-rule-soft pt-[22px] font-mono text-[12px] text-ink-faint">
-            <span>
-              Free forever. Open source. Built by{" "}
-              <a
-                className="text-ink-soft hover:text-accent"
-                href={AUTHOR}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Josh Daniel
-              </a>
-              .
-            </span>
-            <span>~/.notesiderc</span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }
