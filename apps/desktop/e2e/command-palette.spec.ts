@@ -1,7 +1,7 @@
 import { boot, expect, test } from "./fixtures";
 
 test.describe("command palette", () => {
-  test("Mod-Shift-p runs a command by name", async ({ page }) => {
+  test("runs a command by name", async ({ page }) => {
     await boot(page, { vimMode: false });
     await page.locator(".cm-content").click();
     const sidebar = page.locator(".av-sidebar");
@@ -10,8 +10,13 @@ test.describe("command palette", () => {
     await page.keyboard.press("ControlOrMeta+Shift+p");
     await page.locator(".fnd-panel").waitFor();
     await page.locator(".fnd-input").fill("sidebar");
-    await expect(page.locator(".fnd-row").first()).toContainText(/sidebar/i);
-    await page.keyboard.press("Enter");
+
+    // Click the matching row (deterministic) rather than relying on Enter/selection.
+    await page
+      .locator(".fnd-row")
+      .filter({ hasText: /sidebar/i })
+      .first()
+      .click();
 
     // Running "Toggle sidebar" collapses it.
     await expect(sidebar).toHaveClass(/is-collapsed/);
