@@ -93,7 +93,6 @@ const VIRTUAL_THRESHOLD = 100;
 function NoteRow({
   note,
   active,
-  dirty,
   onPick,
   style,
   index,
@@ -101,7 +100,6 @@ function NoteRow({
 }: {
   note: NoteMeta;
   active: boolean;
-  dirty: boolean;
   onPick: (id: string) => void;
   style?: CSSProperties;
   index?: number;
@@ -120,7 +118,6 @@ function NoteRow({
       <span className="av-item-main">
         <span className="av-item-title">
           <span className="av-item-titletext">{note.title}</span>
-          {active && dirty && <span className="av-item-dot" />}
         </span>
         <span className="av-item-meta">
           {note.tags[0] ? `${note.tags[0]} · ` : ""}
@@ -136,12 +133,10 @@ function NoteRow({
 function VirtualNoteList({
   notes,
   activeId,
-  activeDirty,
   onPick,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
-  activeDirty: boolean;
   onPick: (id: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -169,7 +164,6 @@ function VirtualNoteList({
               index={item.index}
               measureRef={virt.measureElement}
               active={n.id === activeId}
-              dirty={activeDirty}
               onPick={onPick}
               style={{
                 position: "absolute",
@@ -190,7 +184,6 @@ function Sidebar({
   open,
   notes,
   activeId,
-  activeDirty,
   onPick,
   onNew,
   onSettings,
@@ -198,7 +191,6 @@ function Sidebar({
   open: boolean;
   notes: NoteMeta[];
   activeId: string | null;
-  activeDirty: boolean;
   onPick: (id: string) => void;
   onNew: () => void;
   onSettings: () => void;
@@ -216,22 +208,11 @@ function Sidebar({
         {notes.length <= VIRTUAL_THRESHOLD ? (
           <nav className="av-list" aria-label="Notes">
             {notes.map((n) => (
-              <NoteRow
-                key={n.id}
-                note={n}
-                active={n.id === activeId}
-                dirty={activeDirty}
-                onPick={onPick}
-              />
+              <NoteRow key={n.id} note={n} active={n.id === activeId} onPick={onPick} />
             ))}
           </nav>
         ) : (
-          <VirtualNoteList
-            notes={notes}
-            activeId={activeId}
-            activeDirty={activeDirty}
-            onPick={onPick}
-          />
+          <VirtualNoteList notes={notes} activeId={activeId} onPick={onPick} />
         )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
@@ -721,7 +702,6 @@ export function App() {
               open={navOpen}
               notes={notes}
               activeId={s.activeId}
-              activeDirty={s.dirty}
               onPick={(id) => void session.open(id)}
               onNew={() => void createNote()}
               onSettings={openSettings}
