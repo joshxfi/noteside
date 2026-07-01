@@ -10,7 +10,6 @@
     "beforeBuildCommand": "pnpm build:web"
   },
   "app": {
-    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -19,8 +18,11 @@
         "height": 800,
         "minWidth": 720,
         "minHeight": 520,
-        "decorations": false,
-        "transparent": true,
+        "decorations": true,
+        "transparent": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 19, "y": 17 },
+        "hiddenTitle": true,
         "resizable": true,
         "center": true
       }
