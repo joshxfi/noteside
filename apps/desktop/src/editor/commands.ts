@@ -242,6 +242,15 @@ export const COMMANDS: Command[] = [
     command: "settings",
   },
   {
+    id: "theme",
+    title: "Change theme",
+    group: "Settings",
+    ex: ["theme", "colorscheme", "colo"],
+    leader: "t",
+    command: "theme",
+    paletteHint: "colors",
+  },
+  {
     id: "config",
     title: "Edit ~/.notesiderc",
     group: "Settings",

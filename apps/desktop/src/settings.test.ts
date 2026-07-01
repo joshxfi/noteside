@@ -15,8 +15,7 @@ describe("config serialize/parse round-trip", () => {
 
   it("round-trips a fully customized config", () => {
     const cfg: Config = {
-      theme: "dark",
-      accent: "sage",
+      theme: "catppuccin-mocha",
       editorFont: "spectral",
       uiFont: "jetbrains",
       fontSize: 22,
@@ -81,8 +80,23 @@ describe("config serialize/parse round-trip", () => {
 
   it("ignores comments and unknown keys", () => {
     const parsed = parseConfig('" a comment\nset bogus = 1\nset theme = dark', CONFIG_DEFAULTS);
-    expect(parsed.theme).toBe("dark");
-    expect(parsed.accent).toBe(CONFIG_DEFAULTS.accent);
+    expect(parsed.theme).toBe("noteside-dark"); // dark alias → builtin id
+  });
+
+  it("resolves theme ids + light/dark aliases and ignores stale accent lines", () => {
+    expect(parseConfig("set theme = catppuccin-mocha", CONFIG_DEFAULTS).theme).toBe(
+      "catppuccin-mocha",
+    );
+    expect(parseConfig("set theme = light", CONFIG_DEFAULTS).theme).toBe("noteside-light");
+    expect(parseConfig("set theme = dark", CONFIG_DEFAULTS).theme).toBe("noteside-dark");
+    // unknown theme id → keep the base value, never crash
+    expect(parseConfig("set theme = bogus-theme", CONFIG_DEFAULTS).theme).toBe(
+      CONFIG_DEFAULTS.theme,
+    );
+    // a stale `set accent = …` line from a pre-themes config is silently dropped
+    const p = parseConfig("set accent = plum\nset theme = nord", CONFIG_DEFAULTS);
+    expect(p.theme).toBe("nord");
+    expect("accent" in p).toBe(false);
   });
 });
 

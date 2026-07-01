@@ -8,6 +8,9 @@
      editor is immune — it sizes from --editor-size, never from --ui-scale. */
   --ui-scale: 1;
   --accent-base: oklch(0.565 0.095 350);
+  /* Danger/error red — theme-independent by default; a base16 theme overrides it
+     (with its base08) via an inline var on :root. */
+  --danger: oklch(0.56 0.13 26);
 }
 
 [data-theme="light"] {
@@ -43,8 +46,10 @@
   --accent-ink: oklch(0.2 0.02 60);
   --active-line: color-mix(in oklab, var(--paper), var(--accent) 9%);
   --sel: color-mix(in oklab, var(--paper), var(--accent) 30%);
-  --desk-a: color-mix(in oklab, oklch(0.18 0.012 55), var(--accent) 7%);
-  --desk-b: color-mix(in oklab, oklch(0.135 0.012 50), var(--accent) 5%);
+  /* Derive the backdrop from --paper (darkened) rather than hardcoded oklch bases,
+     so a full theme that overrides --paper re-skins the desk gradient too. */
+  --desk-a: color-mix(in oklab, color-mix(in oklab, var(--paper), black 22%), var(--accent) 7%);
+  --desk-b: color-mix(in oklab, color-mix(in oklab, var(--paper), black 42%), var(--accent) 5%);
   --shadow: 0 34px 80px -24px rgba(0, 0, 0, 0.66), 0 10px 30px -18px rgba(0, 0, 0, 0.6);
   --win-border: rgba(255, 235, 210, 0.1);
 }
@@ -1267,6 +1272,21 @@ body {
   background: color-mix(in oklab, var(--paper), var(--accent) 12%);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent), transparent 60%);
 }
+/* theme-picker row: a 3-stripe preview chip (bg / ink / accent) before the name */
+.thm-chip {
+  flex: none;
+  width: 34px;
+  height: 15px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink), transparent 82%);
+}
+.thm-row.is-current .fnd-name::after {
+  content: "current";
+  margin-left: 8px;
+  font-size: 0.82em;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
 .fnd-git {
   width: 11px;
   flex: none;
@@ -1609,7 +1629,7 @@ html.tauri .av-window {
   background: var(--active-line);
 }
 .pal-row.danger:hover {
-  background: color-mix(in oklab, var(--paper), oklch(0.56 0.13 26) 12%);
+  background: color-mix(in oklab, var(--paper), var(--danger) 12%);
 }
 .pal-key {
   display: inline-grid;
@@ -1626,8 +1646,8 @@ html.tauri .av-window {
   box-shadow: 0 1px 0 var(--rule);
 }
 .pal-row.danger .pal-key {
-  color: oklch(0.56 0.13 26);
-  border-color: color-mix(in oklab, var(--rule), oklch(0.56 0.13 26) 40%);
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--rule), var(--danger) 40%);
 }
 .pal-label {
   font-size: calc(13.5px * var(--ui-scale));

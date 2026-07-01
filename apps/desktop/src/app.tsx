@@ -21,7 +21,6 @@ import {
 } from "./editor/commands";
 import { type Backlink, resolveLink } from "./links";
 import {
-  accentValue,
   CONFIG_DEFAULTS,
   type Config,
   fontStack,
@@ -29,6 +28,8 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
+import { applyThemeVars, themeById } from "./themes";
+import { ThemePicker } from "./components/theme-picker";
 import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
@@ -342,6 +343,7 @@ export function App() {
   const [notes, setNotes] = useState<NoteMeta[]>([]);
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
@@ -377,8 +379,11 @@ export function App() {
   // apply config -> design tokens (always); persist only after initial load
   useEffect(() => {
     const r = document.documentElement;
-    r.setAttribute("data-theme", cfg.theme);
-    r.style.setProperty("--accent-base", accentValue(cfg.accent));
+    const theme = themeById(cfg.theme);
+    r.setAttribute("data-theme", theme.mode);
+    // Writes the theme's primitives inline (base16), or clears them so the
+    // [data-theme] block renders verbatim (builtin Noteside light/dark).
+    applyThemeVars(r, theme);
     r.style.setProperty("--editor-font", fontStack(cfg.editorFont, "editor"));
     r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
@@ -575,6 +580,10 @@ export function App() {
     setCheatsheetOpen(false);
     setRefocus((r) => r + 1);
   };
+  const closeThemePicker = () => {
+    setThemePickerOpen(false);
+    setRefocus((r) => r + 1);
+  };
 
   // Step to the adjacent note in the sidebar list (Mod-j / Mod-k). Clamps at the
   // ends; opening flushes any pending save of the outgoing buffer.
@@ -590,6 +599,7 @@ export function App() {
     else if (c === "grep") openFinder("content");
     else if (c === "nav") toggleNav();
     else if (c === "settings") openSettings();
+    else if (c === "theme") setThemePickerOpen(true);
     else if (c === "config") openConfig();
     else if (c === "palette") setPaletteOpen(true);
     else if (c === "commands") setCmdSearchOpen(true);
@@ -620,6 +630,7 @@ export function App() {
       cmdSearchOpen ||
       cheatsheetOpen ||
       settingsOpen ||
+      themePickerOpen ||
       backlinks
     ),
     overrides: cfg.chords,
@@ -771,6 +782,17 @@ export function App() {
               setSettingsOpen(false);
               setCheatsheetOpen(true);
             }}
+            onPickTheme={() => {
+              setSettingsOpen(false);
+              setThemePickerOpen(true);
+            }}
+          />
+        )}
+        {themePickerOpen && (
+          <ThemePicker
+            current={cfg.theme}
+            onCommit={(id) => setCfgPatch({ theme: id })}
+            onClose={closeThemePicker}
           />
         )}
         {finder && (
