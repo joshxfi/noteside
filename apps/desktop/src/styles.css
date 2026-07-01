@@ -154,7 +154,7 @@ body {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 4px; /* a tight toolbar cluster; the lights get their own trailing gap below */
   padding: 0 16px;
   background: var(--paper-2);
   border-bottom: 1px solid var(--rule-soft);
@@ -163,6 +163,7 @@ body {
   display: flex;
   gap: 9px;
   align-items: center;
+  margin-right: 8px; /* separate the (demo-only) traffic lights from the toolbar icons */
 }
 .av-dot {
   width: 12px;
@@ -224,9 +225,10 @@ body {
 }
 .av-navtoggle {
   z-index: 1;
-  color: var(--ink-faint);
 }
-.av-navtoggle svg {
+/* Block-level SVGs so both icons sit on their box center (not the text baseline) —
+   keeps the two buttons consistent with each other and the traffic lights. */
+.av-iconbtn svg {
   display: block;
 }
 
