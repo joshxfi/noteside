@@ -350,13 +350,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.av-item-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex: none;
-}
 .av-item-meta {
   font-size: calc(10.5px * var(--ui-scale));
   letter-spacing: 0.02em;
