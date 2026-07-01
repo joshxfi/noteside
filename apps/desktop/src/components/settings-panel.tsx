@@ -1,14 +1,8 @@
 // settings-panel.tsx — in-app Settings panel (writes to the live config).
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import {
-  ACCENTS,
-  byIdHelper as byId,
-  type Config,
-  EDITOR_FONTS,
-  ESC_PRESETS,
-  UI_FONTS,
-} from "../settings";
+import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS, UI_FONTS } from "../settings";
+import { themeById } from "../themes";
 import { checkForUpdate, RELEASES_LATEST, type UpdateCheck } from "../check-update";
 import { openExternal } from "../open-external";
 import { useAppVersion } from "../use-app-version";
@@ -72,6 +66,7 @@ export interface SettingsPanelProps {
   onClose: () => void;
   onEditFile: () => void;
   onShortcuts: () => void;
+  onPickTheme: () => void;
 }
 
 export function SettingsPanel({
@@ -80,6 +75,7 @@ export function SettingsPanel({
   onClose,
   onEditFile,
   onShortcuts,
+  onPickTheme,
 }: SettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState(0);
@@ -152,8 +148,7 @@ export function SettingsPanel({
 
   // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
-    { cycle: () => setCfg({ theme: cfg.theme === "light" ? "dark" : "light" }) },
-    { cycle: (d) => cycleList(ACCENTS, cfg.accent, "accent", d) },
+    { cycle: () => onPickTheme() }, // idx 0 — Theme: opens the live-preview picker
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
     { cycle: (d) => cycleList(UI_FONTS, cfg.uiFont, "uiFont", d) },
     { cycle: (d) => setCfg({ fontSize: Math.max(16, Math.min(28, cfg.fontSize + d)) }) },
@@ -180,9 +175,12 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 12 — opens the keymap editor (cheatsheet)
-    { cycle: onAboutAction }, // idx 13 — About: check for updates / open releases
+    { cycle: () => onShortcuts() }, // idx 11 — opens the keymap editor (cheatsheet)
+    { cycle: onAboutAction }, // idx 12 — About: check for updates / open releases
   ];
+
+  const currentTheme = themeById(cfg.theme);
+  const themeChip = `linear-gradient(90deg, ${currentTheme.preview[0]} 0 34%, ${currentTheme.preview[1]} 34% 67%, ${currentTheme.preview[2]} 67% 100%)`;
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).tagName === "INPUT") {
@@ -231,36 +229,27 @@ export function SettingsPanel({
 
         <div className="set-scroll">
           <div className="set-sec">Appearance</div>
-          <Row idx={0} focus={focus} setFocus={setFocus} label="Theme">
-            {(
-              [
-                ["light", "Light"],
-                ["dark", "Dark"],
-              ] as const
-            ).map(([v, l]) => (
-              <Pill key={v} active={cfg.theme === v} onClick={() => setCfg({ theme: v })}>
-                {l}
-              </Pill>
-            ))}
-          </Row>
-          <Row idx={1} focus={focus} setFocus={setFocus} label="Accent">
-            <div className="set-swatches">
-              {ACCENTS.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  tabIndex={-1}
-                  className={"set-swatch" + (cfg.accent === a.id ? " is-on" : "")}
-                  style={{ background: a.value }}
-                  title={a.label}
-                  onClick={() => setCfg({ accent: a.id })}
-                />
-              ))}
-            </div>
+          <Row
+            idx={0}
+            focus={focus}
+            setFocus={setFocus}
+            label="Theme"
+            hint="preview & pick a palette"
+          >
+            <button
+              type="button"
+              tabIndex={-1}
+              className="set-editfile"
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+              onClick={onPickTheme}
+            >
+              <span className="thm-chip" aria-hidden="true" style={{ background: themeChip }} />
+              {currentTheme.label}&nbsp;→
+            </button>
           </Row>
 
           <div className="set-sec">Typography</div>
-          <Row idx={2} focus={focus} setFocus={setFocus} label="Editor font">
+          <Row idx={1} focus={focus} setFocus={setFocus} label="Editor font">
             <span className="set-selectwrap">
               <select
                 className="set-select"
@@ -278,7 +267,7 @@ export function SettingsPanel({
               <span className="set-selectarrow">▾</span>
             </span>
           </Row>
-          <Row idx={3} focus={focus} setFocus={setFocus} label="Interface font">
+          <Row idx={2} focus={focus} setFocus={setFocus} label="Interface font">
             <span className="set-selectwrap">
               <select
                 className="set-select"
@@ -296,7 +285,7 @@ export function SettingsPanel({
               <span className="set-selectarrow">▾</span>
             </span>
           </Row>
-          <Row idx={4} focus={focus} setFocus={setFocus} label="Font size">
+          <Row idx={3} focus={focus} setFocus={setFocus} label="Font size">
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -314,7 +303,7 @@ export function SettingsPanel({
             </div>
           </Row>
           <Row
-            idx={5}
+            idx={4}
             focus={focus}
             setFocus={setFocus}
             label="Interface size"
@@ -350,7 +339,7 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={6} focus={focus} setFocus={setFocus} label="Line height">
+          <Row idx={5} focus={focus} setFocus={setFocus} label="Line height">
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -375,7 +364,7 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={7} focus={focus} setFocus={setFocus} label="Relative line numbers">
+          <Row idx={6} focus={focus} setFocus={setFocus} label="Relative line numbers">
             <button
               type="button"
               tabIndex={-1}
@@ -387,7 +376,7 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">Cursor</div>
-          <Row idx={8} focus={focus} setFocus={setFocus} label="Style">
+          <Row idx={7} focus={focus} setFocus={setFocus} label="Style">
             {(
               [
                 ["block", "Block"],
@@ -400,7 +389,7 @@ export function SettingsPanel({
               </Pill>
             ))}
           </Row>
-          <Row idx={9} focus={focus} setFocus={setFocus} label="Blink">
+          <Row idx={8} focus={focus} setFocus={setFocus} label="Blink">
             <button
               type="button"
               tabIndex={-1}
@@ -413,7 +402,7 @@ export function SettingsPanel({
 
           <div className="set-sec">Keys</div>
           <Row
-            idx={10}
+            idx={9}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -429,7 +418,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={11}
+            idx={10}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -464,7 +453,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={12}
+            idx={11}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"
@@ -476,7 +465,7 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">About</div>
-          <Row idx={13} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+          <Row idx={12} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
             {aboutControl()}
           </Row>
         </div>

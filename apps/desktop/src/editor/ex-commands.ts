@@ -11,6 +11,7 @@ export type AppCommand =
   | "grep"
   | "nav"
   | "settings"
+  | "theme"
   | "config"
   | "new"
   | "delete"
