@@ -89,6 +89,10 @@ describe("config serialize/parse round-trip", () => {
     );
     expect(parseConfig("set theme = light", CONFIG_DEFAULTS).theme).toBe("noteside-light");
     expect(parseConfig("set theme = dark", CONFIG_DEFAULTS).theme).toBe("noteside-dark");
+    // dark/light-ish strings keep the pre-themes parser's tolerance
+    expect(parseConfig("set theme = dark mode", CONFIG_DEFAULTS).theme).toBe("noteside-dark");
+    expect(parseConfig("set theme = darkmode", CONFIG_DEFAULTS).theme).toBe("noteside-dark");
+    expect(parseConfig("set theme = LIGHT!", CONFIG_DEFAULTS).theme).toBe("noteside-light");
     // unknown theme id → keep the base value, never crash
     expect(parseConfig("set theme = bogus-theme", CONFIG_DEFAULTS).theme).toBe(
       CONFIG_DEFAULTS.theme,

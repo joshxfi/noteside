@@ -1468,17 +1468,8 @@ html.embed .av-window {
 /* ── native Tauri window: the OS draws a real title bar, traffic lights, frame and
       shadow (decorations:true in tauri.conf), so the app fills it edge-to-edge — the
       `tauri` class also carries `embed`, whose rules above square the corners and drop
-      the custom shadow/border. Just hide the now-redundant in-app traffic lights; the
-      landing iframe has `embed` only, so it is unaffected. ── */
-html.tauri .av-lights {
-  display: none;
-}
-/* Native app: drop the redundant "Noteside — <note>" titlebar text (the OS window
-   title is hidden via tauri.conf hiddenTitle, and the open note is shown in the
-   sidebar). The landing demo keeps it as branded chrome. */
-html.tauri .av-title {
-  display: none;
-}
+      the custom shadow/border. The demo-only traffic lights + titlebar text are gated
+      out in JSX (app.tsx, !isTauri()), not hidden here. ── */
 /* macOS Overlay title bar (tauri.conf titleBarStyle): the native traffic lights float
    over the top-left of the content, so the app's toolbar IS the title bar — inset its
    left edge past the lights so the two share one unified row. Windows/Linux draw a

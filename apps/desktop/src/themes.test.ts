@@ -114,7 +114,6 @@ describe("schemeToPalette", () => {
     expect(v["--ink-soft"]).toBe(p.base04);
     expect(v["--ink-faint"]).toBe(p.base03); // enough contrast → base03 kept
     expect(v["--accent"]).toBe(p.base0d);
-    expect(v["--accent-base"]).toBe(p.base0d);
     expect(v["--danger"]).toBe(p.base08); // base16 red
     // borders are derived (a mix), not raw slots
     expect(v["--rule"]).toContain("color-mix");
@@ -175,7 +174,7 @@ describe("applyThemeVars", () => {
     const el = fakeEl();
     const mocha = THEMES.find((t) => t.id === "catppuccin-mocha") as Theme;
     applyThemeVars(el, mocha);
-    // it writes every one of the 12 primitives it controls…
+    // it writes every one of the primitives it controls…
     expect(Object.keys(el.set).sort()).toEqual([...THEME_VARS].sort());
     expect(el.set["--paper"]).toBeDefined();
     expect(el.set["--ink"]).toBeDefined();

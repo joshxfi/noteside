@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS, UI_FONTS } from "../settings";
-import { themeById } from "../themes";
+import { previewGradient, themeById } from "../themes";
 import { checkForUpdate, RELEASES_LATEST, type UpdateCheck } from "../check-update";
 import { openExternal } from "../open-external";
 import { useAppVersion } from "../use-app-version";
@@ -180,7 +180,7 @@ export function SettingsPanel({
   ];
 
   const currentTheme = themeById(cfg.theme);
-  const themeChip = `linear-gradient(90deg, ${currentTheme.preview[0]} 0 34%, ${currentTheme.preview[1]} 34% 67%, ${currentTheme.preview[2]} 67% 100%)`;
+  const themeChip = previewGradient(currentTheme);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).tagName === "INPUT") {

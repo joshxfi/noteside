@@ -7,8 +7,8 @@ as [base16](https://github.com/tinted-theming/home) schemes in
 MIT-licensed [`tinted-theming/schemes`](https://github.com/tinted-theming/schemes)
 repository, which re-expresses every scheme below under a single MIT license.
 
-Noteside maps each scheme'''s 16 slots onto its own design tokens at runtime
-(`src/themes.ts`); we redistribute the color _values_, not the upstream projects'''
+Noteside maps each scheme's 16 slots onto its own design tokens at runtime
+(`src/themes.ts`); we redistribute the color _values_, not the upstream projects'
 source. Raw color values are not themselves copyrightable, but attribution is the
 right thing to do — thanks to the original authors:
 

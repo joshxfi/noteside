@@ -27,7 +27,7 @@ export interface SessionSnapshot {
   initialText: string;
   /** On-disk / last-applied baseline for the active buffer (the dirty baseline). */
   savedText: string;
-  /** Note buffer: working !== saved (drives the sidebar dot). */
+  /** Note buffer: working !== saved (guards reconcile against clobbering edits). */
   dirty: boolean;
   /** 1-based cursor target on the next mount (0 = none). Always 0 for config. */
   gotoLine: number;
@@ -167,8 +167,9 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // The id-pinned note save (autosave timer + explicit :w). Mirrors App's doSaveNote:
   // bound to an explicit id, so a queued save can never write one note's text into
   // another after a switch; only touches the on-screen buffer if `id` is still active.
-  async function persistNote(id: string, text: string, seq = editSeq): Promise<void> {
-    if (!id || id === CONFIG_ID) return;
+  // Resolves true only when the write landed — rename-on-save gates on it.
+  async function persistNote(id: string, text: string, seq = editSeq): Promise<boolean> {
+    if (!id || id === CONFIG_ID) return false;
     try {
       const meta = await backend.saveNote(id, text);
       onNoteSaved(meta);
@@ -177,8 +178,10 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
         noteDirty = seq !== editSeq;
         commit();
       }
+      return true;
     } catch (e) {
       notify(`save failed: ${e}`);
+      return false;
     }
   }
 
@@ -202,9 +205,16 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       return;
     }
     if (meta.id === id) return; // filename already matched the title
-    if (activeId === id) activeId = meta.id;
+    // A keystroke during the rename round-trip queued an autosave pinned to the old
+    // path — re-target it so it can't recreate the renamed-away file on disk.
+    autosaver.repin(id, meta.id);
     if (lastNoteId === id) lastNoteId = meta.id;
-    noteTitle = meta.title;
+    if (activeId === id) {
+      // Only the still-active buffer migrates its id/title; if the user switched
+      // away mid-rename, the new buffer's title must not be clobbered.
+      activeId = meta.id;
+      noteTitle = meta.title;
+    }
     onNoteRenamed(id, meta);
     commit();
   }
@@ -254,7 +264,9 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       commit();
     } else if (activeId) {
       const id = activeId;
-      void persistNote(id, text, editSeq).then(() => maybeRename(id));
+      // Rename only after the write LANDED — a failed save must not trigger a
+      // rename derived from the stale on-disk content.
+      void persistNote(id, text, editSeq).then((ok) => (ok ? maybeRename(id) : undefined));
     }
   }
 
