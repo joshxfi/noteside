@@ -68,8 +68,10 @@ window, with a Rust core that treats your files as the source of truth.
   (`<Space> l`) to see everything that points at the current note.
 - **Instant search.** Fuzzy file/title finding (Rust [`nucleo`](https://github.com/helix-editor/nucleo))
   plus line-level content search (plain · regex · fuzzy) with a live preview pane.
-- **Warm, literary design.** A serif reading surface, one quiet plum cursor, and a
-  light/dark theme. Everything is configurable from a live `~/.notesiderc` buffer
+- **Warm, literary design, 33 themes.** A serif reading surface and one quiet plum
+  cursor by default — plus a curated set of base16 palettes (Catppuccin, Gruvbox,
+  Nord, Rosé Pine, Tokyo Night, …) behind a live-preview picker (`:theme` /
+  `<Space> t`). Everything is configurable from a live `~/.notesiderc` buffer
   (vimrc-flavored) or an in-app settings panel.
 
 ## Keys
@@ -85,6 +87,8 @@ Standard vim throughout. On top of that:
 | `:backlinks` / `<Space> l` | Linked-references panel for the current note  |
 | `:new` `:rm`               | New note · delete note                        |
 | `:preview` / `<Space> p`   | Toggle inline live-preview                    |
+| `:theme` / `<Space> t`     | Theme picker (33 themes, live preview)        |
+| `⌘=` `⌘-` `⌘0`             | Editor font size (`⇧` for interface size)     |
 | `:settings` `:config`      | Settings panel · edit `~/.notesiderc`         |
 | `:set …`                   | CodeMirror-vim options (e.g. `:set hlsearch`) |
 

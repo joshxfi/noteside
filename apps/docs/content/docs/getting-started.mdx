@@ -73,9 +73,12 @@ Press `⌘N` (or `:new`, or `<Space> n`) to create a note. New notes start as
 3. otherwise the prettified filename.
 
 So just typing `# My ideas` at the top names the note "My ideas" in the sidebar. To
-**rename** a note, change that title — there's no separate rename command, and the
-file on disk keeps its name. (A `title:` in YAML frontmatter wins over the heading if
-you'd rather set it explicitly.)
+**rename** a note, change that title — there's no separate rename command. On an
+explicit save (`:w` / `⌘S`, never autosave) the file on disk is renamed to match the
+title too (`untitled.md` → `my-ideas.md`, staying in its folder), so filenames keep up
+with your notes; `[[wikilinks]]` resolve by title, so links keep working across the
+rename. (A `title:` in YAML frontmatter wins over the heading if you'd rather set it
+explicitly.)
 
 ## Saving
 
