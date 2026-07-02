@@ -34,6 +34,19 @@ function seed(): Map<string, Rec> {
 const recs = seed();
 const LS = (k: string) => `noteside:${k}`;
 
+// Frecency (mirrors the Rust store): exponential decay with a 7-day half-life;
+// each open adds 1 to the decayed score. In-memory only — the demo is ephemeral.
+const HALF_LIFE_MS = 7 * 24 * 3_600_000;
+const frecency = new Map<string, { s: number; t: number }>();
+
+function decayed(e: { s: number; t: number }, now: number): number {
+  return e.s * Math.pow(0.5, (now - e.t) / HALF_LIFE_MS);
+}
+function frecencyOf(path: string, now: number): number {
+  const e = frecency.get(path);
+  return e ? decayed(e, now) : 0;
+}
+
 function metas(): NoteMeta[] {
   return [...recs.values()]
     .map((r) => r.meta)
@@ -89,10 +102,16 @@ function subseq(hay: string, needle: string): { score: number; positions: number
 function fileSearch(query: string): FileHit[] {
   const q = query.trim().toLowerCase();
   const all = [...recs.values()];
+  const now = Date.now();
   if (!q) {
+    // Recents: frecency ranks opened notes MRU-style; never-opened notes score 0
+    // and keep the plain (pinned, updated) order among themselves.
     return all
       .sort(
-        (a, b) => Number(b.meta.pinned) - Number(a.meta.pinned) || b.meta.updated - a.meta.updated,
+        (a, b) =>
+          Number(b.meta.pinned) - Number(a.meta.pinned) ||
+          frecencyOf(b.meta.path, now) - frecencyOf(a.meta.path, now) ||
+          b.meta.updated - a.meta.updated,
       )
       .map((r) => ({ ...base(r), score: 0, positions: [], titlePositions: [] }));
   }
@@ -104,6 +123,10 @@ function fileSearch(query: string): FileHit[] {
     const pathScore = pathMatch?.score ?? 0;
     const titleScore = titleMatch ? titleMatch.score + 16 : 0;
     const score = Math.max(pathScore, titleScore);
+    // Bounded frecency nudge (≤ +15%): text relevance stays dominant; frecency
+    // breaks near-ties toward often-opened notes.
+    const f = frecencyOf(r.meta.path, now);
+    const boosted = score * (1 + 0.15 * (f / (f + 3)));
     scored.push({
       h: {
         ...base(r),
@@ -111,7 +134,7 @@ function fileSearch(query: string): FileHit[] {
         positions: pathMatch?.positions ?? [],
         titlePositions: titleMatch?.positions ?? [],
       },
-      s: score,
+      s: boosted,
     });
   }
   scored.sort((a, b) => b.s - a.s);
@@ -233,6 +256,11 @@ export const mockBackend: Backend = {
     const meta: NoteMeta = { ...r.meta, id: newPath, path: newPath, title, updated: Date.now() };
     recs.delete(path);
     recs.set(newPath, { meta, body: r.body });
+    const f = frecency.get(path);
+    if (f) {
+      frecency.delete(path);
+      frecency.set(newPath, f);
+    }
     return meta;
   },
   async createNote(title) {
@@ -253,6 +281,12 @@ export const mockBackend: Backend = {
   },
   async deleteNote(path) {
     recs.delete(path);
+    frecency.delete(path);
+  },
+  async recordOpen(path) {
+    const now = Date.now();
+    const e = frecency.get(path);
+    frecency.set(path, { s: (e ? decayed(e, now) : 0) + 1, t: now });
   },
   async searchFiles(query) {
     return fileSearch(query);

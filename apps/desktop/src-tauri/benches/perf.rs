@@ -3,9 +3,11 @@
 // on open / external change — so these are what "highly performant" must hold
 // at notebook scale. Run: `cargo bench` (results in target/criterion).
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use noteside_lib::frecency::FrecencyEntry;
 use noteside_lib::models::NoteMeta;
 use noteside_lib::notebook::{scan_notebook, NoteRecord};
 use noteside_lib::search::{content_search, fuzzy_files};
+use std::collections::HashMap;
 use std::fs;
 
 const WORDS: &[&str] = &[
@@ -62,10 +64,12 @@ fn make_records(n: usize) -> Vec<NoteRecord> {
 fn bench_search(c: &mut Criterion) {
     let mut g = c.benchmark_group("search");
     g.sample_size(30);
+    // Empty map = the pre-frecency baseline, so numbers stay comparable.
+    let no_frecency: HashMap<String, FrecencyEntry> = HashMap::new();
     for &n in &[1_000usize, 10_000, 50_000] {
         let recs = make_records(n);
         g.bench_with_input(BenchmarkId::new("fuzzy_files", n), &recs, |b, recs| {
-            b.iter(|| fuzzy_files(recs, "roadmap", 50))
+            b.iter(|| fuzzy_files(recs, "roadmap", 50, &no_frecency, 0))
         });
         g.bench_with_input(BenchmarkId::new("content_plain", n), &recs, |b, recs| {
             b.iter(|| content_search(recs, "lighthouse", "plain", 200).unwrap())

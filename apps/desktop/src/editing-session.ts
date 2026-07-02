@@ -38,7 +38,7 @@ export interface SessionSnapshot {
 
 export interface EditingSessionDeps {
   /** Read once at creation; must be stable. */
-  backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes">;
+  backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes" | "recordOpen">;
   /** Transient toast channel (App's flash): I/O failures + the "reloaded from disk" notice. */
   notify(message: string): void;
   /** A config buffer was saved (`:w`) — App parses, applies, and persists. */
@@ -250,6 +250,9 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       return;
     }
     if (token !== loadToken) return; // a newer navigation superseded this open
+    // A USER navigation landed (open() is never called by the watcher — reconcile
+    // reads directly) — feed the frecency ranking. Best-effort, fire-and-forget.
+    void Promise.resolve(backend.recordOpen(id)).catch(() => {});
     noteInitial = doc.body;
     noteSaved = doc.body;
     noteDirty = false;

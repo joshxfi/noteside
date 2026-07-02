@@ -30,7 +30,13 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
           .trim(),
       )
       .find(Boolean) ?? null;
-  const backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes"> = {
+  const backend: Pick<
+    Backend,
+    "readNote" | "saveNote" | "renameNote" | "listNotes" | "recordOpen"
+  > = {
+    async recordOpen(id: string): Promise<void> {
+      calls.push(`open:${id}`);
+    },
     async readNote(id: string): Promise<NoteDoc> {
       calls.push(`read:${id}`); // recorded at call time, before any delay (call-order stays stable)
       const d = delays[id] ?? 0;
@@ -435,6 +441,19 @@ describe("editingSession", () => {
     expect(s.initialText).toBe("# A\n\nnew body");
     expect(s.savedText).toBe("# A\n\nnew body");
     expect(s.dirty).toBe(false);
+  });
+
+  // Frecency: only USER navigation records an open — the watcher's reconcile
+  // reads the note directly and must not inflate the ranking.
+  it("open() records a frecency open; reconcile() does not", async () => {
+    const { session, calls } = makeSession({ "a.md": "one", "b.md": "two" });
+    await session.open("a.md");
+    await session.open("b.md");
+    expect(calls.filter((c) => c === "open:a.md").length).toBe(1);
+    expect(calls.filter((c) => c === "open:b.md").length).toBe(1);
+    await session.reconcile();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.filter((c) => c.startsWith("open:")).length).toBe(2); // unchanged
   });
 
   // REGRESSION (review): open() must AWAIT the outgoing flush before reading —

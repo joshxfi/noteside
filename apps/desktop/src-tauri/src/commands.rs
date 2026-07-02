@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Instant, SystemTime};
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, Result};
+use crate::frecency::{self, FrecencyEntry};
 use crate::links;
 use crate::models::{Backlink, ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
@@ -19,6 +22,42 @@ where
     tauri::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| AppError::Msg(format!("worker failed: {e}")))?
+}
+
+/// Wall-clock unix ms, taken once per command and passed down so `search`/
+/// `frecency` stay pure and deterministic under test.
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
+/// The shared frecency store: `frecency.json` in the per-app data dir (one
+/// file for all notebooks, keyed inside by notebook root path).
+fn frecency_file(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|dir| dir.join("frecency.json"))
+}
+
+/// Persist a notebook's frecency snapshot, off the state lock. Best-effort:
+/// frecency is reconstructible ranking data, so I/O problems (including a
+/// missing app-data dir resolution) never fail the calling command.
+async fn persist_frecency(
+    app: &AppHandle,
+    root: &Path,
+    snapshot: Arc<HashMap<String, FrecencyEntry>>,
+    now_ms: u64,
+) {
+    let Some(file) = frecency_file(app) else {
+        return;
+    };
+    let root = root.to_string_lossy().to_string();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        frecency::save(&file, &root, &snapshot, now_ms);
+    })
+    .await;
 }
 
 fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
@@ -40,11 +79,19 @@ pub async fn open_notebook(
         return Err(AppError::Msg(format!("not a directory: {path}")));
     }
     let scan_root = root.clone();
-    let records = blocking(move || Ok(notebook::scan_notebook(&scan_root))).await?;
+    let store = frecency_file(&app);
+    let (records, frec) = blocking(move || {
+        let records = notebook::scan_notebook(&scan_root);
+        let frec = store.map_or_else(HashMap::new, |file| {
+            frecency::load(&file, &scan_root.to_string_lossy())
+        });
+        Ok((records, frec))
+    })
+    .await?;
     let metas = sorted_metas(&records);
     {
         let mut g = state.notebook.lock().unwrap();
-        g.load(root.clone(), records);
+        g.load(root.clone(), records, frec);
     }
     match watcher::start_watcher(app, state.notebook.clone(), root) {
         Ok(d) => *state.watcher.lock().unwrap() = Some(d),
@@ -151,7 +198,11 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
 /// root). No-op when the filename already represents the title (returns the current
 /// meta). Wikilinks resolve by title, so `[[links]]` keep working across the move.
 #[tauri::command]
-pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
+pub async fn rename_note(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NoteMeta> {
     // The body comes from the in-memory index (save_note just recorded it) — no
     // disk re-read on the hot save path; fall back to disk for an unindexed note.
     let (root, recorded) = {
@@ -164,6 +215,7 @@ pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<Not
             .map(|r| r.body.clone());
         (root, body)
     };
+    let persist_root = root.clone();
     let rel = path.clone();
     let (renamed, meta, body) = blocking(move || {
         let old_abs = notebook::safe_note_path(&root, &rel)
@@ -194,8 +246,14 @@ pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<Not
     })
     .await?;
     if renamed {
-        let mut g = state.notebook.lock().unwrap();
-        g.record_own_rename(&path, meta.clone(), body, Instant::now());
+        let snapshot = {
+            let mut g = state.notebook.lock().unwrap();
+            g.record_own_rename(&path, meta.clone(), body, Instant::now());
+            g.frecency.clone()
+        };
+        // The rename just migrated the note's frecency entry old→new path —
+        // persist so a crash before the next open doesn't strand the old key.
+        persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
     }
     // No-op path: save_note already recorded this exact meta+body — nothing to update.
     Ok(meta)
@@ -221,13 +279,46 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
     Ok(())
 }
 
+/// Record a note open for frecency ranking (finder recents + a bounded search
+/// nudge), then persist the notebook's map — opens are human-paced, so an
+/// immediate write is cheap and durable. Never fails over bookkeeping.
+#[tauri::command]
+pub async fn record_open(path: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+    let now = now_ms();
+    let (root, snapshot) = {
+        let mut g = state.notebook.lock().unwrap();
+        let Some(root) = g.root.clone() else {
+            return Ok(());
+        };
+        // Only indexed notes count — synthetic buffers (e.g. the config
+        // buffer) and stale paths must not accumulate in the map.
+        if !g.records.iter().any(|r| r.meta.path == path) {
+            return Ok(());
+        }
+        g.record_open(&path, now);
+        (root, g.frecency.clone())
+    };
+    persist_frecency(&app, &root, snapshot, now).await;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn search_files(query: String, state: State<'_, AppState>) -> Result<Vec<FileHit>> {
-    let records = {
+    let now = now_ms();
+    let (records, frecency) = {
         let g = state.notebook.lock().unwrap();
-        g.records.clone()
+        (g.records.clone(), g.frecency.clone())
     };
-    blocking(move || Ok(search::fuzzy_files(records.as_slice(), &query, 200))).await
+    blocking(move || {
+        Ok(search::fuzzy_files(
+            records.as_slice(),
+            &query,
+            200,
+            &frecency,
+            now,
+        ))
+    })
+    .await
 }
 
 #[tauri::command]

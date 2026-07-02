@@ -25,6 +25,7 @@ export const tauriBackend: Backend = {
   renameNote: (path) => invoke<NoteMeta>("rename_note", { path }),
   createNote: (title) => invoke<NoteMeta>("create_note", { title: title ?? null }),
   deleteNote: (path) => invoke<void>("delete_note", { path }),
+  recordOpen: (path) => invoke<void>("record_open", { path }),
   searchFiles: (query) => invoke<FileHit[]>("search_files", { query }),
   searchContent: (query, mode) => invoke<ContentHit[]>("search_content", { query, mode }),
   async getConfig() {

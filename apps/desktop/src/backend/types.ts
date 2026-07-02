@@ -64,6 +64,9 @@ export interface Backend {
   renameNote(path: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
   deleteNote(path: string): Promise<void>;
+  /** A user opened this note (finder/sidebar/link/step — NOT watcher reloads).
+   *  Feeds the frecency ranking in searchFiles; best-effort, fire-and-forget. */
+  recordOpen(path: string): Promise<void>;
   searchFiles(query: string): Promise<FileHit[]>;
   searchContent(query: string, mode: GrepMode): Promise<ContentHit[]>;
   getConfig(): Promise<Partial<Config> | null>;
