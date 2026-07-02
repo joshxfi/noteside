@@ -23,6 +23,12 @@ export type AppCommand =
   | "reopen"
   | "nextNote"
   | "prevNote"
+  | "fontUp"
+  | "fontDown"
+  | "fontReset"
+  | "uiUp"
+  | "uiDown"
+  | "uiReset"
   | "cheatsheet";
 
 export interface EditorHandlers {

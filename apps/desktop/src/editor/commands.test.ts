@@ -31,6 +31,12 @@ const APP_COMMANDS: AppCommand[] = [
   "reopen",
   "nextNote",
   "prevNote",
+  "fontUp",
+  "fontDown",
+  "fontReset",
+  "uiUp",
+  "uiDown",
+  "uiReset",
   "cheatsheet",
 ];
 
@@ -107,6 +113,34 @@ describe("command table", () => {
   it("eventChord normalizes modifier order and case", () => {
     expect(eventChord(ev("F", { ctrl: true, shift: true }))).toBe("Mod-Shift-f");
     expect(eventChord(ev("p", { meta: true }))).toBe("Mod-p");
+  });
+
+  // Zoom chords: the "-" key must survive chord parsing, and shifted
+  // punctuation ("+", "_") must fold back to its base key.
+  describe("font/UI zoom chords", () => {
+    const ctx = { enabled: true, editingTarget: false };
+    it("the '-' key parses as a chord key (trailing dash)", () => {
+      expect(eventChord(ev("-", { meta: true }))).toBe("Mod--");
+      expect(resolveGlobalChord(ev("-", { meta: true }), ctx)).toBe("fontDown");
+      expect(chordLabel("Mod--", false)).toBe("Ctrl+-");
+      expect(chordLabel("Mod--", true)).toBe("⌘-");
+    });
+    it("shifted '+' and '_' fold to '=' and '-'", () => {
+      expect(eventChord(ev("+", { meta: true, shift: true }))).toBe("Mod-Shift-=");
+      expect(eventChord(ev("_", { meta: true, shift: true }))).toBe("Mod-Shift--");
+      // layouts with an unshifted '+' key: Cmd-+ still means zoom-in
+      expect(eventChord(ev("+", { meta: true }))).toBe("Mod-=");
+      expect(resolveGlobalChord(ev("+", { meta: true, shift: true }), ctx)).toBe("uiUp");
+      expect(resolveGlobalChord(ev("_", { meta: true, shift: true }), ctx)).toBe("uiDown");
+    });
+    it("editor zoom resolves globally on = / - / 0", () => {
+      expect(resolveGlobalChord(ev("=", { meta: true }), ctx)).toBe("fontUp");
+      expect(resolveGlobalChord(ev("0", { meta: true }), ctx)).toBe("fontReset");
+    });
+    it("uiReset ships without a default chord (Shift+0 is layout-dependent)", () => {
+      expect(COMMAND_BY_ID.uiReset?.chord).toBeUndefined();
+      expect(COMMAND_BY_ID.uiReset?.command).toBe("uiReset");
+    });
   });
 
   it("commandChordKeymap yields one binding per chord and dispatches", () => {

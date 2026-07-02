@@ -731,6 +731,23 @@ export function App() {
     if (next && next.id !== s.activeId) void session.open(next.id);
   };
 
+  // Mod± / Mod-Shift± zoom. Clamps mirror the settings-panel steppers; the CSS
+  // vars apply live (no remount) and the debounced persist coalesces key-repeat.
+  const bumpFont = (d: number) => {
+    const fontSize =
+      d === 0 ? CONFIG_DEFAULTS.fontSize : Math.max(16, Math.min(28, cfg.fontSize + d));
+    setCfgPatch({ fontSize });
+    flash(`font size ${fontSize}px`);
+  };
+  const bumpUi = (d: number) => {
+    const uiScale =
+      d === 0
+        ? CONFIG_DEFAULTS.uiScale
+        : Math.max(0.9, Math.min(1.3, Math.round((cfg.uiScale + d) * 20) / 20));
+    setCfgPatch({ uiScale });
+    flash(`interface ${Math.round(uiScale * 100)}%`);
+  };
+
   const onCommand = (c: AppCommand) => {
     if (c === "find") openFinder("all");
     else if (c === "grep") openFinder("content");
@@ -748,6 +765,12 @@ export function App() {
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
     else if (c === "prevNote") stepNote(-1);
+    else if (c === "fontUp") bumpFont(1);
+    else if (c === "fontDown") bumpFont(-1);
+    else if (c === "fontReset") bumpFont(0);
+    else if (c === "uiUp") bumpUi(0.05);
+    else if (c === "uiDown") bumpUi(-0.05);
+    else if (c === "uiReset") bumpUi(0);
   };
 
   // Run a command chosen from the searchable palette. App-level: AppCommands via
