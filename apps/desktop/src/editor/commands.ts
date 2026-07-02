@@ -222,6 +222,53 @@ export const COMMANDS: Command[] = [
     leader: "b",
     command: "nav",
   },
+  // Font/scale zoom follows the writing-app convention (iA Writer, Bear):
+  // Mod± zooms the editor text; Mod-Shift± zooms the UI chrome. `=` is the
+  // canonical key (the `+` glyph is Shift-`=`; eventChord folds `+` back to
+  // `=` so both physical gestures land here).
+  {
+    id: "fontUp",
+    title: "Editor font larger",
+    group: "View",
+    chord: "Mod-=",
+    command: "fontUp",
+  },
+  {
+    id: "fontDown",
+    title: "Editor font smaller",
+    group: "View",
+    chord: "Mod--",
+    command: "fontDown",
+  },
+  {
+    id: "fontReset",
+    title: "Editor font reset",
+    group: "View",
+    chord: "Mod-0",
+    command: "fontReset",
+  },
+  {
+    id: "uiUp",
+    title: "Interface larger",
+    group: "View",
+    chord: "Mod-Shift-=",
+    command: "uiUp",
+  },
+  {
+    id: "uiDown",
+    title: "Interface smaller",
+    group: "View",
+    chord: "Mod-Shift--",
+    command: "uiDown",
+  },
+  // No default chord: Shift+0 types ")" on most layouts (the same trap the
+  // header comment describes), so reset-to-100% is palette-run or `bind`-able.
+  {
+    id: "uiReset",
+    title: "Interface size reset",
+    group: "View",
+    command: "uiReset",
+  },
   {
     id: "togglePreview",
     title: "Toggle live preview",
@@ -276,8 +323,12 @@ export const COMMAND_BY_ID: Record<string, Command> = Object.fromEntries(
 const MAC = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/.test(navigator.platform || "");
 const MOD_ORDER = ["Mod", "Alt", "Shift"];
 
+// Split on "-" except a trailing one, so the "-" KEY itself parses ("Mod--" →
+// ["Mod", "-"]) — the same rule CM6's keymap uses.
+const CHORD_SPLIT = /-(?!$)/;
+
 function normChord(chord: string): string {
-  const parts = chord.split("-");
+  const parts = chord.split(CHORD_SPLIT);
   const key = parts.pop() as string;
   const mods = new Set(
     parts.map((m) => (m === "Cmd" || m === "Meta" || m === "Ctrl" || m === "Control" ? "Mod" : m)),
@@ -285,6 +336,11 @@ function normChord(chord: string): string {
   const ordered = MOD_ORDER.filter((m) => mods.has(m));
   return [...ordered, key.length === 1 ? key.toLowerCase() : key].join("-");
 }
+
+// event.key reports the SHIFTED glyph for punctuation; fold the pairs our
+// chords use back to their base key so "Mod-Shift-=" is matchable and a
+// browser-style Cmd-"+" (layouts with a real + key) still means zoom-in.
+const SHIFT_BASE: Record<string, string> = { "+": "=", _: "-" };
 
 /** Normalize a keyboard event into the same chord form as the table (for matching). */
 export function eventChord(e: {
@@ -299,14 +355,15 @@ export function eventChord(e: {
   if (e.altKey) mods.push("Alt");
   if (e.shiftKey) mods.push("Shift");
   const ordered = MOD_ORDER.filter((m) => mods.includes(m));
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const raw = SHIFT_BASE[e.key] ?? e.key;
+  const key = raw.length === 1 ? raw.toLowerCase() : raw;
   return [...ordered, key].join("-");
 }
 
 /** Human-readable chord, platform-aware (⌘⇧F on macOS, Ctrl+Shift+F elsewhere).
  *  `mac` is injectable so the label is deterministic to test on either platform. */
 export function chordLabel(chord: string, mac: boolean = MAC): string {
-  const parts = chord.split("-").map((p) => {
+  const parts = chord.split(CHORD_SPLIT).map((p) => {
     if (p === "Mod") return mac ? "⌘" : "Ctrl";
     if (p === "Shift") return mac ? "⇧" : "Shift";
     if (p === "Alt") return mac ? "⌥" : "Alt";

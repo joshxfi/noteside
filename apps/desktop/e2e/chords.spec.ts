@@ -18,4 +18,32 @@ test.describe("keyboard chords", () => {
     await page.keyboard.press("ControlOrMeta+b");
     await expect(sidebar).toHaveClass(/is-collapsed/);
   });
+
+  test("Mod± zooms the editor font and Mod-Shift± the interface", async ({ page }) => {
+    await boot(page, { vimMode: false });
+    await page.locator(".cm-content").click();
+
+    const cssVar = (name: string) =>
+      page.evaluate((n) => document.documentElement.style.getPropertyValue(n).trim(), name);
+
+    expect(await cssVar("--editor-size")).toBe("19px");
+    await page.keyboard.press("ControlOrMeta+=");
+    await expect.poll(() => cssVar("--editor-size")).toBe("20px");
+    await page.keyboard.press("ControlOrMeta+-");
+    await expect.poll(() => cssVar("--editor-size")).toBe("19px");
+
+    // the shifted pair drives the UI scale, leaving the editor size alone
+    await page.keyboard.press("ControlOrMeta+Shift+=");
+    await expect.poll(() => cssVar("--ui-scale")).toBe("1.05");
+    expect(await cssVar("--editor-size")).toBe("19px");
+    await page.keyboard.press("ControlOrMeta+Shift+-");
+    await expect.poll(() => cssVar("--ui-scale")).toBe("1");
+
+    // Mod-0 resets the editor font
+    await page.keyboard.press("ControlOrMeta+=");
+    await page.keyboard.press("ControlOrMeta+=");
+    await expect.poll(() => cssVar("--editor-size")).toBe("21px");
+    await page.keyboard.press("ControlOrMeta+0");
+    await expect.poll(() => cssVar("--editor-size")).toBe("19px");
+  });
 });
