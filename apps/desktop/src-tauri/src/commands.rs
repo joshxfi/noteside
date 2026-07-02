@@ -146,30 +146,39 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
     Ok(meta)
 }
 
-/// Rename a note's file so its slug matches its (frontmatter/heading-derived) title.
-/// No-op when the filename already represents the title (returns the current meta).
-/// Wikilinks resolve by title, so title-based `[[links]]` keep working across the move.
+/// Rename a note's file so its slug matches its (frontmatter/heading-derived) title,
+/// staying WITHIN the note's own directory (a nested note is never hoisted to the
+/// root). No-op when the filename already represents the title (returns the current
+/// meta). Wikilinks resolve by title, so `[[links]]` keep working across the move.
 #[tauri::command]
 pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
-    let root = {
+    // The body comes from the in-memory index (save_note just recorded it) — no
+    // disk re-read on the hot save path; fall back to disk for an unindexed note.
+    let (root, recorded) = {
         let g = state.notebook.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoNotebook)?
+        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let body = g.records.iter().find(|r| r.meta.path == path).map(|r| r.body.clone());
+        (root, body)
     };
     let rel = path.clone();
     let (renamed, meta, body) = blocking(move || {
         let old_abs = notebook::safe_note_path(&root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
-        let body = std::fs::read_to_string(&old_abs)
-            .map_err(|e| AppError::Msg(format!("read failed: {e}")))?;
+        let body = match recorded {
+            Some(b) => b,
+            None => std::fs::read_to_string(&old_abs)
+                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
+        };
         // Derive the title exactly as the index does, then slugify it.
-        let title = notebook::parse_meta(rel.clone(), &body, 0).title;
-        let slug = notebook::slugify(&title);
+        let mut meta = notebook::parse_meta(rel.clone(), &body, 0);
+        let slug = notebook::slugify(&meta.title);
         let stem = Path::new(&rel).file_stem().and_then(|s| s.to_str()).unwrap_or("");
         if notebook::stem_matches_slug(stem, &slug) {
-            let meta = notebook::parse_meta(rel.clone(), &body, notebook::mtime_millis(&old_abs));
+            meta.updated = notebook::mtime_millis(&old_abs);
             return Ok((false, meta, body));
         }
-        let new_abs = notebook::unique_note_path(&root, &slug);
+        let dir = old_abs.parent().unwrap_or(&root);
+        let new_abs = notebook::unique_note_path(dir, &slug);
         std::fs::rename(&old_abs, &new_abs)
             .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
         let new_rel = notebook::rel_path(&root, &new_abs);
@@ -177,13 +186,11 @@ pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<Not
         Ok((true, meta, body))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
     if renamed {
+        let mut g = state.notebook.lock().unwrap();
         g.record_own_rename(&path, meta.clone(), body, Instant::now());
-    } else {
-        // Refresh the in-memory meta (title may have changed) without a move.
-        g.record_own_write(meta.clone(), body, Instant::now());
     }
+    // No-op path: save_note already recorded this exact meta+body — nothing to update.
     Ok(meta)
 }
 

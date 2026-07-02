@@ -2,7 +2,7 @@
 // from the sample notebook; search mirrors the Rust behaviour closely enough for
 // the demo. Config/last-notebook persist to localStorage.
 import { NOTES } from "../data";
-import { computeBacklinks } from "../links";
+import { computeBacklinks, slugifyTitle, stemMatchesSlug } from "../links";
 import type { Config } from "../settings";
 import type { Backend, ContentHit, FileHit, GrepMode, NoteDoc, NoteMeta } from "./types";
 
@@ -51,21 +51,12 @@ function titleFromBody(text: string): string | null {
   return null;
 }
 
-function slugify(title: string): string {
-  return (
-    title
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "untitled"
-  );
-}
-// Mirrors notebook::stem_matches_slug — a filename already representing this slug
-// exactly or as a `<slug>-N` collision variant.
-function stemMatchesSlug(stem: string, slug: string): boolean {
-  if (stem === slug) return true;
-  const rest = stem.startsWith(slug + "-") ? stem.slice(slug.length + 1) : null;
-  return rest !== null && /^\d+$/.test(rest);
+/** First free `<dir><slug>.md` / `<dir><slug>-N.md` key (mirrors unique_note_path). */
+function uniquePath(dir: string, slug: string): string {
+  let path = `${dir}${slug}.md`;
+  let n = 2;
+  while (recs.has(path)) path = `${dir}${slug}-${n++}.md`;
+  return path;
 }
 
 function base(r: Rec): Omit<FileHit, "score" | "positions" | "titlePositions"> {
@@ -224,12 +215,21 @@ export const mockBackend: Backend = {
     if (!r) throw new Error(`no such note: ${path}`);
     const title = titleFromBody(r.body);
     if (!title) return r.meta; // no heading → the filename is the identity
-    const slug = slugify(title);
-    const stem = path.replace(/\.md$/, "");
-    if (stemMatchesSlug(stem, slug)) return r.meta; // filename already matches
-    let newPath = `${slug}.md`;
-    let n = 2;
-    while (recs.has(newPath)) newPath = `${slug}-${n++}.md`;
+    const slug = slugifyTitle(title);
+    // Mirror the Rust command: compare the FILENAME stem (directory stripped) and
+    // rename within the note's own directory — nested notes are never hoisted out.
+    const dirEnd = path.lastIndexOf("/") + 1;
+    const dir = path.slice(0, dirEnd);
+    const stem = path.slice(dirEnd).replace(/\.md$/, "");
+    if (stemMatchesSlug(stem, slug)) {
+      // Filename already matches — still surface the freshly derived title (parity
+      // with rename_note, which re-parses even on a no-op).
+      if (r.meta.title === title) return r.meta;
+      const meta: NoteMeta = { ...r.meta, title };
+      recs.set(path, { meta, body: r.body });
+      return meta;
+    }
+    const newPath = uniquePath(dir, slug);
     const meta: NoteMeta = { ...r.meta, id: newPath, path: newPath, title, updated: Date.now() };
     recs.delete(path);
     recs.set(newPath, { meta, body: r.body });
@@ -237,14 +237,7 @@ export const mockBackend: Backend = {
   },
   async createNote(title) {
     const display = (title ?? "").trim() || "Untitled";
-    const slug =
-      display
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "") || "untitled";
-    let path = `${slug}.md`;
-    let n = 2;
-    while (recs.has(path)) path = `${slug}-${n++}.md`;
+    const path = uniquePath("", slugifyTitle(display));
     const body = `# ${display}\n\n`;
     const meta: NoteMeta = {
       id: path,

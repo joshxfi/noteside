@@ -44,4 +44,21 @@ describe("mock backend", () => {
     expect(meta.title).toBe("Derived Title");
     expect((await mockBackend.readNote("scratch.md")).body).toContain("# Derived Title");
   });
+
+  // Parity with rename_note (REGRESSION, review): the stem comparison must strip
+  // the directory, and a rename must stay WITHIN the note's own directory.
+  it("renameNote no-ops on a nested note whose filename already matches its title", async () => {
+    await mockBackend.saveNote("journal/keep-me.md", "# Keep Me\n\nbody");
+    const meta = await mockBackend.renameNote("journal/keep-me.md");
+    expect(meta.path).toBe("journal/keep-me.md"); // dir-stripped stem matched → no move
+  });
+
+  it("renameNote renames within the note's directory (never hoists to the root)", async () => {
+    await mockBackend.saveNote("journal/old-name.md", "# Fresh Title\n\nbody");
+    const meta = await mockBackend.renameNote("journal/old-name.md");
+    expect(meta.path).toBe("journal/fresh-title.md"); // moved, but still in journal/
+    expect(meta.title).toBe("Fresh Title");
+    await expect(mockBackend.readNote("journal/old-name.md")).rejects.toThrow();
+    expect((await mockBackend.readNote("journal/fresh-title.md")).body).toContain("Fresh Title");
+  });
 });

@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONFIG_ID, createEditingSession, type EditingSessionDeps } from "./editing-session";
+import { slugifyTitle, stemMatchesSlug } from "./links";
 import type { Backend, NoteDoc, NoteMeta } from "./backend/types";
 
 // A Map-backed fake of the consumed backend slice. Records the exact call order
 // (so flush-before-switch is assertable) and lets a test mutate bodies to
-// simulate an external "disk" edit.
+// simulate an external "disk" edit. `delays` keys are note ids (read/save) or
+// `rename:<id>` (renameNote); ids added to `failingSaves` make saveNote reject.
 function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, number> = {}) {
   const bodies = new Map<string, string>(Object.entries(seed));
+  const failingSaves = new Set<string>();
   const calls: string[] = [];
   const metaOf = (id: string): NoteMeta => ({
     id,
@@ -39,23 +42,22 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
       calls.push(`save:${id}`);
       const d = delays[id] ?? 0;
       if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
+      if (failingSaves.has(id)) throw new Error(`disk full: ${id}`);
       bodies.set(id, body);
       return metaOf(id);
     },
-    // Mimics the real command: slug the body's title; rename the file if the
-    // filename doesn't already represent it. Returns the (possibly new) meta.
+    // Mimics the real command: slug the body's title (same shared rules as the
+    // mock backend); rename the file if the filename doesn't already represent
+    // it. Returns the (possibly new) meta.
     async renameNote(id: string): Promise<NoteMeta> {
       calls.push(`rename:${id}`);
+      const d = delays[`rename:${id}`] ?? 0;
+      if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
       const title = titleOf(bodies.get(id) ?? "");
       if (!title) return metaOf(id);
-      const slug =
-        title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "") || "untitled";
+      const slug = slugifyTitle(title);
       const stem = id.replace(/\.md$/, "");
-      const numbered = stem.startsWith(`${slug}-`) && /^\d+$/.test(stem.slice(slug.length + 1));
-      if (stem === slug || numbered) return metaOf(id);
+      if (stemMatchesSlug(stem, slug)) return metaOf(id);
       let newId = `${slug}.md`;
       let n = 2;
       while (bodies.has(newId)) newId = `${slug}-${n++}.md`;
@@ -68,7 +70,7 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
       return [...bodies.keys()].map(metaOf);
     },
   };
-  return { backend, bodies, calls, metaOf };
+  return { backend, bodies, calls, metaOf, failingSaves };
 }
 
 function makeSession(
@@ -406,5 +408,63 @@ describe("editingSession", () => {
     expect(calls).not.toContain("rename:untitled.md"); // autosave did NOT rename
     expect(renamed).toEqual([]);
     expect(session.getSnapshot().activeId).toBe("untitled.md");
+  });
+
+  // REGRESSION (review): a keystroke during the rename round-trip queued an
+  // autosave pinned to the OLD path, which later recreated the renamed-away file.
+  it("an autosave queued during the rename follows the new id (no file resurrection)", async () => {
+    const { session, bodies, calls } = makeSession(
+      { "untitled.md": "# Untitled\n" },
+      {},
+      { "rename:untitled.md": 50 }, // rename IPC in flight for 50ms
+    );
+    await session.open("untitled.md");
+    session.save("# Hello World\n\nbody"); // persist lands, rename parked on the timer
+    session.change("# Hello World\n\nbody + typed during rename"); // pins autosave to the OLD id
+    await vi.advanceTimersByTimeAsync(50); // rename resolves → id migrates + repin
+    expect(session.getSnapshot().activeId).toBe("hello-world.md");
+    await vi.advanceTimersByTimeAsync(800); // the queued autosave fires
+    expect(bodies.has("untitled.md")).toBe(false); // NOT resurrected
+    expect(bodies.get("hello-world.md")).toBe("# Hello World\n\nbody + typed during rename");
+    expect(calls).toContain("save:hello-world.md"); // the autosave followed the rename
+    expect(session.getSnapshot().dirty).toBe(false); // and settled the buffer
+  });
+
+  // REGRESSION (review): noteTitle was assigned unconditionally after the rename
+  // await, clobbering the title of a note opened while the rename was in flight.
+  it("switching notes during an in-flight rename does not clobber the new note's title", async () => {
+    const { session, renamed } = makeSession(
+      { "untitled.md": "# Hello World\n", "b.md": "B" },
+      {},
+      { "b.md": 10, "rename:untitled.md": 50 },
+    );
+    await session.open("untitled.md");
+    session.save("# Hello World\n");
+    const openB = session.open("b.md"); // parked on the 10ms read
+    await vi.advanceTimersByTimeAsync(0); // persist resolves; rename passes its guard, parks on 50ms
+    await vi.advanceTimersByTimeAsync(10); // b.md opens
+    await openB;
+    expect(session.getSnapshot().title).toBe("b");
+    await vi.advanceTimersByTimeAsync(50); // rename resolves with A's new meta
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("b.md");
+    expect(s.title).toBe("b"); // NOT "Hello World"
+    // the sidebar swap still happened for the renamed row
+    expect(renamed).toEqual([
+      { oldId: "untitled.md", meta: expect.objectContaining({ id: "hello-world.md" }) },
+    ]);
+  });
+
+  // REGRESSION (review): a failed explicit save must not chain into a rename
+  // derived from the stale on-disk content.
+  it("a failed explicit save does not trigger a rename", async () => {
+    const { session, calls, notices, failingSaves } = makeSession({ "a.md": "# New Title\n" });
+    await session.open("a.md");
+    failingSaves.add("a.md");
+    session.save("# New Title\n\nmore");
+    await vi.advanceTimersByTimeAsync(0); // flush the save+rename microtask chain
+    expect(notices.some((m) => m.startsWith("save failed"))).toBe(true);
+    expect(calls).toContain("save:a.md");
+    expect(calls).not.toContain("rename:a.md"); // gated on save success
   });
 });

@@ -11,6 +11,10 @@ export interface Autosave {
   flush(): void;
   /** Drop any queued save without running it. */
   cancel(): void;
+  /** Re-target a queued save from `oldId` to `newId` (rename-on-save migrates the
+   *  buffer's id mid-flight; a save left pinned to the old path would recreate the
+   *  renamed-away file). No-op when nothing is pending or the pin doesn't match. */
+  repin(oldId: string, newId: string): void;
 }
 
 export function createAutosave(
@@ -47,6 +51,9 @@ export function createAutosave(
     cancel() {
       clearTimer();
       pending = null;
+    },
+    repin(oldId, newId) {
+      if (pending && pending.id === oldId) pending = { ...pending, id: newId };
     },
   };
 }

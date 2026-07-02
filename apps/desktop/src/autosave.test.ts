@@ -89,4 +89,17 @@ describe("createAutosave", () => {
     a.flush();
     expect(saved).toEqual([]);
   });
+
+  // rename-on-save migrates the buffer's id mid-flight; the queued save must
+  // follow it or it would recreate the renamed-away file.
+  it("repin() re-targets a matching queued save and ignores a stale oldId", () => {
+    const saved: Array<[string, string]> = [];
+    const a = createAutosave((id, text) => saved.push([id, text]), 800);
+    a.schedule("untitled.md", "body");
+    a.repin("other.md", "nope.md"); // pin doesn't match → no-op
+    a.repin("untitled.md", "hello-world.md");
+    vi.advanceTimersByTime(800);
+    expect(saved).toEqual([["hello-world.md", "body"]]);
+    a.repin("untitled.md", "x.md"); // nothing pending → no-op, no crash
+  });
 });

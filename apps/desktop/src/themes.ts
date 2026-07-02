@@ -98,11 +98,11 @@ export const THEME_VARS = [
   "--rule-soft",
   "--accent",
   "--accent-ink",
-  "--accent-base",
   "--danger",
-  // Deliberately NOT set for base16 (they derive from --paper/--accent in the
-  // [data-theme] blocks, or inherit the mode default): --sel, --active-line,
-  // --desk-a, --desk-b, --shadow, --win-border.
+  // Deliberately NOT set for base16: --sel/--active-line/--desk-a/--desk-b derive
+  // from --paper/--accent in the [data-theme] blocks; --shadow/--win-border inherit
+  // the mode default; --accent-base is a builtins-only input to the block's --accent
+  // definition, which the inline --accent above already shadows.
 ] as const;
 
 // Guard thresholds. base16 schemes are authored for syntax, not UI, so a couple
@@ -153,10 +153,13 @@ export function schemeToPalette(p: Base16Palette): Record<string, string> {
     "--rule-soft": ruleSoft,
     "--accent": accent,
     "--accent-ink": accentInk,
-    "--accent-base": accent,
     "--danger": p.base08, // base16 red
   };
 }
+
+/** The 3-stripe swatch (bg · ink · accent) both pickers render for a theme. */
+export const previewGradient = (t: Theme): string =>
+  `linear-gradient(90deg, ${t.preview[0]} 0 34%, ${t.preview[1]} 34% 67%, ${t.preview[2]} 67% 100%)`;
 
 /** The CSS-var overrides a theme applies. Empty for builtin (use styles.css). */
 export function resolveThemeVars(theme: Theme): Record<string, string> {
@@ -186,6 +189,9 @@ export function applyThemeVars(el: StyleTarget, theme: Theme): void {
 }
 
 // ── the registry ─────────────────────────────────────────────────────────
+// The builtin previews transcribe --paper/--ink/--accent from the [data-theme]
+// blocks in styles.css (the visual source of truth) — keep them in sync when
+// retuning the Noteside palette there.
 const BUILTIN: Theme[] = [
   {
     id: "noteside-light",

@@ -28,12 +28,12 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
-import { applyThemeVars, themeById } from "./themes";
+import { applyThemeVars, resolveThemeId, themeById } from "./themes";
 import { ThemePicker } from "./components/theme-picker";
 import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
-import { isTauri, windowControl } from "./use-window-controls";
+import { isTauri } from "./use-window-controls";
 
 const AUTOSAVE_MS = 800;
 
@@ -57,31 +57,15 @@ function relTime(ms: number): string {
   return `${Math.round(d / 365)}y ago`;
 }
 
+// Landing-demo-only chrome (the native app shows the OS traffic lights instead
+// and never renders this — see the !isTauri() gate at the render site). Red
+// stands in for "close" by closing the note buffer; amber/green are inert.
 function TrafficLights({ onCloseNote }: { onCloseNote: () => void }) {
-  const tauri = isTauri();
-  const onRed = () => (tauri ? void windowControl("close") : onCloseNote());
   return (
     <div className="av-lights">
-      <button className="av-dot red" onClick={onRed} aria-label="close" />
-      {tauri ? (
-        <>
-          <button
-            className="av-dot amber"
-            onClick={() => void windowControl("minimize")}
-            aria-label="minimize"
-          />
-          <button
-            className="av-dot green"
-            onClick={() => void windowControl("toggleMaximize")}
-            aria-label="zoom"
-          />
-        </>
-      ) : (
-        <>
-          <span className="av-dot amber" />
-          <span className="av-dot green" />
-        </>
-      )}
+      <button className="av-dot red" onClick={onCloseNote} aria-label="close" />
+      <span className="av-dot amber" />
+      <span className="av-dot green" />
     </div>
   );
 }
@@ -399,7 +383,13 @@ export function App() {
       let stored: Partial<Config> | null = null;
       try {
         stored = await backend.getConfig();
-        if (stored) setCfg((c) => ({ ...c, ...stored }));
+        if (stored) {
+          // Pre-themes configs stored theme:"light"|"dark" — normalize the alias
+          // (or any unknown id) to a canonical theme id so raw comparisons (e.g.
+          // the picker's is-current marker) work and the store converges.
+          const theme = typeof stored.theme === "string" ? resolveThemeId(stored.theme) : null;
+          setCfg((c) => ({ ...c, ...stored, theme: theme ?? c.theme }));
+        }
       } catch {
         /* defaults */
       }
@@ -637,7 +627,7 @@ export function App() {
     <div className="av-desktop">
       <div className="av-window">
         <div className="av-titlebar" data-tauri-drag-region>
-          <TrafficLights onCloseNote={() => s.activeId && session.quit()} />
+          {!isTauri() && <TrafficLights onCloseNote={() => s.activeId && session.quit()} />}
           <button
             className="av-iconbtn av-navtoggle"
             onClick={toggleNav}
@@ -684,16 +674,18 @@ export function App() {
               />
             </svg>
           </button>
-          <div className="av-title" data-tauri-drag-region>
-            {titleText ? (
-              <>
-                Noteside — {titleText}
-                {s.status === "note" && <span className="av-ext">.md</span>}
-              </>
-            ) : (
-              "Noteside"
-            )}
-          </div>
+          {!isTauri() && (
+            <div className="av-title" data-tauri-drag-region>
+              {titleText ? (
+                <>
+                  Noteside — {titleText}
+                  {s.status === "note" && <span className="av-ext">.md</span>}
+                </>
+              ) : (
+                "Noteside"
+              )}
+            </div>
+          )}
         </div>
 
         <div className="av-body">

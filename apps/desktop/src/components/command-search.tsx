@@ -4,14 +4,7 @@
 // ask for confirmation. Reuses the finder (fnd-*) markup. Esc closes.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { chordLabel, type Command } from "../editor/commands";
-
-function subseq(q: string, text: string): boolean {
-  if (!q) return true;
-  const t = text.toLowerCase();
-  let i = 0;
-  for (let j = 0; j < t.length && i < q.length; j++) if (t[j] === q[i]) i++;
-  return i === q.length;
-}
+import { scrollRowIntoView, subseq } from "./list-nav";
 
 export function CommandSearch({
   commands,
@@ -41,14 +34,7 @@ export function CommandSearch({
 
   // keep the selection in view
   useEffect(() => {
-    const c = listRef.current;
-    if (!c) return;
-    const el = c.children[sel] as HTMLElement | undefined;
-    if (!el) return;
-    const top = el.offsetTop;
-    const bottom = top + el.offsetHeight;
-    if (top < c.scrollTop) c.scrollTop = top;
-    else if (bottom > c.scrollTop + c.clientHeight) c.scrollTop = bottom - c.clientHeight;
+    scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
 
   const choose = (cmd: Command | undefined) => {

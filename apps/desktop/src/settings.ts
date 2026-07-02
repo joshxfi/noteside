@@ -154,10 +154,13 @@ export function parseConfig(text: string, base: Config): Config {
       const key = m[1].toLowerCase(),
         val = m[2].trim();
       if (key === "theme") {
-        // Accept a theme id, an alias (light/dark), or a label; unknown → leave
-        // the current value (a config naming a not-yet-bundled theme won't crash).
+        // Accept a theme id, an alias (light/dark), or a label. Dark/light-ish
+        // strings ("dark mode") keep the pre-themes parser's tolerance; anything
+        // else leaves the current value (an unknown theme name won't crash).
         const id = resolveThemeId(val);
         if (id) c.theme = id;
+        else if (/dark/i.test(val)) c.theme = "noteside-dark";
+        else if (/light/i.test(val)) c.theme = "noteside-light";
       } else if (key === "editor-font") {
         const id = matchFont(EDITOR_FONTS, val);
         if (id) c.editorFont = id;

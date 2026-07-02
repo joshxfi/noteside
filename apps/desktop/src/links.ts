@@ -86,6 +86,22 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, "");
 const baseName = (path: string) => path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 
+// ── filename ⇄ title slugging (rename-on-save) ────────────────────────────
+// The JS mirror of notebook.rs `slugify`/`stem_matches_slug`, shared by the mock
+// backend and tests so the rules live in exactly one TS place. (`slug` above stays
+// fallback-free on purpose — an empty resolution key must never match.)
+
+/** A filesystem-safe slug for a note title (never empty — falls back to "untitled"). */
+export const slugifyTitle = (title: string): string => slug(title) || "untitled";
+
+/** True if a filename stem already represents `s` — exactly, or as a `<s>-N`
+ *  collision variant — so rename-on-save can skip a file that's already correct. */
+export function stemMatchesSlug(stem: string, s: string): boolean {
+  if (stem === s) return true;
+  const rest = stem.startsWith(`${s}-`) ? stem.slice(s.length + 1) : null;
+  return rest !== null && /^\d+$/.test(rest);
+}
+
 /** Resolve a target to a note by decreasing specificity: exact title, exact
  *  filename, filename slug, title slug. Empty keys (punctuation-only targets,
  *  blank titles) never match, and the ordered passes make ties deterministic. */
