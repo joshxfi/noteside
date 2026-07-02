@@ -55,21 +55,21 @@ panel) and these are all you need. They stay available with vim on, too.
 Standard vim throughout. On top of that, these ex-commands and motions are wired to
 the app:
 
-| Command                | Does                                          |
-| ---------------------- | --------------------------------------------- |
-| `:w` `:q` `:wq`        | Save · close note · save & close (`:x` too)   |
-| `:find` (`:files`)     | Fuzzy file & content finder                   |
-| `:grep`                | Search note contents                          |
-| `gf` / `:follow`       | Follow the `[[wikilink]]` under the cursor    |
-| `:backlinks` (`:back`) | Linked-references panel for the current note  |
-| `:new` / `:rm`         | New note · delete note                        |
-| `:preview`             | Toggle inline live-preview                    |
-| `:theme` (`:colo`)     | Theme picker (live preview)                   |
-| `:nav`                 | Toggle the sidebar                            |
-| `:commands`            | Open the searchable command palette           |
-| `:settings` `:config`  | Settings panel · edit `~/.notesiderc`         |
-| `:help`                | Keyboard cheatsheet                           |
-| `:set …`               | CodeMirror-vim options (e.g. `:set hlsearch`) |
+| Command                | Does                                             |
+| ---------------------- | ------------------------------------------------ |
+| `:w` `:q` `:wq`        | Save · close note · save & close (`:x` too)      |
+| `:find` (`:files`)     | Fuzzy file & content finder                      |
+| `:grep`                | Search note contents                             |
+| `gf` / `:follow`       | Follow the `[[wikilink]]` under the cursor       |
+| `:backlinks` (`:back`) | Linked-references panel for the current note     |
+| `:new` / `:rm`         | New note · delete note                           |
+| `:preview`             | Toggle inline live-preview                       |
+| `:theme`               | Theme picker (also vim's `:colorscheme`/`:colo`) |
+| `:nav`                 | Toggle the sidebar                               |
+| `:commands`            | Open the searchable command palette              |
+| `:settings` `:config`  | Settings panel · edit `~/.notesiderc`            |
+| `:help`                | Keyboard cheatsheet                              |
+| `:set …`               | CodeMirror-vim options (e.g. `:set hlsearch`)    |
 
 Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
 `~/.notesiderc` and apply on `:w`.
