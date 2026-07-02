@@ -2,9 +2,10 @@
 // content matches in one list; Files / Content narrow it. Queries the backend
 // (Rust nucleo + content scan, or the mock) with a short debounce; the preview
 // pane reads selected note text from the backend's in-memory preview path.
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backend, type ContentHit, type FileHit, type GrepMode } from "../backend";
+import { scrollRowIntoView } from "./list-nav";
 
 const GREP_MODES: GrepMode[] = ["plain", "regex", "fuzzy"];
 
@@ -81,6 +82,71 @@ function GrepRow({ item }: { item: ContentHit }) {
   );
 }
 
+// Rows and preview lines are memo'd so a selection move re-renders only the two
+// rows whose `selected`/`isMatch` flipped, not every row (up to 400 in "all"
+// mode) or every preview line.
+const ResultRow = memo(function ResultRow({
+  item,
+  index,
+  selected,
+  onHover,
+  onPick,
+}: {
+  item: FileHit | ContentHit;
+  index: number;
+  selected: boolean;
+  onHover: (index: number) => void;
+  onPick: (item: FileHit | ContentHit) => void;
+}) {
+  return (
+    <div
+      id={`fnd-opt-${index}`}
+      role="option"
+      aria-selected={selected}
+      className={"fnd-row" + (selected ? " is-sel" : "")}
+      onMouseMove={() => !selected && onHover(index)}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        onPick(item);
+      }}
+    >
+      {"lineNumber" in item ? <GrepRow item={item} /> : <FileRow item={item} />}
+    </div>
+  );
+});
+
+const PrevLine = memo(function PrevLine({
+  text,
+  isMatch,
+  ranges,
+}: {
+  text: string;
+  isMatch: boolean;
+  ranges: Range[] | null;
+}) {
+  return (
+    <div className={"fnd-prevline" + (isMatch ? " is-match" : "")}>
+      {isMatch && ranges ? hl(text, ranges) : text || "​"}
+    </div>
+  );
+});
+
+// Truncation indicator bracketing the preview window; never carries is-match,
+// so the scroll-to-match querySelector cannot land on it.
+function PrevMore({ count }: { count: number }) {
+  return (
+    <div className="fnd-prevline fnd-prevmore">
+      ··· {count} more {count === 1 ? "line" : "lines"} ···
+    </div>
+  );
+}
+
+// Preview renders a window of ±PREVIEW_RADIUS lines around the match instead of
+// the whole note (a 10k-line note would otherwise reconcile 10k divs per
+// arrow-key). The window is clamped to the note, so notes that fit entirely
+// (≤ 2·RADIUS+1 lines) render in full — pixel-identical to the unwindowed list.
+const PREVIEW_RADIUS = 150;
+
 function Preview({
   path,
   lines,
@@ -93,10 +159,9 @@ function Preview({
   ranges: Range[] | null;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const c = bodyRef.current,
-      el = lineRef.current;
+    const c = bodyRef.current;
+    const el = c?.querySelector<HTMLElement>(".fnd-prevline.is-match");
     if (!c || !el) return;
     const top = el.offsetTop,
       bottom = top + el.offsetHeight;
@@ -110,22 +175,27 @@ function Preview({
       </div>
     );
   }
+  const size = Math.min(lines.length, 2 * PREVIEW_RADIUS + 1);
+  const start = Math.min(Math.max(0, (activeLine ?? 1) - 1 - PREVIEW_RADIUS), lines.length - size);
   return (
     <div className="fnd-preview">
       <div className="fnd-prevhead">{path}</div>
       <div className="fnd-prevbody" ref={bodyRef}>
-        {lines.map((ln, i) => {
-          const isMatch = activeLine === i + 1;
+        {start > 0 && <PrevMore count={start} />}
+        {lines.slice(start, start + size).map((ln, i) => {
+          const isMatch = activeLine === start + i + 1;
+          // Absolute line index as key: when the window slides, overlapping
+          // lines keep identity and their memo'd renders are skipped.
           return (
-            <div
-              key={i}
-              className={"fnd-prevline" + (isMatch ? " is-match" : "")}
-              ref={isMatch ? lineRef : null}
-            >
-              {isMatch && ranges ? hl(ln, ranges) : ln || "​"}
-            </div>
+            <PrevLine
+              key={start + i}
+              text={ln}
+              isMatch={isMatch}
+              ranges={isMatch ? ranges : null}
+            />
           );
         })}
+        {start + size < lines.length && <PrevMore count={lines.length - start - size} />}
       </div>
     </div>
   );
@@ -199,18 +269,14 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
 
   // keep selection in view
   useEffect(() => {
-    const c = listRef.current;
-    if (!c) return;
-    const el = c.children[sel] as HTMLElement | undefined;
-    if (!el) return;
-    const top = el.offsetTop,
-      bottom = top + el.offsetHeight;
-    if (top < c.scrollTop) c.scrollTop = top;
-    else if (bottom > c.scrollTop + c.clientHeight) c.scrollTop = bottom - c.clientHeight;
+    scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
 
   // Lazily load preview text from the backend's cached path, then memoize it for
   // this overlay session so moving across many hits in the same file stays cheap.
+  // Cache misses debounce ~40ms so key-repeat across many files coalesces into
+  // one IPC for the file the selection lands on; the cleanup's alive flag drops
+  // late responses for a file that is no longer selected.
   useEffect(() => {
     if (!selPath) {
       setPreview(null);
@@ -222,22 +288,30 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
       return;
     }
     let alive = true;
-    backend
-      .previewNote(selPath)
-      .then((doc) => {
-        if (!alive) return;
-        const lines = doc.body.split("\n");
-        previewCacheRef.current.set(selPath, lines);
-        setPreview({ path: selPath, lines });
-      })
-      .catch(() => alive && setPreview(null));
+    const id = setTimeout(() => {
+      backend
+        .previewNote(selPath)
+        .then((doc) => {
+          if (!alive) return;
+          const lines = doc.body.split("\n");
+          previewCacheRef.current.set(selPath, lines);
+          setPreview({ path: selPath, lines });
+        })
+        .catch(() => alive && setPreview(null));
+    }, 40);
     return () => {
       alive = false;
+      clearTimeout(id);
     };
   }, [selPath]);
 
+  const pick = useCallback(
+    (item: FileHit | ContentHit) => onOpen(item.path, "lineNumber" in item ? item.lineNumber : 0),
+    [onOpen],
+  );
+
   const open = () => {
-    if (selItem) onOpen(selItem.path, "lineNumber" in selItem ? selItem.lineNumber : 0);
+    if (selItem) pick(selItem);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -333,20 +407,14 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
               </div>
             ) : (
               items.map((item, i) => (
-                <div
+                <ResultRow
                   key={itemKey(item)}
-                  id={`fnd-opt-${i}`}
-                  role="option"
-                  aria-selected={i === sel}
-                  className={"fnd-row" + (i === sel ? " is-sel" : "")}
-                  onMouseMove={() => i !== sel && setSel(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onOpen(item.path, "lineNumber" in item ? item.lineNumber : 0);
-                  }}
-                >
-                  {"lineNumber" in item ? <GrepRow item={item} /> : <FileRow item={item} />}
-                </div>
+                  item={item}
+                  index={i}
+                  selected={i === sel}
+                  onHover={setSel}
+                  onPick={pick}
+                />
               ))
             )}
           </div>

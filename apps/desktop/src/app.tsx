@@ -1,12 +1,23 @@
 // app.tsx — window chrome, notebook sidebar, editor + finder + settings orchestration.
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import {
+  Component,
+  lazy,
+  memo,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { backend, type NoteMeta } from "./backend";
-import { Editor } from "./editor/editor";
-import { type AppCommand, setInsertEscape, setUserKeymaps } from "./editor/ex-commands";
+import type { AppCommand } from "./editor/ex-commands";
+import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
 import { Finder } from "./components/finder";
 import { SettingsPanel } from "./components/settings-panel";
-import { CommandPalette, type PaletteAction } from "./components/command-palette";
+import { CommandPalette } from "./components/command-palette";
 import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
@@ -28,20 +39,70 @@ import {
   parseConfig,
   serializeConfig,
 } from "./settings";
-import { applyThemeVars, resolveThemeId, themeById } from "./themes";
+import { applyThemeVars, resolveThemeId, resolveThemeVars, themeById } from "./themes";
 import { ThemePicker } from "./components/theme-picker";
 import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 
+// The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
+// Loading it lazily keeps it off the first-paint path; kicking the import at
+// module scope starts the (local, fast) fetch immediately, so it's ready by the
+// time a note opens.
+const editorChunk = import("./editor/editor");
+editorChunk.catch(() => {}); // rejection surfaces via EditorBoundary at render, not as an unhandled event
+const Editor = lazy(() => editorChunk.then((m) => ({ default: m.Editor })));
+
+// Suspense catches loading, not failure — without this, a chunk-load error
+// (corrupt/partial install) would unmount the whole app to a blank window.
+class EditorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="av-empty">
+        <div className="av-empty-title">The editor failed to load</div>
+        <div className="av-empty-sub">
+          This usually means a damaged install.{" "}
+          <button className="av-link" onClick={() => location.reload()}>
+            Reload
+          </button>{" "}
+          or reinstall Noteside.
+        </div>
+      </div>
+    );
+  }
+}
+
 const AUTOSAVE_MS = 800;
+
+// The theme mirror the index.html boot script paints from before the config
+// store loads (kills the light-flash for dark/base16 users). Written by the
+// config-apply effect; read here to seed the initial cfg so the first React
+// render agrees with the boot script instead of undoing it.
+const BOOT_THEME_KEY = "noteside:boot-theme";
+
+function bootConfig(): Config {
+  try {
+    const raw = localStorage.getItem(BOOT_THEME_KEY);
+    const t = raw ? (JSON.parse(raw) as { id?: unknown }) : null;
+    const id = typeof t?.id === "string" ? resolveThemeId(t.id) : null;
+    if (id) return { ...CONFIG_DEFAULTS, theme: id };
+  } catch {
+    /* corrupt mirror — defaults */
+  }
+  return CONFIG_DEFAULTS;
+}
 
 type Status = "boot" | "no-notebook" | "ready";
 type FinderMode = "all" | "files" | "content";
 
-function relTime(ms: number): string {
-  const diff = Date.now() - ms;
+function relTime(ms: number, now: number): string {
+  const diff = now - ms;
   const s = Math.round(diff / 1000);
   if (s < 45) return "just now";
   const m = Math.round(s / 60);
@@ -74,18 +135,24 @@ function TrafficLights({ onCloseNote }: { onCloseNote: () => void }) {
 // it the plain flex list renders verbatim, so typical notebooks are untouched.
 const VIRTUAL_THRESHOLD = 100;
 
-function NoteRow({
+// Memoized so an autosave landing (which replaces one meta in the list) or a
+// toast re-renders 1 row, not all of them. `top` is a primitive (the virtual
+// offset) so the memo compare stays shallow; `now` ticks once a minute to keep
+// the relative timestamps honest.
+const NoteRow = memo(function NoteRow({
   note,
   active,
   onPick,
-  style,
+  now,
+  top,
   index,
   measureRef,
 }: {
   note: NoteMeta;
   active: boolean;
   onPick: (id: string) => void;
-  style?: CSSProperties;
+  now: number;
+  top?: number;
   index?: number;
   measureRef?: (el: HTMLElement | null) => void;
 }) {
@@ -96,7 +163,17 @@ function NoteRow({
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
-      style={style}
+      style={
+        top === undefined
+          ? undefined
+          : {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${top}px)`,
+            }
+      }
     >
       <span className="av-item-bar" />
       <span className="av-item-main">
@@ -105,12 +182,12 @@ function NoteRow({
         </span>
         <span className="av-item-meta">
           {note.tags[0] ? `${note.tags[0]} · ` : ""}
-          {relTime(note.updated)}
+          {relTime(note.updated, now)}
         </span>
       </span>
     </button>
   );
-}
+});
 
 // Windowed note list for large notebooks — measures real row heights (titles
 // may wrap), so the scrollbar stays accurate without assuming a fixed row size.
@@ -118,10 +195,12 @@ function VirtualNoteList({
   notes,
   activeId,
   onPick,
+  now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
+  now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virt = useVirtualizer({
@@ -130,7 +209,10 @@ function VirtualNoteList({
     estimateSize: () => 52,
     overscan: 10,
   });
-  const activeIndex = activeId ? notes.findIndex((n) => n.id === activeId) : -1;
+  const activeIndex = useMemo(
+    () => (activeId ? notes.findIndex((n) => n.id === activeId) : -1),
+    [notes, activeId],
+  );
   useEffect(() => {
     if (activeIndex >= 0) virt.scrollToIndex(activeIndex, { align: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,13 +231,8 @@ function VirtualNoteList({
               measureRef={virt.measureElement}
               active={n.id === activeId}
               onPick={onPick}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${item.start}px)`,
-              }}
+              now={now}
+              top={item.start}
             />
           );
         })}
@@ -164,7 +241,7 @@ function VirtualNoteList({
   );
 }
 
-function Sidebar({
+const Sidebar = memo(function Sidebar({
   open,
   notes,
   activeId,
@@ -179,6 +256,13 @@ function Sidebar({
   onNew: () => void;
   onSettings: () => void;
 }) {
+  // Minute tick so memoized rows still refresh their "5m ago" labels (they used
+  // to piggyback on unrelated App re-renders).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
   return (
     <aside className={"av-sidebar" + (open ? "" : " is-collapsed")}>
       <div className="av-sidebar-inner">
@@ -192,11 +276,11 @@ function Sidebar({
         {notes.length <= VIRTUAL_THRESHOLD ? (
           <nav className="av-list" aria-label="Notes">
             {notes.map((n) => (
-              <NoteRow key={n.id} note={n} active={n.id === activeId} onPick={onPick} />
+              <NoteRow key={n.id} note={n} active={n.id === activeId} onPick={onPick} now={now} />
             ))}
           </nav>
         ) : (
-          <VirtualNoteList notes={notes} activeId={activeId} onPick={onPick} />
+          <VirtualNoteList notes={notes} activeId={activeId} onPick={onPick} now={now} />
         )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
@@ -255,6 +339,38 @@ function Sidebar({
       </div>
     </aside>
   );
+});
+
+// Sidebar list order (matches the backend: pinned desc, then updated desc) — so
+// create/delete can patch the list locally instead of refetching it over IPC.
+function metaOrder(a: NoteMeta, b: NoteMeta): number {
+  return Number(b.pinned) - Number(a.pinned) || b.updated - a.updated;
+}
+function insertMeta(list: NoteMeta[], meta: NoteMeta): NoteMeta[] {
+  // Stable re-sort of the whole list, not just an insert: the old code refetched
+  // listNotes here, which also re-slotted any note whose `updated` bumped since
+  // (autosaves patch metas in place without re-sorting) — keep that behavior.
+  return [...list, meta].sort(metaOrder);
+}
+
+// Watcher events often rescan to an identical list — keep the old array identity
+// so the memoized sidebar doesn't re-render for nothing.
+function sameMetaList(a: NoteMeta[], b: NoteMeta[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.title !== y.title ||
+      x.updated !== y.updated ||
+      x.pinned !== y.pinned ||
+      x.tags[0] !== y.tags[0]
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function NotebookPicker({ onPick }: { onPick: () => void }) {
@@ -303,7 +419,7 @@ function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: 
 }
 
 export function App() {
-  const [cfg, setCfg] = useState<Config>(CONFIG_DEFAULTS);
+  const [cfg, setCfg] = useState<Config>(bootConfig);
   const [status, setStatus] = useState<Status>("boot");
   const [notes, setNotes] = useState<NoteMeta[]>([]);
   const [navOpen, setNavOpen] = useState(true);
@@ -321,10 +437,10 @@ export function App() {
 
   const configLoaded = useRef(false);
 
-  const flash = (msg: string) => {
+  const flash = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast((m) => (m === msg ? null : m)), 1600);
-  };
+  }, []);
 
   // The editing session owns the whole per-buffer loop: working/saved/dirty,
   // autosave, open/save/quit, the config buffer kind, external reconcile, and the
@@ -339,14 +455,15 @@ export function App() {
     },
     onNoteSaved: (meta) => setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n))),
     onNoteRenamed: (oldId, meta) => setNotes((ns) => ns.map((n) => (n.id === oldId ? meta : n))),
-    onNotesChanged: setNotes,
+    onNotesChanged: (list) => setNotes((prev) => (sameMetaList(prev, list) ? prev : list)),
   });
 
-  // apply config -> design tokens (always); persist only after initial load
+  // apply config -> design tokens. Keyed on the visual fields only, so editing
+  // e.g. the esc-map text field doesn't rewrite every CSS var per keystroke.
   useEffect(() => {
     const r = document.documentElement;
     const theme = themeById(cfg.theme);
-    r.setAttribute("data-theme", theme.mode);
+    if (r.getAttribute("data-theme") !== theme.mode) r.setAttribute("data-theme", theme.mode);
     // Writes the theme's primitives inline (base16), or clears them so the
     // [data-theme] block renders verbatim (builtin Noteside light/dark).
     applyThemeVars(r, theme);
@@ -355,8 +472,61 @@ export function App() {
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
     r.style.setProperty("--ui-scale", String(cfg.uiScale));
-    if (configLoaded.current) void backend.setConfig(cfg);
+    try {
+      // Mirror for the index.html boot script + bootConfig(): the next launch
+      // paints this theme before the config store loads.
+      localStorage.setItem(
+        BOOT_THEME_KEY,
+        JSON.stringify({ id: theme.id, mode: theme.mode, vars: resolveThemeVars(theme) }),
+      );
+    } catch {
+      /* private mode / quota — cosmetic only */
+    }
+  }, [cfg.theme, cfg.editorFont, cfg.uiFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
+
+  // persist config, debounced: held settings steppers fire per key-repeat, and
+  // each store.set is an IPC (a sync localStorage write in the demo). The tail
+  // is flushed on unmount/pagehide so a quick quit can't drop the last change.
+  const persistTimer = useRef<number | null>(null);
+  const cfgRef = useRef(cfg);
+  useEffect(() => {
+    cfgRef.current = cfg;
+    if (!configLoaded.current) return;
+    if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
+    persistTimer.current = window.setTimeout(() => {
+      persistTimer.current = null;
+      void backend.setConfig(cfgRef.current);
+    }, 300);
   }, [cfg]);
+  useEffect(() => {
+    const flushConfig = () => {
+      if (persistTimer.current === null) return;
+      window.clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+      void backend.setConfig(cfgRef.current);
+    };
+    // pagehide covers the browser/demo; WKWebView doesn't reliably fire it on a
+    // native close/Cmd-Q, so the Tauri close-requested event is the real flush
+    // there (without it, a theme commit + fast quit would silently revert).
+    window.addEventListener("pagehide", flushConfig);
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    if (isTauri()) {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(() => flushConfig()))
+        .then((u) => {
+          if (disposed) u();
+          else unlisten = u;
+        })
+        .catch(() => {});
+    }
+    return () => {
+      disposed = true;
+      window.removeEventListener("pagehide", flushConfig);
+      unlisten?.();
+      flushConfig();
+    };
+  }, []);
 
   // keep the vim insert-escape mapping (e.g. "jj" → <Esc>) in sync with settings
   useEffect(() => {
@@ -377,29 +547,21 @@ export function App() {
     else session.close();
   };
 
-  // boot: load config, then last notebook
+  // boot: load config + last notebook in parallel (independent reads)
   useEffect(() => {
     (async () => {
-      let stored: Partial<Config> | null = null;
-      try {
-        stored = await backend.getConfig();
-        if (stored) {
-          // Pre-themes configs stored theme:"light"|"dark" — normalize the alias
-          // (or any unknown id) to a canonical theme id so raw comparisons (e.g.
-          // the picker's is-current marker) work and the store converges.
-          const theme = typeof stored.theme === "string" ? resolveThemeId(stored.theme) : null;
-          setCfg((c) => ({ ...c, ...stored, theme: theme ?? c.theme }));
-        }
-      } catch {
-        /* defaults */
+      const [stored, last] = await Promise.all([
+        backend.getConfig().catch(() => null),
+        backend.getLastNotebook().catch(() => null),
+      ]);
+      if (stored) {
+        // Pre-themes configs stored theme:"light"|"dark" — normalize the alias
+        // (or any unknown id) to a canonical theme id so raw comparisons (e.g.
+        // the picker's is-current marker) work and the store converges.
+        const theme = typeof stored.theme === "string" ? resolveThemeId(stored.theme) : null;
+        setCfg((c) => ({ ...c, ...stored, theme: theme ?? c.theme }));
       }
       configLoaded.current = true;
-      let last: string | null = null;
-      try {
-        last = await backend.getLastNotebook();
-      } catch {
-        /* no remembered notebook */
-      }
       // A brand-new user (no stored config, no notebook) gets the one-time
       // vim/plain-keyboard choice before anything else. Picking it persists the
       // config, so the gate never fires again.
@@ -489,7 +651,7 @@ export function App() {
     setSettingsOpen(false);
     session.openConfig(serializeConfig(cfg));
   };
-  const openSettings = () => setSettingsOpen(true);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = () => {
     setSettingsOpen(false);
     setRefocus((r) => r + 1);
@@ -513,15 +675,18 @@ export function App() {
     flash(cfg.livePreview ? "live preview off" : "live preview on");
   };
 
-  const createNote = async () => {
+  // Create/delete patch the sidebar list locally — the meta (or the removal) is
+  // already known, so refetching all N metas over IPC is wasted; the watcher's
+  // reconcile() remains the eventual-consistency backstop.
+  const createNote = useCallback(async () => {
     try {
       const meta = await backend.createNote();
-      setNotes(await backend.listNotes());
+      setNotes((ns) => insertMeta(ns, meta));
       await session.open(meta.id);
     } catch (e) {
       flash(`couldn't create note: ${e}`);
     }
-  };
+  }, [session, flash]);
 
   const deleteActive = async () => {
     if (s.status !== "note" || !s.activeId) return;
@@ -529,9 +694,9 @@ export function App() {
     session.cancelAutosave(); // drop any queued save so it can't resurrect the file
     try {
       await backend.deleteNote(path);
-      const list = await backend.listNotes();
-      setNotes(list);
-      const next = list[0]?.id ?? null;
+      // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
+      setNotes((ns) => ns.filter((n) => n.id !== path).sort(metaOrder));
+      const next = notes.filter((n) => n.id !== path).sort(metaOrder)[0]?.id ?? null;
       if (next) await session.open(next);
       else session.close();
       flash("note deleted");
@@ -609,14 +774,23 @@ export function App() {
     run: onCommand,
   });
 
-  // The which-key leader palette is derived from the command table (single source).
-  const paletteActions: PaletteAction[] = leaderCommands.map((c) => ({
-    key: c.leader as string,
-    label: c.title,
-    hint: c.id === "togglePreview" ? (cfg.livePreview ? "on" : "off") : c.paletteHint,
-    danger: c.danger,
-    run: () => runPaletteCommand(c),
-  }));
+  // Stable handles for the memoized sidebar (so autosaves/toasts re-render rows,
+  // not the whole tree).
+  const openNote = useCallback((id: string) => void session.open(id), [session]);
+  const onNewNote = useCallback(() => void createNote(), [createNote]);
+
+  // Rebuilt only when the notebook list changes — read lazily by the wikilink
+  // autocomplete via the editor's props ref.
+  const linkTargets = useMemo(() => [...new Set(notes.map((n) => n.title))], [notes]);
+
+  const searchableCommands = useMemo(
+    () =>
+      withChordOverrides(
+        paletteCommands.filter((c) => !c.needsNote || s.status === "note"),
+        cfg.chords,
+      ),
+    [cfg.chords, s.status],
+  );
 
   const titleText = s.title;
   const showEditor = s.status !== "empty";
@@ -694,8 +868,8 @@ export function App() {
               open={navOpen}
               notes={notes}
               activeId={s.activeId}
-              onPick={(id) => void session.open(id)}
-              onNew={() => void createNote()}
+              onPick={openNote}
+              onNew={onNewNote}
               onSettings={openSettings}
             />
           )}
@@ -709,35 +883,36 @@ export function App() {
             ) : status === "no-notebook" ? (
               <NotebookPicker onPick={() => void pickNotebook()} />
             ) : showEditor ? (
-              <Editor
-                key={
-                  s.editorKey +
-                  ":" +
-                  vimSuffix +
-                  ":" +
-                  (previewOn ? "p" : "s") +
-                  (cfg.relativeNumbers ? ":rn" : "")
-                }
-                notePath={s.activeId as string}
-                fileLabel={s.title ?? ""}
-                initialText={s.initialText}
-                savedText={s.savedText}
-                vimMode={cfg.vimMode}
-                cursorBlink={cfg.cursorBlink}
-                cursor={cfg.cursor}
-                relativeNumbers={cfg.relativeNumbers}
-                chordOverrides={cfg.chords}
-                preview={previewOn}
-                linkTargets={[...new Set(notes.map((n) => n.title))]}
-                gotoLine={s.gotoLine}
-                refocusToken={refocus}
-                onChange={(text, dirty) => session.change(text, dirty)}
-                onSave={(text) => session.save(text)}
-                onQuit={() => session.quit()}
-                onCommand={onCommand}
-                onFollowLink={onFollowLink}
-                onOpenUrl={onOpenUrl}
-              />
+              // Preview/relativeNumbers deliberately NOT in the key: the editor
+              // reconfigures them live via compartments (a remount would lose
+              // cursor + undo history and reseed from open-time text).
+              <EditorBoundary>
+                <Suspense fallback={null}>
+                  <Editor
+                    key={s.editorKey + ":" + vimSuffix}
+                    notePath={s.activeId as string}
+                    fileLabel={s.title ?? ""}
+                    initialText={s.initialText}
+                    savedText={s.savedText}
+                    dirty={s.status === "note" ? s.dirty : undefined}
+                    vimMode={cfg.vimMode}
+                    cursorBlink={cfg.cursorBlink}
+                    cursor={cfg.cursor}
+                    relativeNumbers={cfg.relativeNumbers}
+                    chordOverrides={cfg.chords}
+                    preview={previewOn}
+                    linkTargets={linkTargets}
+                    gotoLine={s.gotoLine}
+                    refocusToken={refocus}
+                    onChange={(text, dirty) => session.change(text, dirty)}
+                    onSave={(text) => session.save(text)}
+                    onQuit={() => session.quit()}
+                    onCommand={onCommand}
+                    onFollowLink={onFollowLink}
+                    onOpenUrl={onOpenUrl}
+                  />
+                </Suspense>
+              </EditorBoundary>
             ) : (
               <EmptyState hasClosed={!!s.lastNoteId} onReopen={() => session.reopenLast()} />
             )}
@@ -771,13 +946,22 @@ export function App() {
         {finder && (
           <Finder initialMode={finder.mode} onClose={closeFinder} onOpen={openFromFinder} />
         )}
-        {paletteOpen && <CommandPalette actions={paletteActions} onClose={closePalette} />}
+        {paletteOpen && (
+          <CommandPalette
+            // Derived from the command table only while open (single source).
+            actions={leaderCommands.map((c) => ({
+              key: c.leader as string,
+              label: c.title,
+              hint: c.id === "togglePreview" ? (cfg.livePreview ? "on" : "off") : c.paletteHint,
+              danger: c.danger,
+              run: () => runPaletteCommand(c),
+            }))}
+            onClose={closePalette}
+          />
+        )}
         {cmdSearchOpen && (
           <CommandSearch
-            commands={withChordOverrides(
-              paletteCommands.filter((c) => !c.needsNote || s.status === "note"),
-              cfg.chords,
-            )}
+            commands={searchableCommands}
             onRun={runPaletteCommand}
             onClose={closeCmdSearch}
           />

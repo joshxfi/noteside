@@ -1,8 +1,17 @@
+use std::cell::RefCell;
+use std::cmp::Reverse;
+
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 
 use crate::models::{ContentHit, FileHit};
 use crate::notebook::NoteRecord;
+
+thread_local! {
+    // Matcher owns big scratch allocations; reuse it across calls (searches run
+    // on a small pool of blocking threads, so this stays bounded).
+    static MATCHER: RefCell<Matcher> = RefCell::new(Matcher::new(Config::DEFAULT.match_paths()));
+}
 
 fn file_hit(r: &NoteRecord, score: u32, positions: Vec<u32>, title_positions: Vec<u32>) -> FileHit {
     FileHit {
@@ -31,64 +40,76 @@ fn fuzzy_match(
         .map(|score| (score, indices.clone()))
 }
 
+/// Partial sort: keep only the `limit` smallest elements per `key`, in order.
+/// The key must be a total order (tie-break on a unique index) so this returns
+/// exactly what a stable full sort + truncate would have.
+fn top_by_key<T, K: Ord, F: FnMut(&T) -> K + Copy>(items: &mut Vec<T>, limit: usize, key: F) {
+    if items.len() > limit {
+        items.select_nth_unstable_by_key(limit, key);
+        items.truncate(limit);
+    }
+    items.sort_unstable_by_key(key);
+}
+
 /// Fuzzy match over note paths and titles (Telescope/fzf-style), powered by
 /// nucleo. With an empty query, returns everything pinned-first then most-recent.
 pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<FileHit> {
     let q = query.trim();
     if q.is_empty() {
-        let mut all: Vec<&NoteRecord> = records.iter().collect();
-        all.sort_by(|a, b| {
-            b.meta
-                .pinned
-                .cmp(&a.meta.pinned)
-                .then(b.meta.updated.cmp(&a.meta.updated))
+        let mut all: Vec<(usize, &NoteRecord)> = records.iter().enumerate().collect();
+        top_by_key(&mut all, limit, |&(i, r)| {
+            (Reverse(r.meta.pinned), Reverse(r.meta.updated), i)
         });
         return all
             .into_iter()
-            .take(limit)
-            .map(|r| file_hit(r, 0, Vec::new(), Vec::new()))
+            .map(|(_, r)| file_hit(r, 0, Vec::new(), Vec::new()))
             .collect();
     }
 
-    let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
-    let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
-    let mut buf: Vec<char> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
-    let mut scored: Vec<(u32, Vec<u32>, Vec<u32>, &NoteRecord)> = Vec::new();
+    MATCHER.with(|m| {
+        let matcher = &mut *m.borrow_mut();
+        let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
+        let mut buf: Vec<char> = Vec::new();
 
-    for r in records {
-        let path_match = fuzzy_match(&pattern, &mut matcher, &r.meta.path, &mut buf, &mut indices);
-        let title_match = fuzzy_match(
-            &pattern,
-            &mut matcher,
-            &r.meta.title,
-            &mut buf,
-            &mut indices,
-        );
-        if path_match.is_none() && title_match.is_none() {
-            continue;
+        // Score-only pass over every record (no index tracking).
+        let mut scored: Vec<(u32, usize)> = Vec::new();
+        for (i, r) in records.iter().enumerate() {
+            let path_score = pattern.score(Utf32Str::new(&r.meta.path, &mut buf), matcher);
+            let title_score = pattern.score(Utf32Str::new(&r.meta.title, &mut buf), matcher);
+            if path_score.is_none() && title_score.is_none() {
+                continue;
+            }
+            let p = path_score.unwrap_or(0);
+            let t = title_score.map_or(0, |s| s.saturating_add(16));
+            scored.push((p.max(t), i));
         }
-        let path_score = path_match.as_ref().map_or(0, |m| m.0);
-        let title_score = title_match.as_ref().map_or(0, |m| m.0.saturating_add(16));
-        scored.push((
-            path_score.max(title_score),
-            path_match.map_or_else(Vec::new, |m| m.1),
-            title_match.map_or_else(Vec::new, |m| m.1),
-            r,
-        ));
-    }
-    scored.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then(b.3.meta.pinned.cmp(&a.3.meta.pinned))
-            .then(b.3.meta.updated.cmp(&a.3.meta.updated))
-    });
-    scored
-        .into_iter()
-        .take(limit)
-        .map(|(score, positions, title_positions, r)| {
-            file_hit(r, score, positions, title_positions)
-        })
-        .collect()
+
+        top_by_key(&mut scored, limit, |&(score, i)| {
+            let r = &records[i];
+            (
+                Reverse(score),
+                Reverse(r.meta.pinned),
+                Reverse(r.meta.updated),
+                i,
+            )
+        });
+
+        // Highlight-index pass only for the returned page.
+        let mut indices: Vec<u32> = Vec::new();
+        scored
+            .into_iter()
+            .map(|(score, i)| {
+                let r = &records[i];
+                let positions =
+                    fuzzy_match(&pattern, matcher, &r.meta.path, &mut buf, &mut indices)
+                        .map_or_else(Vec::new, |m| m.1);
+                let title_positions =
+                    fuzzy_match(&pattern, matcher, &r.meta.title, &mut buf, &mut indices)
+                        .map_or_else(Vec::new, |m| m.1);
+                file_hit(r, score, positions, title_positions)
+            })
+            .collect()
+    })
 }
 
 /// Line-level content search over the cached note bodies. Modes mirror the
@@ -117,8 +138,19 @@ pub fn content_search(
         None
     };
     let needle_lc = needle.to_lowercase();
+    let mut prefilter: Option<Prefilter> = None;
 
-    'outer: for r in records {
+    'outer: for (ri, r) in records.iter().enumerate() {
+        // A popular query fills `limit` within the first records and never pays
+        // for the prefilter (building one can cost a regex compile); only a scan
+        // that outlives PREFILTER_AFTER notes — a rare or no-match query, which
+        // is exactly where skipping pays off — builds and consults it.
+        if ri >= PREFILTER_AFTER {
+            let pf = prefilter.get_or_insert_with(|| build_prefilter(needle, mode, smart_case));
+            if !pf.may_match(&r.body, needle, &needle_lc) {
+                continue;
+            }
+        }
         for (i, line) in r.body.lines().enumerate() {
             let ranges: Vec<[u32; 2]> = match mode {
                 "regex" => re
@@ -149,6 +181,132 @@ pub fn content_search(
         }
     }
     Ok(hits)
+}
+
+/// Long-scan threshold for building the whole-body prefilter (see the comment
+/// at its use in `content_search`).
+const PREFILTER_AFTER: usize = 128;
+
+/// Whole-body skip test, run once per note before the per-line loop: most notes
+/// don't match a query, and one fast body scan is far cheaper than line-by-line
+/// matching. A prefilter may say "maybe" for a non-matching note (the unchanged
+/// per-line pass then finds nothing) but must never say "no" for a matching one.
+enum Prefilter {
+    /// Case-sensitive plain: a line hit implies the body contains the needle.
+    Contains,
+    /// Plain case-insensitive, as an escaped-literal regex (its literal engine
+    /// is SIMD-accelerated). A no-match verdict is only honored for ASCII
+    /// bodies: the per-line matcher uses full Unicode lowercasing while regex
+    /// case-insensitivity uses simple case folding, and the two disagree on
+    /// oddities like 'İ' → "i̇" (on ASCII they agree exactly).
+    CiLiteral(regex::Regex),
+    /// Regex mode, recompiled with `(?m)` + CRLF line endings. A no-match
+    /// verdict is only honored for bodies without '\r': CRLF mode also stops
+    /// `.` from matching a mid-line '\r' that the per-line regex would match.
+    Multiline(regex::Regex),
+    /// Fuzzy: lowercased-subsequence scan over the whole body — ignoring line
+    /// boundaries makes it a superset of any single line's subsequence.
+    Fuzzy,
+    /// No safe body-level test exists for this query: per-line only.
+    None,
+}
+
+impl Prefilter {
+    fn may_match(&self, body: &str, needle: &str, needle_lc: &str) -> bool {
+        match self {
+            Prefilter::Contains => body.contains(needle),
+            Prefilter::CiLiteral(re) => re.is_match(body) || !body.is_ascii(),
+            Prefilter::Multiline(re) => re.is_match(body) || body.contains('\r'),
+            Prefilter::Fuzzy => body_has_subsequence(body, needle_lc),
+            Prefilter::None => true,
+        }
+    }
+}
+
+fn build_prefilter(needle: &str, mode: &str, smart_case: bool) -> Prefilter {
+    match mode {
+        // The per-line pattern is re-anchored to the body with `(?m)` (+ CRLF
+        // line endings, since `lines()` strips `\r\n` but plain `(?m)$` only
+        // matches before `\n`). `^`/`$`/`\b` keep their per-line meaning then;
+        // body anchors and inline flag groups clearing `m` do not, so those
+        // patterns get no prefilter.
+        "regex" if !regex_prefilter_unsafe(needle) => {
+            regex::RegexBuilder::new(&format!("(?m){needle}"))
+                .case_insensitive(!smart_case)
+                .crlf(true)
+                .build()
+                .map_or(Prefilter::None, Prefilter::Multiline)
+        }
+        "regex" => Prefilter::None,
+        "fuzzy" => Prefilter::Fuzzy,
+        _ if smart_case => Prefilter::Contains,
+        _ => regex::RegexBuilder::new(&regex::escape(needle))
+            .case_insensitive(true)
+            .build()
+            .map_or(Prefilter::None, Prefilter::CiLiteral),
+    }
+}
+
+/// True if prepending `(?m)` could make the prefilter miss a per-line match:
+/// `\A`/`\z`/`\Z` stay body-anchored under `(?m)`, and an inline flag group
+/// that clears `m` (e.g. `(?-m:...)`) re-anchors `^`/`$` to the body.
+/// Over-approximates — a false "true" only skips the prefilter.
+fn regex_prefilter_unsafe(pattern: &str) -> bool {
+    if pattern.contains(r"\A") || pattern.contains(r"\z") || pattern.contains(r"\Z") {
+        return true;
+    }
+    let mut i = 0;
+    while let Some(off) = pattern[i..].find("(?") {
+        let start = i + off + 2;
+        let end = pattern[start..]
+            .find([':', ')'])
+            .map_or(pattern.len(), |e| start + e);
+        let flags = &pattern[start..end];
+        if let Some(dash) = flags.find('-') {
+            if flags[dash..].contains('m') {
+                return true;
+            }
+        }
+        i = start;
+    }
+    false
+}
+
+/// Allocation-free "could any line fuzzy-match?": is `needle_lc` a subsequence
+/// of the lowercased body? The char walk mirrors per-char `to_lowercase`, with
+/// σ/ς treated as equal because full lowercasing is context-sensitive about
+/// final sigma. Never misses a line the per-line matcher would accept.
+fn body_has_subsequence(body: &str, needle_lc: &str) -> bool {
+    if body.is_ascii() && needle_lc.is_ascii() {
+        let mut nee = needle_lc.bytes();
+        let Some(mut want) = nee.next() else {
+            return false;
+        };
+        for b in body.bytes() {
+            if b.to_ascii_lowercase() == want {
+                match nee.next() {
+                    Some(n) => want = n,
+                    None => return true,
+                }
+            }
+        }
+        return false;
+    }
+    let mut nee = needle_lc.chars();
+    let Some(mut want) = nee.next() else {
+        return false;
+    };
+    for ch in body.chars() {
+        for lc in ch.to_lowercase() {
+            if lc == want || (lc == 'σ' && want == 'ς') || (lc == 'ς' && want == 'σ') {
+                match nee.next() {
+                    Some(n) => want = n,
+                    None => return true,
+                }
+            }
+        }
+    }
+    false
 }
 
 fn plain_ranges(line: &str, needle: &str, needle_lc: &str, smart_case: bool) -> Vec<[u32; 2]> {
@@ -201,17 +359,44 @@ fn ascii_case_insensitive_ranges(line: &str, needle_lc: &str) -> Vec<[u32; 2]> {
 }
 
 fn subsequence_ranges(line: &str, needle_lc: &str) -> Option<Vec<[u32; 2]>> {
-    let hay = line.to_lowercase();
     let mut chars = needle_lc.chars();
     let mut want = chars.next()?;
     let mut ranges = Vec::new();
-    for (bi, ch) in hay.char_indices() {
-        if ch == want {
-            ranges.push([bi as u32, (bi + ch.len_utf8()) as u32]);
-            match chars.next() {
-                Some(c) => want = c,
-                None => return Some(ranges),
+    // Case-fold in place (no lowercased copy) so offsets index the original
+    // line. Mirrors `body_has_subsequence`: a char's full lowercase expansion
+    // (e.g. 'İ' → "i̇") can consume several needle chars, and σ/ς fold both
+    // ways because `str::to_lowercase` is context-sensitive about final sigma.
+    for (bi, ch) in line.char_indices() {
+        let mut consumed = false;
+        let mut done = false;
+        if ch.is_ascii() && want.is_ascii() {
+            if ch.eq_ignore_ascii_case(&want) {
+                consumed = true;
+                match chars.next() {
+                    Some(c) => want = c,
+                    None => done = true,
+                }
             }
+        } else {
+            for lc in ch.to_lowercase() {
+                if lc != want && !(lc == 'σ' && want == 'ς') && !(lc == 'ς' && want == 'σ') {
+                    continue;
+                }
+                consumed = true;
+                match chars.next() {
+                    Some(c) => want = c,
+                    None => {
+                        done = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if consumed {
+            ranges.push([bi as u32, (bi + ch.len_utf8()) as u32]);
+        }
+        if done {
+            return Some(ranges);
         }
     }
     None
@@ -245,6 +430,16 @@ mod tests {
             },
             body: body.into(),
         }
+    }
+
+    /// Prepend PREFILTER_AFTER non-matching notes so `content_search` actually
+    /// reaches the prefilter path for the records under test.
+    fn pad(recs: Vec<NoteRecord>) -> Vec<NoteRecord> {
+        let mut out: Vec<NoteRecord> = (0..PREFILTER_AFTER)
+            .map(|i| rec(&format!("pad-{i}.md"), "zz", false, 0))
+            .collect();
+        out.extend(recs);
+        out
     }
 
     #[test]
@@ -316,5 +511,204 @@ mod tests {
     fn content_empty_needle_is_empty() {
         let recs = vec![rec("a.md", "anything", false, 0)];
         assert!(content_search(&recs, "  ", "plain", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn fuzzy_query_limit_keeps_best_with_original_tie_order() {
+        // Identical paths (and non-matching titles) → identical scores; ties
+        // must fall back to pinned, updated, then input order, exactly like
+        // the old stable full sort.
+        let recs = vec![
+            rec_with_title("notes/kettle.md", "One", "", false, 1),
+            rec_with_title("notes/kettle.md", "Two", "", true, 0),
+            rec_with_title("notes/kettle.md", "Three", "", false, 1),
+            rec_with_title("notes/kettle.md", "Four", "", false, 5),
+        ];
+        let hits = fuzzy_files(&recs, "kettle", 2);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "Two"); // pinned first
+        assert_eq!(hits[1].title, "Four"); // then updated desc
+        let full = fuzzy_files(&recs, "kettle", 10);
+        assert_eq!(full[2].title, "One"); // equal keys keep input order
+        assert_eq!(full[3].title, "Three");
+        assert!(!full.iter().any(|h| h.positions.is_empty()));
+    }
+
+    #[test]
+    fn fuzzy_empty_query_limit_matches_full_sort_prefix() {
+        let recs = vec![
+            rec("a.md", "", false, 3),
+            rec("b.md", "", true, 0),
+            rec("c.md", "", false, 7),
+        ];
+        let page = fuzzy_files(&recs, "", 2);
+        assert_eq!(page.len(), 2);
+        assert_eq!(page[0].path, "b.md");
+        assert_eq!(page[1].path, "c.md");
+    }
+
+    #[test]
+    fn content_nomatch_is_empty_in_every_mode() {
+        let recs = pad(vec![
+            rec("a.md", "the kettle is on\nsecond line", false, 0),
+            rec("b.md", "roadmap review", false, 0),
+        ]);
+        assert!(content_search(&recs, "qqzzxxnotpresent", "plain", 10)
+            .unwrap()
+            .is_empty());
+        assert!(content_search(&recs, "qqzzxxnotpresent", "regex", 10)
+            .unwrap()
+            .is_empty());
+        assert!(content_search(&recs, "qxv", "fuzzy", 10)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn content_regex_body_anchor_bypasses_prefilter() {
+        // `\A` under the body-level `(?m)` prefilter would only match the first
+        // line; per-line it anchors every line, so the prefilter must not run.
+        let recs = pad(vec![rec("a.md", "alpha\nbeta", false, 0)]);
+        let hits = content_search(&recs, r"\Abeta", "regex", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line_number, 2);
+        assert!(regex_prefilter_unsafe(r"\Abeta"));
+        assert!(regex_prefilter_unsafe(r"foo\z"));
+        assert!(regex_prefilter_unsafe(r"foo\Z"));
+        assert!(regex_prefilter_unsafe(r"(?-m:^a)"));
+        assert!(regex_prefilter_unsafe(r"(?i-m)^a"));
+        assert!(!regex_prefilter_unsafe(r"^foo$"));
+        assert!(!regex_prefilter_unsafe(r"(?i)foo\b"));
+    }
+
+    #[test]
+    fn content_regex_line_anchors_survive_the_prefilter() {
+        let recs = pad(vec![rec("a.md", "x\nfoo", false, 0)]);
+        let hits = content_search(&recs, "^foo", "regex", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line_number, 2);
+
+        // `$` on a CRLF body: lines() strips \r\n, so the prefilter needs CRLF
+        // line-terminator handling to see the same match.
+        let crlf = pad(vec![rec("b.md", "foo\r\nbar", false, 0)]);
+        let hits = content_search(&crlf, "foo$", "regex", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line_number, 1);
+    }
+
+    #[test]
+    fn content_plain_insensitive_hit_survives_the_prefilter() {
+        let recs = pad(vec![
+            rec("a.md", "nothing here", false, 0),
+            rec("b.md", "The KETTLE is on", false, 0),
+        ]);
+        let hits = content_search(&recs, "kettle", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "b.md");
+        let [s, e] = hits[0].ranges[0];
+        assert_eq!(&hits[0].line[s as usize..e as usize], "KETTLE");
+    }
+
+    #[test]
+    fn content_plain_non_ascii_body_is_not_skipped() {
+        // 'İ' lowercases to "i̇" (i + combining dot) — the per-line matcher sees
+        // an "i" the prefilter's case-folded scan would not; non-ASCII bodies
+        // must fall through to the per-line pass.
+        let recs = pad(vec![rec("a.md", "İstanbul", false, 0)]);
+        let hits = content_search(&recs, "i", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn content_fuzzy_matches_with_ranges_into_the_original_line() {
+        let recs = pad(vec![
+            rec("a.md", "unrelated words only", false, 0),
+            rec("b.md", "The Kettle Boils", false, 0),
+        ]);
+        let hits = content_search(&recs, "ktb", "fuzzy", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, "b.md");
+        let picked: String = hits[0]
+            .ranges
+            .iter()
+            .map(|&[s, e]| &hits[0].line[s as usize..e as usize])
+            .collect();
+        assert_eq!(picked, "KtB");
+    }
+
+    #[test]
+    fn prefilter_verdicts_per_mode() {
+        let pf = build_prefilter("kettle", "plain", false);
+        assert!(pf.may_match("the KETTLE is on", "kettle", "kettle"));
+        assert!(!pf.may_match("nothing here", "kettle", "kettle"));
+        assert!(pf.may_match("İstanbul", "i", "i")); // non-ASCII body: never skip
+
+        let pf = build_prefilter("Kettle", "plain", true);
+        assert!(pf.may_match("a Kettle", "Kettle", "kettle"));
+        assert!(!pf.may_match("a kettle", "Kettle", "kettle")); // case-sensitive
+
+        let pf = build_prefilter("^foo", "regex", false);
+        assert!(pf.may_match("x\nfoo", "^foo", "^foo"));
+        assert!(!pf.may_match("x\nbar", "^foo", "^foo"));
+        let pf = build_prefilter("foo$", "regex", false);
+        assert!(pf.may_match("foo\r\nbar", "foo$", "foo$"));
+        // a body with '\r' is never skipped: per-line `.` matches a lone CR,
+        // the prefilter's CRLF mode does not
+        let pf = build_prefilter("alpha.beta", "regex", false);
+        assert!(pf.may_match("alpha\rbeta", "alpha.beta", "alpha.beta"));
+        assert!(matches!(
+            build_prefilter(r"\Abeta", "regex", false),
+            Prefilter::None
+        ));
+
+        let pf = build_prefilter("ktb", "fuzzy", false);
+        assert!(pf.may_match("The Kettle Boils", "ktb", "ktb"));
+        assert!(!pf.may_match("unrelated words only", "ktb", "ktb"));
+    }
+
+    #[test]
+    fn content_regex_dot_matches_mid_line_cr_past_the_prefilter() {
+        // lines() keeps a lone '\r', and the per-line regex (no CRLF mode) lets
+        // `.` match it; the CRLF-mode prefilter must not skip such a body.
+        let recs = pad(vec![rec("c.md", "alpha\rbeta", false, 0)]);
+        let hits = content_search(&recs, "alpha.beta", "regex", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].line_number, 1);
+    }
+
+    #[test]
+    fn content_fuzzy_folds_final_sigma() {
+        // str::to_lowercase maps a word-final 'Σ' to 'ς'; the in-place fold
+        // maps it to 'σ', so the matcher must treat the two as equal.
+        let recs = pad(vec![rec("g.md", "ΚΑΦΈΣ", false, 0)]);
+        let hits = content_search(&recs, "καφές", "fuzzy", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].ranges.len(), 5);
+    }
+
+    #[test]
+    fn content_fuzzy_consumes_multichar_lowercase_expansions() {
+        // 'İ'.to_lowercase() is "i̇" (i + combining dot): the needle's two chars
+        // must both be consumable by the single 'İ' line char.
+        let recs = pad(vec![rec("t.md", "İstanbul", false, 0)]);
+        let hits = content_search(&recs, "İstanbul", "fuzzy", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].ranges[0], [0, 2]); // the two-byte 'İ', emitted once
+
+        // the multi-consume walk leaves ASCII output byte-identical
+        assert_eq!(
+            subsequence_ranges("The Kettle", "tk").unwrap(),
+            vec![[0u32, 1], [4, 5]]
+        );
+    }
+
+    #[test]
+    fn body_has_subsequence_matches_the_per_line_semantics() {
+        assert!(body_has_subsequence("The Kettle Boils", "ktb"));
+        assert!(!body_has_subsequence("The Kettle Boils", "qzx"));
+        // spans lines (superset of per-line: false positive is fine, miss is not)
+        assert!(body_has_subsequence("ab\ncd", "acd"));
+        assert!(body_has_subsequence("ΚΑΦΈΣ", "ς")); // final-sigma folding
+        assert!(!body_has_subsequence("anything", ""));
     }
 }

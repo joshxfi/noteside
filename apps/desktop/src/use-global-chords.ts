@@ -9,7 +9,7 @@
 // stopPropagation; (2) an input/textarea/contenteditable or the CM editor owns
 // focus (the editor's own keymap handles those, so we never double-dispatch).
 import { useEffect, useRef } from "react";
-import { type ChordOverrides, makeGlobalChordMap, resolveGlobalChord } from "./editor/commands";
+import { type ChordOverrides, globalChordMap, resolveGlobalChord } from "./editor/commands";
 import type { AppCommand } from "./editor/ex-commands";
 
 export function useGlobalChords(opts: {
@@ -23,6 +23,7 @@ export function useGlobalChords(opts: {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const { enabled, overrides, run } = ref.current;
+      if (!enabled) return; // cheapest bail first — this handler sees every keystroke
       const el = document.activeElement as HTMLElement | null;
       const editingTarget =
         !!el &&
@@ -30,7 +31,8 @@ export function useGlobalChords(opts: {
           el.tagName === "TEXTAREA" ||
           el.isContentEditable ||
           !!el.closest(".cm-editor"));
-      const cmd = resolveGlobalChord(e, { enabled, editingTarget }, makeGlobalChordMap(overrides));
+      if (editingTarget) return;
+      const cmd = resolveGlobalChord(e, { enabled, editingTarget }, globalChordMap(overrides));
       if (cmd) {
         e.preventDefault();
         run(cmd);

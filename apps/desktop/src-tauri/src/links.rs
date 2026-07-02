@@ -58,43 +58,80 @@ fn base_name(path: &str) -> String {
     }
 }
 
+/// Lookup tables for `resolve`'s four match steps, built in one pass over the
+/// records. Values are record indices; insert-if-absent keeps the first record
+/// per key, matching the old linear scans' first-match tie-break.
+struct ResolveIndex {
+    by_title: HashMap<String, usize>,
+    by_base: HashMap<String, usize>,
+    by_base_slug: HashMap<String, usize>,
+    by_title_slug: HashMap<String, usize>,
+}
+
+impl ResolveIndex {
+    fn build(records: &[NoteRecord]) -> Self {
+        let mut by_title = HashMap::with_capacity(records.len());
+        let mut by_base = HashMap::with_capacity(records.len());
+        let mut by_base_slug = HashMap::with_capacity(records.len());
+        let mut by_title_slug = HashMap::with_capacity(records.len());
+        for (i, r) in records.iter().enumerate() {
+            let base = base_name(&r.meta.path);
+            by_title.entry(norm(&r.meta.title)).or_insert(i);
+            by_base.entry(norm(&base)).or_insert(i);
+            by_base_slug.entry(slug(&base)).or_insert(i);
+            by_title_slug.entry(slug(&r.meta.title)).or_insert(i);
+        }
+        Self {
+            by_title,
+            by_base,
+            by_base_slug,
+            by_title_slug,
+        }
+    }
+
+    /// Decreasing specificity: exact title, exact filename, filename slug,
+    /// title slug. Empty keys never match.
+    fn lookup(&self, target: &str) -> Option<usize> {
+        let t = {
+            let n = norm(target);
+            n.strip_suffix(".md").map(str::to_string).unwrap_or(n)
+        };
+        let ts = slug(target);
+        if !t.is_empty() {
+            if let Some(&i) = self.by_title.get(&t) {
+                return Some(i);
+            }
+            if let Some(&i) = self.by_base.get(&t) {
+                return Some(i);
+            }
+        }
+        if !ts.is_empty() {
+            if let Some(&i) = self.by_base_slug.get(&ts) {
+                return Some(i);
+            }
+            if let Some(&i) = self.by_title_slug.get(&ts) {
+                return Some(i);
+            }
+        }
+        None
+    }
+}
+
 /// Resolve a target to a note by decreasing specificity: exact title, exact
 /// filename, filename slug, title slug. Empty keys never match.
 pub fn resolve<'a>(target: &str, records: &'a [NoteRecord]) -> Option<&'a NoteRecord> {
-    let t = {
-        let n = norm(target);
-        n.strip_suffix(".md").map(str::to_string).unwrap_or(n)
-    };
-    let ts = slug(target);
-    if t.is_empty() && ts.is_empty() {
-        return None;
-    }
-    if !t.is_empty() {
-        if let Some(r) = records.iter().find(|r| norm(&r.meta.title) == t) {
-            return Some(r);
-        }
-        if let Some(r) = records.iter().find(|r| norm(&base_name(&r.meta.path)) == t) {
-            return Some(r);
-        }
-    }
-    if !ts.is_empty() {
-        if let Some(r) = records
-            .iter()
-            .find(|r| slug(&base_name(&r.meta.path)) == ts)
-        {
-            return Some(r);
-        }
-        if let Some(r) = records.iter().find(|r| slug(&r.meta.title) == ts) {
-            return Some(r);
-        }
-    }
-    None
+    ResolveIndex::build(records)
+        .lookup(target)
+        .map(|i| &records[i])
 }
 
 /// Notes (other than `active_id`) whose body has a wikilink resolving to it.
 /// One reference line per source note. A per-target cache keeps it ~O(refs).
 pub fn backlinks(records: &[NoteRecord], active_id: &str) -> Vec<Backlink> {
-    let mut cache: HashMap<String, bool> = HashMap::new();
+    let index = ResolveIndex::build(records);
+    // Keys borrow from the note bodies: a repeated target costs one hash
+    // lookup, no allocation.
+    let mut cache: HashMap<&str, bool> = HashMap::new();
     let mut out = Vec::new();
     for r in records {
         if r.meta.id == active_id {
@@ -103,9 +140,10 @@ pub fn backlinks(records: &[NoteRecord], active_id: &str) -> Vec<Backlink> {
         for (i, line) in r.body.lines().enumerate() {
             let mut found = false;
             for t in parse_targets(line) {
-                let hit = *cache.entry(t.to_string()).or_insert_with(|| {
-                    resolve(t, records)
-                        .map(|m| m.meta.id == active_id)
+                let hit = *cache.entry(t).or_insert_with(|| {
+                    index
+                        .lookup(t)
+                        .map(|m| records[m].meta.id == active_id)
                         .unwrap_or(false)
                 });
                 if hit {
@@ -176,6 +214,26 @@ mod tests {
         );
         assert!(resolve("nope", &recs).is_none());
         assert!(resolve("!!!", &recs).is_none());
+    }
+
+    #[test]
+    fn resolve_prefers_title_over_filename_and_first_record_on_ties() {
+        // Step precedence: an exact TITLE match on a later record beats an
+        // exact FILENAME match on an earlier one.
+        let recs = vec![rec("zed.md", "Other", ""), rec("b.md", "Zed", "")];
+        assert_eq!(resolve("zed", &recs).unwrap().meta.id, "b.md");
+        // Within a step, the first record wins.
+        let dupes = vec![rec("first.md", "Dup", ""), rec("second.md", "Dup", "")];
+        assert_eq!(resolve("dup", &dupes).unwrap().meta.id, "first.md");
+        // Slug fallback: filename slug beats title slug.
+        let slugs = vec![
+            rec("x.md", "Meeting Notes!", ""),
+            rec("meeting-notes.md", "Y", ""),
+        ];
+        assert_eq!(
+            resolve("Meeting -- Notes", &slugs).unwrap().meta.id,
+            "meeting-notes.md"
+        );
     }
 
     #[test]

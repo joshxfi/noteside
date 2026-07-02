@@ -7,8 +7,10 @@
 export interface Autosave {
   /** Queue a save for `id` with `text`, resetting the debounce timer. */
   schedule(id: string, text: string | (() => string), version?: number): void;
-  /** Immediately run any queued save (e.g. before switching notes). */
-  flush(): void;
+  /** Immediately run any queued save (e.g. before switching notes). Resolves when
+   *  the save's own promise settles, so callers can order a read AFTER the write
+   *  (a flush-then-read that doesn't await can read pre-flush bytes). */
+  flush(): Promise<void>;
   /** Drop any queued save without running it. */
   cancel(): void;
   /** Re-target a queued save from `oldId` to `newId` (rename-on-save migrates the
@@ -18,7 +20,7 @@ export interface Autosave {
 }
 
 export function createAutosave(
-  save: (id: string, text: string, version?: number) => void,
+  save: (id: string, text: string, version?: number) => unknown,
   delayMs: number,
 ): Autosave {
   let pending: { id: string; text: string | (() => string); version?: number } | null = null;
@@ -42,11 +44,11 @@ export function createAutosave(
         if (p) save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
       }, delayMs);
     },
-    flush() {
+    async flush() {
       clearTimer();
       const p = pending;
       pending = null;
-      if (p) save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
+      if (p) await save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
     },
     cancel() {
       clearTimer();

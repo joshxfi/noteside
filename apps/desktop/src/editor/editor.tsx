@@ -53,6 +53,47 @@ const chordKeymap = new Compartment();
 // reconfigures the live editor (same no-remount reason). Both CM's bar caret and
 // vim's block cursor read this drawSelection config for their blink rate.
 const selectionComp = new Compartment();
+// The preview-dependent decorations and the lineNumbers config get Compartments
+// as well, so toggling preview / relativeNumbers reconfigures the live editor —
+// a remount would tear down 10-100ms of view AND reseed the doc from the
+// open-time initialText, visibly reverting a mid-edit buffer.
+const previewComp = new Compartment();
+const lineNumbersComp = new Compartment();
+
+// Both livePreview and wikilinks close over the preview flag at construction,
+// so a reconfigure must build fresh instances.
+const previewExts = (preview: boolean): Extension => [
+  ...(preview ? [livePreview] : []),
+  wikilinks(preview),
+];
+const lineNumbersExt = (relative: boolean): Extension =>
+  lineNumbers(relative ? { formatNumber: relFmt } : undefined);
+
+// Static extension values, hoisted so a remount doesn't rebuild them — CM
+// extensions are immutable configs; per-editor state lives in the EditorState.
+const gutterHighlight = highlightActiveLineGutter();
+const historyExt = history();
+// in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
+// theme styling. The default panel handles type / Enter (next) / Esc (close).
+const searchExt = search({ top: true });
+// The editor-scope chord only fires when the content is focused; this makes
+// Mod-f also CLOSE the panel while the find field itself is focused, so it toggles.
+const searchPanelToggle = keymap.of([
+  {
+    key: "Mod-f",
+    scope: "search-panel",
+    preventDefault: true,
+    run: (view) => {
+      closeSearchPanel(view);
+      return true;
+    },
+  },
+]);
+const markdownExt = markdown({ addKeymap: false });
+const noteSyntax = syntaxHighlighting(noteHighlight);
+// high precedence so the completion popup wins Enter/Tab/Esc over vim
+const completionKeys = Prec.high(keymap.of(completionKeymap));
+const defaultKeys = keymap.of(defaultKeymap);
 
 defineExCommands();
 
@@ -62,6 +103,11 @@ export interface EditorProps {
   fileLabel: string;
   initialText: string;
   savedText: string;
+  /** Session-tracked dirty state (note buffers). When provided, the status bar
+   *  trusts it verbatim on savedText/dirty changes — no O(doc) stringify per
+   *  autosave. Leave undefined for buffers whose dirtiness is Editor-local
+   *  (the config buffer), which keep the internal doc-vs-savedText compare. */
+  dirty?: boolean;
   vimMode: boolean;
   cursorBlink: boolean;
   /** Caret shape for insert / non-vim mode (vim normal mode is always a block). */
@@ -123,6 +169,10 @@ export function Editor(props: EditorProps) {
   // dispatchCommand lives inside the mount effect; expose it so the live chord
   // reconfigure effect below can rebuild the keymap with fresh overrides.
   const dispatchRef = useRef<(cmd: Command) => void>(() => {});
+  // False during the first effect pass (flipped by the last effect below), so
+  // the reconfigure effects skip the mount run — their compartments were just
+  // initialized with the same config; a reconfigure would be redundant work.
+  const didMountRef = useRef(false);
 
   const [mode, setMode] = useState(vimMode ? "normal" : "insert");
   const [stat, setStat] = useState({ words: 0, line: 1, col: 1, pct: "All", dirty: false });
@@ -166,7 +216,13 @@ export function Editor(props: EditorProps) {
     };
     const setCursorStat = (state: EditorState, dirty?: boolean) => {
       const next = cursorStat(state);
-      setStat((s) => ({ ...s, ...next, ...(dirty === undefined ? {} : { dirty }) }));
+      setStat((s) => {
+        const d = dirty === undefined ? s.dirty : dirty;
+        if (s.line === next.line && s.col === next.col && s.pct === next.pct && s.dirty === d) {
+          return s; // unchanged — skip the re-render
+        }
+        return { ...s, ...next, dirty: d };
+      });
     };
     const setFullStat = (state: EditorState, dirty: boolean) => {
       setStat({ words: countWords(state), ...cursorStat(state), dirty });
@@ -229,34 +285,18 @@ export function Editor(props: EditorProps) {
     // below. The `:` / `/` command line still appears as a transient panel.
     if (vimMode) extensions.push(vim());
     extensions.push(
-      lineNumbers(relativeNumbers ? { formatNumber: relFmt } : undefined),
+      lineNumbersComp.of(lineNumbersExt(relativeNumbers)),
       activeLineHighlight,
-      highlightActiveLineGutter(),
+      gutterHighlight,
       selectionComp.of(drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {})),
-      history(),
-      // in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
-      // theme styling. The default panel handles type / Enter (next) / Esc (close).
-      search({ top: true }),
-      // The editor-scope chord above only fires when the content is focused; this makes
-      // Mod-f also CLOSE the panel while the find field itself is focused, so it toggles.
-      keymap.of([
-        {
-          key: "Mod-f",
-          scope: "search-panel",
-          preventDefault: true,
-          run: (view) => {
-            closeSearchPanel(view);
-            return true;
-          },
-        },
-      ]),
-      markdown({ addKeymap: false }),
-      syntaxHighlighting(noteHighlight),
-      ...(preview ? [livePreview] : []),
-      wikilinks(preview),
+      historyExt,
+      searchExt,
+      searchPanelToggle,
+      markdownExt,
+      noteSyntax,
+      previewComp.of(previewExts(preview)),
       wikilinkComplete(() => propsRef.current.linkTargets),
-      // high precedence so the completion popup wins Enter/Tab/Esc over vim
-      Prec.high(keymap.of(completionKeymap)),
+      completionKeys,
       EditorView.lineWrapping,
       nsTheme,
       // Mod-click (Cmd/Ctrl) opens the link under the pointer — a wikilink or an
@@ -304,14 +344,16 @@ export function Editor(props: EditorProps) {
         }
       }),
     );
-    if (!vimMode) extensions.push(keymap.of(defaultKeymap));
+    if (!vimMode) extensions.push(defaultKeys);
 
     const view = new EditorView({
       state: EditorState.create({ doc: initialText, extensions }),
       parent: host,
     });
     viewRef.current = view;
-    setFullStat(view.state, view.state.doc.toString() !== savedRef.current);
+    // The doc was just created from initialText, so compare the props directly
+    // (a reference compare in the clean case) instead of stringifying the doc.
+    setFullStat(view.state, initialText !== savedRef.current);
 
     const goto = propsRef.current.gotoLine ?? 0;
     if (goto > 0) {
@@ -355,7 +397,7 @@ export function Editor(props: EditorProps) {
   // takes effect in the already-open editor (no remount, no focus theft).
   useEffect(() => {
     const view = viewRef.current;
-    if (!view) return;
+    if (!didMountRef.current || !view) return;
     view.dispatch({
       effects: chordKeymap.reconfigure(
         keymap.of([
@@ -370,6 +412,7 @@ export function Editor(props: EditorProps) {
   // Reconfiguring the facet makes both CM's cursorLayer and vim's block-cursor
   // plugin re-read the blink rate, so the change takes effect immediately.
   useEffect(() => {
+    if (!didMountRef.current) return;
     viewRef.current?.dispatch({
       effects: selectionComp.reconfigure(
         drawSelection(props.cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
@@ -377,14 +420,40 @@ export function Editor(props: EditorProps) {
     });
   }, [props.cursorBlink]);
 
+  // Toggle live-preview on the LIVE view (no remount): doc, cursor, and undo
+  // history survive. Fresh plugin instances — they close over the flag.
+  useEffect(() => {
+    if (!didMountRef.current) return;
+    viewRef.current?.dispatch({
+      effects: previewComp.reconfigure(previewExts(props.preview)),
+    });
+  }, [props.preview]);
+
+  // Same for the gutter's relative/absolute numbering.
+  useEffect(() => {
+    if (!didMountRef.current) return;
+    viewRef.current?.dispatch({
+      effects: lineNumbersComp.reconfigure(lineNumbersExt(props.relativeNumbers)),
+    });
+  }, [props.relativeNumbers]);
+
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    // Note buffers pass session-tracked dirtiness; only the config buffer
+    // (dirty === undefined) still derives it from the doc here.
     const dirty =
-      view.state.doc.length !== props.savedText.length ||
-      view.state.doc.toString() !== props.savedText;
+      props.dirty !== undefined
+        ? props.dirty
+        : view.state.doc.length !== props.savedText.length ||
+          view.state.doc.toString() !== props.savedText;
     setStat((s) => (s.dirty === dirty ? s : { ...s, dirty }));
-  }, [props.savedText]);
+  }, [props.savedText, props.dirty]);
+
+  // Declared last so it runs after the guarded effects above on first mount.
+  useEffect(() => {
+    didMountRef.current = true;
+  }, []);
 
   return (
     <div className="av-editor" data-cursor={props.cursor}>

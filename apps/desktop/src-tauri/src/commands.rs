@@ -157,7 +157,11 @@ pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<Not
     let (root, recorded) = {
         let g = state.notebook.lock().unwrap();
         let root = g.root.clone().ok_or(AppError::NoNotebook)?;
-        let body = g.records.iter().find(|r| r.meta.path == path).map(|r| r.body.clone());
+        let body = g
+            .records
+            .iter()
+            .find(|r| r.meta.path == path)
+            .map(|r| r.body.clone());
         (root, body)
     };
     let rel = path.clone();
@@ -172,7 +176,10 @@ pub async fn rename_note(path: String, state: State<'_, AppState>) -> Result<Not
         // Derive the title exactly as the index does, then slugify it.
         let mut meta = notebook::parse_meta(rel.clone(), &body, 0);
         let slug = notebook::slugify(&meta.title);
-        let stem = Path::new(&rel).file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let stem = Path::new(&rel)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
         if notebook::stem_matches_slug(stem, &slug) {
             meta.updated = notebook::mtime_millis(&old_abs);
             return Ok((false, meta, body));

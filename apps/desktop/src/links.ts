@@ -14,13 +14,17 @@ export interface WikiLink {
 }
 
 // Target/display contain no brackets, pipes, or newlines.
+// Shared stateful /g regex: parseWikilinks is synchronous and non-reentrant, so
+// resetting lastIndex at entry is safe — and avoids a RegExp allocation on a
+// call made once per visible line per editor update.
 const WIKILINK = /\[\[([^[\]|\n]+?)(?:\|([^[\]|\n]+?))?\]\]/g;
 
 export function parseWikilinks(text: string): WikiLink[] {
-  const re = new RegExp(WIKILINK.source, "g");
+  if (!text.includes("[[")) return [];
+  WIKILINK.lastIndex = 0;
   const out: WikiLink[] = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
+  while ((m = WIKILINK.exec(text))) {
     out.push({
       target: m[1].trim(),
       display: m[2] ? m[2].trim() : null,
@@ -62,17 +66,18 @@ function trimUrl(url: string): string {
 /** The openable external URL at column `col` within a single line, or null.
  *  Markdown `[text](url)` takes precedence over the bare scan so the whole
  *  `[…](…)` span (the visible text included) opens its url; same half-open
- *  column rule as `wikilinkAt`. */
+ *  column rule as `wikilinkAt`. Reuses the module-level /g regexes (reset at
+ *  entry) — synchronous and non-reentrant, like `parseWikilinks`. */
 export function urlAt(line: string, col: number): string | null {
-  const md = new RegExp(MD_LINK.source, "g");
+  MD_LINK.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = md.exec(line))) {
+  while ((m = MD_LINK.exec(line))) {
     if (col >= m.index && col < m.index + m[0].length) {
       return URL_SCHEME.test(m[1]) ? m[1] : null;
     }
   }
-  const bare = new RegExp(BARE_URL.source, "gi");
-  while ((m = bare.exec(line))) {
+  BARE_URL.lastIndex = 0;
+  while ((m = BARE_URL.exec(line))) {
     const url = trimUrl(m[0]);
     if (col >= m.index && col < m.index + url.length) return url;
   }
@@ -102,31 +107,70 @@ export function stemMatchesSlug(stem: string, s: string): boolean {
   return rest !== null && /^\d+$/.test(rest);
 }
 
-/** Resolve a target to a note by decreasing specificity: exact title, exact
- *  filename, filename slug, title slug. Empty keys (punctuation-only targets,
- *  blank titles) never match, and the ordered passes make ties deterministic. */
-export function resolveLink(target: string, notes: NoteMeta[]): NoteMeta | null {
+// The four resolution indexes, one per specificity tier. Built with
+// insert-if-absent so the FIRST note owns a contested key — the map equivalent
+// of `notes.find`, keeping ties deterministic. Empty keys (blank titles,
+// punctuation-only slugs) are never inserted, so they can never match.
+interface ResolveMaps {
+  byTitle: Map<string, NoteMeta>;
+  byFile: Map<string, NoteMeta>;
+  byFileSlug: Map<string, NoteMeta>;
+  byTitleSlug: Map<string, NoteMeta>;
+}
+
+function buildResolveMaps(notes: NoteMeta[]): ResolveMaps {
+  const maps: ResolveMaps = {
+    byTitle: new Map(),
+    byFile: new Map(),
+    byFileSlug: new Map(),
+    byTitleSlug: new Map(),
+  };
+  const put = (map: Map<string, NoteMeta>, key: string, n: NoteMeta) => {
+    if (key && !map.has(key)) map.set(key, n);
+  };
+  for (const n of notes) {
+    const file = baseName(n.path);
+    put(maps.byTitle, norm(n.title), n);
+    put(maps.byFile, norm(file), n);
+    put(maps.byFileSlug, slug(file), n);
+    put(maps.byTitleSlug, slug(n.title), n);
+  }
+  return maps;
+}
+
+function resolveWithMaps(target: string, maps: ResolveMaps): NoteMeta | null {
   const t = norm(target).replace(/\.md$/i, "");
   const ts = slug(target);
   if (!t && !ts) return null;
   return (
-    (t ? notes.find((n) => norm(n.title) === t) : undefined) ??
-    (t ? notes.find((n) => norm(baseName(n.path)) === t) : undefined) ??
-    (ts ? notes.find((n) => slug(baseName(n.path)) === ts) : undefined) ??
-    (ts ? notes.find((n) => slug(n.title) === ts) : undefined) ??
+    (t ? maps.byTitle.get(t) : undefined) ??
+    (t ? maps.byFile.get(t) : undefined) ??
+    (ts ? maps.byFileSlug.get(ts) : undefined) ??
+    (ts ? maps.byTitleSlug.get(ts) : undefined) ??
     null
   );
 }
 
-/** Notes (other than `activeId`) whose body has a wikilink resolving to it. */
+/** Resolve a target to a note by decreasing specificity: exact title, exact
+ *  filename, filename slug, title slug. Empty keys (punctuation-only targets,
+ *  blank titles) never match, and the ordered tiers (first note wins within a
+ *  tier) make ties deterministic. */
+export function resolveLink(target: string, notes: NoteMeta[]): NoteMeta | null {
+  return resolveWithMaps(target, buildResolveMaps(notes));
+}
+
+/** Notes (other than `activeId`) whose body has a wikilink resolving to it.
+ *  The resolution maps are built once per call, so the scan is ~O(docs × links)
+ *  instead of O(docs × links × notes). */
 export function computeBacklinks(activeId: string, docs: NoteDoc[], notes: NoteMeta[]): Backlink[] {
+  const maps = buildResolveMaps(notes);
   const out: Backlink[] = [];
   for (const doc of docs) {
     if (doc.id === activeId) continue;
     const lines = doc.body.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const hit = parseWikilinks(lines[i]).some(
-        (l) => resolveLink(l.target, notes)?.id === activeId,
+        (l) => resolveWithMaps(l.target, maps)?.id === activeId,
       );
       if (hit) {
         out.push({ id: doc.id, title: doc.title, lineNumber: i + 1, line: lines[i].trim() });

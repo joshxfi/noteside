@@ -17,16 +17,28 @@ const hide = Decoration.replace({});
 
 // Lines touched by any selection range stay in "source" form so editing — and
 // vim column math — always sees the literal characters. Shared with the
-// wikilink decorations (same reveal-on-cursor-line behaviour).
+// wikilink decorations (same reveal-on-cursor-line behaviour). Ranges are
+// clamped to the viewport (a contiguous superset of visibleRanges) — both
+// consumers only query visible lines, and an unclamped whole-buffer selection
+// (ggVG) would otherwise materialize one Set entry per document line.
 export function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
   const { doc } = view.state;
+  const { from: vFrom, to: vTo } = view.viewport;
   for (const r of view.state.selection.ranges) {
-    const first = doc.lineAt(r.from).number;
-    const last = doc.lineAt(r.to).number;
+    if (r.to < vFrom || r.from > vTo) continue;
+    const first = doc.lineAt(Math.max(r.from, vFrom)).number;
+    const last = doc.lineAt(Math.min(r.to, vTo)).number;
     for (let n = first; n <= last; n++) lines.add(n);
   }
   return lines;
+}
+
+// A cheap identity for the current active-line set, letting the decoration
+// plugins skip a full viewport rebuild on selection moves that stayed on the
+// same lines (every h/l keypress). Sorted so multi-cursor range order is moot.
+export function activeLinesKey(view: EditorView): string {
+  return [...activeLines(view)].sort((a, b) => a - b).join(",");
 }
 
 // Which markup nodes to collapse. Parent checks keep us from eating fenced-code
@@ -74,11 +86,21 @@ function buildDecorations(view: EditorView): DecorationSet {
 export const livePreview = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    activeKey: string;
     constructor(view: EditorView) {
+      this.activeKey = activeLinesKey(view);
       this.decorations = buildDecorations(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.selectionSet || u.viewportChanged) {
+      if (u.docChanged || u.viewportChanged) {
+        this.activeKey = activeLinesKey(u.view);
+        this.decorations = buildDecorations(u.view);
+      } else if (u.selectionSet) {
+        // Pure selection move (post-update state): rebuild only when the set of
+        // revealed lines actually changed — not on every within-line h/l step.
+        const key = activeLinesKey(u.view);
+        if (key === this.activeKey) return;
+        this.activeKey = key;
         this.decorations = buildDecorations(u.view);
       }
     }

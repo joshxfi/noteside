@@ -18,7 +18,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { parseWikilinks } from "../links";
-import { activeLines } from "./live-preview";
+import { activeLines, activeLinesKey } from "./live-preview";
 
 const linkMark = Decoration.mark({ class: "cm-wikilink" });
 const hide = Decoration.replace({});
@@ -58,17 +58,41 @@ export function wikilinks(preview: boolean) {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      activeKey: string;
       constructor(view: EditorView) {
+        this.activeKey = activeLinesKey(view);
         this.decorations = build(view, preview);
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.selectionSet || u.viewportChanged) {
+        if (u.docChanged || u.viewportChanged) {
+          this.activeKey = activeLinesKey(u.view);
+          this.decorations = build(u.view, preview);
+        } else if (preview && u.selectionSet) {
+          // Outside preview the decorations ignore the selection entirely; in
+          // preview, rebuild only when the revealed-line set changed (see
+          // livePreview — same post-update key compare).
+          const key = activeLinesKey(u.view);
+          if (key === this.activeKey) return;
+          this.activeKey = key;
           this.decorations = build(u.view, preview);
         }
       }
     },
     { decorations: (v) => v.decorations },
   );
+}
+
+// Pre-lowered titles, cached per linkTargets array identity — the array is only
+// re-created when the note list changes, so each `[[` trigger reuses the cache
+// instead of re-lowercasing every title.
+const loweredCache = new WeakMap<readonly string[], { title: string; lower: string }[]>();
+function loweredTargets(targets: string[]): { title: string; lower: string }[] {
+  let entries = loweredCache.get(targets);
+  if (!entries) {
+    entries = targets.map((t) => ({ title: t, lower: t.toLowerCase() }));
+    loweredCache.set(targets, entries);
+  }
+  return entries;
 }
 
 // `[[`-triggered completion over the notebook's note titles (read live via
@@ -82,11 +106,13 @@ export function wikilinkComplete(getTargets: () => string[]) {
         const before = ctx.matchBefore(/\[\[[^\]\n|]*$/);
         if (!before || ctx.pos < before.from + 2) return null;
         const typed = before.text.slice(2).toLowerCase();
-        const options = getTargets()
-          .filter((t) => !typed || t.toLowerCase().includes(typed))
-          .slice(0, 50)
-          .map((t) => ({
-            label: t,
+        // ALL matches, uncapped: CM caps rendering itself, and `validFor`
+        // refines within this list — a cap would make later notes unreachable.
+        const options: Completion[] = [];
+        for (const { title, lower } of loweredTargets(getTargets())) {
+          if (typed && !lower.includes(typed)) continue;
+          options.push({
+            label: title,
             type: "text",
             // append only the brackets that aren't already there, so re-picking
             // inside an existing [[link]] can't produce `]]]]`.
@@ -94,11 +120,12 @@ export function wikilinkComplete(getTargets: () => string[]) {
               const next2 = view.state.sliceDoc(to, to + 2);
               const close = next2 === "]]" ? "" : next2[0] === "]" ? "]" : "]]";
               view.dispatch({
-                changes: { from, to, insert: t + close },
-                selection: { anchor: from + t.length + 2 },
+                changes: { from, to, insert: title + close },
+                selection: { anchor: from + title.length + 2 },
               });
             },
-          }));
+          });
+        }
         if (!options.length) return null;
         return { from: before.from + 2, options, validFor: /^[^\]\n|]*$/ };
       },

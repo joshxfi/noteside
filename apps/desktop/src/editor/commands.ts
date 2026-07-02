@@ -379,6 +379,22 @@ export function makeGlobalChordMap(overrides?: ChordOverrides): Map<string, Comm
 }
 const DEFAULT_GLOBAL_MAP = makeGlobalChordMap();
 
+// Identity-keyed cache: cfg.chords is replaced (never mutated) on a rebind, so
+// the document-level keydown handler can reuse the map instead of rebuilding it
+// on every keystroke.
+let cachedOverrides: ChordOverrides | undefined;
+let cachedGlobalMap: Map<string, Command> = DEFAULT_GLOBAL_MAP;
+
+/** `makeGlobalChordMap`, memoized on the overrides object identity. */
+export function globalChordMap(overrides?: ChordOverrides): Map<string, Command> {
+  if (!overrides) return DEFAULT_GLOBAL_MAP;
+  if (overrides !== cachedOverrides) {
+    cachedOverrides = overrides;
+    cachedGlobalMap = makeGlobalChordMap(overrides);
+  }
+  return cachedGlobalMap;
+}
+
 /** The command a keyboard event triggers when no editor is focused, or undefined. */
 export function globalCommandForEvent(
   e: { metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; key: string },

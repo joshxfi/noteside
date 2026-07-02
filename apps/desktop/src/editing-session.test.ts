@@ -44,7 +44,9 @@ function fakeBackend(seed: Record<string, string> = {}, delays: Record<string, n
       if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
       if (failingSaves.has(id)) throw new Error(`disk full: ${id}`);
       bodies.set(id, body);
-      return metaOf(id);
+      // Like both real backends, the returned meta carries the title re-derived
+      // from the just-saved body — the session's rename pre-check reads it.
+      return { ...metaOf(id), title: titleOf(body) ?? metaOf(id).title };
     },
     // Mimics the real command: slug the body's title (same shared rules as the
     // mock backend); rename the file if the filename doesn't already represent
@@ -389,14 +391,69 @@ describe("editingSession", () => {
     ]);
   });
 
-  it("explicit save does not rename when the filename already matches the title", async () => {
+  it("explicit save skips the rename IPC when the filename already matches the title", async () => {
     const { session, calls, renamed } = makeSession({ "hello.md": "# Hello\n" });
     await session.open("hello.md");
     session.save("# Hello\n");
     await vi.advanceTimersByTimeAsync(0);
     expect(session.getSnapshot().activeId).toBe("hello.md");
-    expect(calls).toContain("rename:hello.md"); // it asked the backend…
-    expect(renamed).toEqual([]); // …but nothing migrated
+    // The pre-check (stem vs the saved meta's title slug) short-circuits the
+    // round-trip entirely — the common `:w` costs one IPC, not two.
+    expect(calls).not.toContain("rename:hello.md");
+    expect(renamed).toEqual([]); // nothing migrated
+  });
+
+  it("the rename pre-check strips the note's directory from the stem", async () => {
+    const { session, calls, renamed } = makeSession({ "journal/hello.md": "# Hello\n" });
+    await session.open("journal/hello.md");
+    session.save("# Hello\n");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).not.toContain("rename:journal/hello.md"); // nested no-op skipped too
+    expect(renamed).toEqual([]);
+  });
+
+  // REGRESSION (review): the JS slug strips Unicode alphanumerics that Rust's
+  // slugify keeps, so the pre-check is only trusted for ASCII titles — a
+  // non-ASCII title must still send the IPC and let the backend decide.
+  it("a non-ASCII title bypasses the pre-check and asks the backend to rename", async () => {
+    const { session, calls } = makeSession({ "untitled.md": "# Untitled\n" });
+    await session.open("untitled.md");
+    session.save("# 日記\n");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toContain("rename:untitled.md"); // delegated, not skipped
+  });
+
+  // REGRESSION (review): noteInitial must follow every landed save, so a later
+  // remount (vim-mode toggle) reseeds from the last-saved text, not the text
+  // the note had when it was opened.
+  it("a landed autosave updates the mount seed (initialText) in lockstep", async () => {
+    const { session } = makeSession({ "a.md": "old" });
+    await session.open("a.md");
+    session.change("# A\n\nnew body");
+    await vi.advanceTimersByTimeAsync(800); // autosave lands
+    const s = session.getSnapshot();
+    expect(s.initialText).toBe("# A\n\nnew body");
+    expect(s.savedText).toBe("# A\n\nnew body");
+    expect(s.dirty).toBe(false);
+  });
+
+  // REGRESSION (review): open() must AWAIT the outgoing flush before reading —
+  // a same-note reopen that reads concurrently can seed pre-flush bytes.
+  it("open() reads only after the flushed save has landed", async () => {
+    const { session, calls } = makeSession({ "a.md": "old" }, {}, { "a.md": 20 });
+    const first = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(20); // initial (delayed) read lands
+    await first;
+    session.change("# A\n\nedited");
+    const reopen = session.open("a.md"); // flushes the queued autosave first
+    await vi.advanceTimersByTimeAsync(0);
+    // the save IPC is in flight; the read must NOT have been issued yet
+    expect(calls.filter((c) => c === "read:a.md").length).toBe(1);
+    expect(calls).toContain("save:a.md");
+    await vi.advanceTimersByTimeAsync(50); // save lands → read issued → resolves
+    await reopen;
+    expect(session.getSnapshot().initialText).toBe("# A\n\nedited"); // post-flush bytes
+    expect(session.getSnapshot().dirty).toBe(false);
   });
 
   it("autosave never triggers a rename (only explicit save does)", async () => {
