@@ -32,11 +32,19 @@ test.describe("keyboard chords", () => {
     await page.keyboard.press("ControlOrMeta+-");
     await expect.poll(() => cssVar("--editor-size")).toBe("19px");
 
-    // the shifted pair drives the UI scale, leaving the editor size alone
-    await page.keyboard.press("ControlOrMeta+Shift+=");
+    // The shifted pair drives the UI scale, leaving the editor size alone.
+    // Press the shifted GLYPHS ("+", "_") — that's what real layouts deliver
+    // for Mod-Shift-=/-; Playwright's "Shift+=" syntax synthesizes an
+    // untransformed "=" with Shift held (an as-if-CapsLock artifact no real
+    // keyboard produces), which CM routes to the unshifted binding instead.
+    await page.keyboard.down("ControlOrMeta");
+    await page.keyboard.press("+");
+    await page.keyboard.up("ControlOrMeta");
     await expect.poll(() => cssVar("--ui-scale")).toBe("1.05");
     expect(await cssVar("--editor-size")).toBe("19px");
-    await page.keyboard.press("ControlOrMeta+Shift+-");
+    await page.keyboard.down("ControlOrMeta");
+    await page.keyboard.press("_");
+    await page.keyboard.up("ControlOrMeta");
     await expect.poll(() => cssVar("--ui-scale")).toBe("1");
 
     // Mod-0 resets the editor font
