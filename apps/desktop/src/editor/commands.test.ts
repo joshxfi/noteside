@@ -143,10 +143,16 @@ describe("command table", () => {
     });
   });
 
-  it("commandChordKeymap yields one binding per chord and dispatches", () => {
+  it("commandChordKeymap yields one binding per chord (plus shifted-glyph aliases) and dispatches", () => {
     const ran: string[] = [];
     const km = commandChordKeymap((c) => ran.push(c.id));
-    expect(km.length).toBe(COMMANDS.filter((c) => c.chord).length);
+    // Shift-= / Shift-- chords each get a '+' / '_' glyph alias (keyCode-free
+    // matching on WebKitGTK/Linux), so the keymap is chords + those aliases.
+    const chords = COMMANDS.map((c) => c.chord).filter(Boolean) as string[];
+    const aliases = chords.filter((c) => /Shift-(=|-)$/.test(c)).length;
+    expect(km.length).toBe(chords.length + aliases);
+    expect(km.map((b) => b.key)).toContain("Mod-+"); // uiUp's glyph alias
+    expect(km.map((b) => b.key)).toContain("Mod-_"); // uiDown's glyph alias
     const find = km.find((b) => b.key === "Mod-p");
     expect(find?.run?.({} as never)).toBe(true);
     expect(ran).toEqual(["find"]);

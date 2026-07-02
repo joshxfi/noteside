@@ -408,20 +408,37 @@ export function chordConflict(
  * Build the always-on CM6 chord keymap from the table. `dispatch` runs a command
  * in the editor's context (AppCommands via onCommand, editor actions via onSave/etc).
  */
+// CM matches a shifted-punctuation chord ("Mod-Shift-=") through a keyCode
+// base-key fallback that assumes a US keyCode table — WebKitGTK/Linux report
+// '+'/'_' with keyCodes that defeat it. Aliasing the shifted GLYPH form makes
+// the binding match on event.key alone, on every platform.
+const CHORD_ALIASES: [RegExp, string][] = [
+  [/Shift-=$/, "+"],
+  [/Shift--$/, "_"],
+];
+function chordAliases(chord: string): string[] {
+  for (const [re, glyph] of CHORD_ALIASES) {
+    if (re.test(chord)) return [chord, chord.replace(re, glyph)];
+  }
+  return [chord];
+}
+
 export function commandChordKeymap(
   dispatch: (cmd: Command) => void,
   overrides?: ChordOverrides,
 ): KeyBinding[] {
   return COMMANDS.map((c) => ({ c, chord: effectiveChord(c, overrides) }))
     .filter((x) => x.chord)
-    .map(({ c, chord }) => ({
-      key: chord as string,
-      preventDefault: true,
-      run: () => {
-        dispatch(c);
-        return true;
-      },
-    }));
+    .flatMap(({ c, chord }) =>
+      chordAliases(chord as string).map((key) => ({
+        key,
+        preventDefault: true,
+        run: () => {
+          dispatch(c);
+          return true;
+        },
+      })),
+    );
 }
 
 /** Chord → command lookup for the document-level fallback. Only command-kind
