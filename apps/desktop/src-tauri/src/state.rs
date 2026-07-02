@@ -14,16 +14,36 @@ use crate::notebook::NoteRecord;
 /// the echo of that write (not an external change) and ignored.
 const SUPPRESS: Duration = Duration::from_millis(700);
 
-/// Update in place when the path is already indexed, otherwise insert at the
-/// path-sorted position: `scan_notebook` returns path-sorted records, and every
-/// in-place mutation must preserve that order so wikilink resolution's
-/// first-record tie-break stays deterministic.
-fn upsert_sorted(records: &mut Vec<NoteRecord>, rec: NoteRecord) {
-    if let Some(existing) = records.iter_mut().find(|r| r.meta.path == rec.meta.path) {
-        *existing = rec;
-    } else {
-        let at = records.partition_point(|r| r.meta.path < rec.meta.path);
-        records.insert(at, rec);
+/// Binary search over the path-sorted records — the invariant `scan_notebook`'s
+/// sort and `upsert_sorted` maintain. `Err` carries the path-sorted insertion
+/// slot, so lookups and inserts share this one definition of the order.
+fn search_by_path(records: &[Arc<NoteRecord>], path: &str) -> std::result::Result<usize, usize> {
+    records.binary_search_by(|r| r.meta.path.as_str().cmp(path))
+}
+
+/// Index of the record at `path`, in O(log N).
+pub fn find_record(records: &[Arc<NoteRecord>], path: &str) -> Option<usize> {
+    search_by_path(records, path).ok()
+}
+
+/// Replace the record at the same path, or insert at the path-sorted position:
+/// `scan_notebook` returns path-sorted records, and every in-place mutation must
+/// preserve that order (wikilink resolution's first-record tie-break, and the
+/// binary searches above, depend on it). The record is freshly `Arc`-wrapped —
+/// never mutated through an existing `Arc` — so live search snapshots keep
+/// their exact data.
+fn upsert_sorted(records: &mut Vec<Arc<NoteRecord>>, rec: NoteRecord) {
+    let rec = Arc::new(rec);
+    match search_by_path(records, &rec.meta.path) {
+        Ok(i) => records[i] = rec,
+        Err(at) => records.insert(at, rec),
+    }
+}
+
+/// Drop the record at `path`, if indexed.
+fn remove_by_path(records: &mut Vec<Arc<NoteRecord>>, path: &str) {
+    if let Ok(i) = search_by_path(records, path) {
+        records.remove(i);
     }
 }
 
@@ -39,7 +59,11 @@ fn upsert_sorted(records: &mut Vec<NoteRecord>, rec: NoteRecord) {
 #[derive(Default)]
 pub struct NotebookState {
     pub root: Option<PathBuf>,
-    pub records: Arc<Vec<NoteRecord>>,
+    /// Two `Arc` layers: searches snapshot the outer Arc and run off the lock,
+    /// while mutations `Arc::make_mut` the outer Vec — with a snapshot live
+    /// that copies N pointers, not note bodies — and swap in freshly built
+    /// records. Kept path-sorted (see `upsert_sorted`).
+    pub records: Arc<Vec<Arc<NoteRecord>>>,
     /// Per-note open-frecency, keyed by notebook-relative path. Loaded with the
     /// notebook and snapshotted by search the same way `records` is.
     pub frecency: Arc<HashMap<String, FrecencyEntry>>,
@@ -55,7 +79,7 @@ impl NotebookState {
     pub fn load(
         &mut self,
         root: PathBuf,
-        records: Vec<NoteRecord>,
+        records: Vec<Arc<NoteRecord>>,
         frecency: HashMap<String, FrecencyEntry>,
     ) {
         self.root = Some(root);
@@ -77,7 +101,7 @@ impl NotebookState {
     }
 
     /// Replace the index after an external change (the watcher's rescan).
-    pub fn set_records(&mut self, records: Vec<NoteRecord>) {
+    pub fn set_records(&mut self, records: Vec<Arc<NoteRecord>>) {
         self.records = Arc::new(records);
     }
 
@@ -91,7 +115,7 @@ impl NotebookState {
             match rec {
                 Some(rec) => upsert_sorted(records, rec),
                 None => {
-                    records.retain(|r| r.meta.path != path);
+                    remove_by_path(records, &path);
                     Arc::make_mut(&mut self.frecency).remove(&path);
                 }
             }
@@ -122,7 +146,7 @@ impl NotebookState {
             frecency.insert(meta.path.clone(), e);
         }
         let records = Arc::make_mut(&mut self.records);
-        records.retain(|r| r.meta.path != old_path);
+        remove_by_path(records, old_path);
         upsert_sorted(records, NoteRecord { meta, body });
         self.suppress_until = Some(now + SUPPRESS);
     }
@@ -131,7 +155,7 @@ impl NotebookState {
     /// the suppression window.
     pub fn record_own_delete(&mut self, path: &str, now: Instant) {
         let records = Arc::make_mut(&mut self.records);
-        records.retain(|r| r.meta.path != path);
+        remove_by_path(records, path);
         Arc::make_mut(&mut self.frecency).remove(path);
         self.suppress_until = Some(now + SUPPRESS);
     }
@@ -179,6 +203,9 @@ mod tests {
             body: body.to_string(),
         }
     }
+    fn arcs(recs: Vec<NoteRecord>) -> Vec<Arc<NoteRecord>> {
+        recs.into_iter().map(Arc::new).collect()
+    }
 
     #[test]
     fn ignores_events_inside_the_suppression_window() {
@@ -210,7 +237,11 @@ mod tests {
         let t0 = Instant::now();
         s.record_own_write(meta("a.md"), "x".to_string(), t0);
         assert!(s.should_ignore_event(t0));
-        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
+        s.load(
+            PathBuf::from("/nb"),
+            arcs(vec![rec("a.md", "x")]),
+            HashMap::new(),
+        );
         assert!(!s.should_ignore_event(t0)); // a fresh open is not our echo
         assert_eq!(s.root, Some(PathBuf::from("/nb")));
         assert_eq!(s.records.len(), 1);
@@ -233,12 +264,62 @@ mod tests {
     }
 
     #[test]
+    fn own_write_shallow_copies_only_the_touched_record() {
+        let mut s = NotebookState::default();
+        s.load(
+            PathBuf::from("/nb"),
+            arcs(vec![
+                rec("a.md", "a1"),
+                rec("b.md", "b1"),
+                rec("c.md", "c1"),
+            ]),
+            HashMap::new(),
+        );
+        let snapshot = s.records.clone(); // a live search snapshot
+        s.record_own_write(meta("b.md"), "b2".to_string(), Instant::now());
+        // the snapshot still sees the pre-mutation body...
+        assert_eq!(snapshot[1].body, "b1");
+        assert_eq!(s.records[1].body, "b2");
+        // ...and every untouched record is the SAME allocation in both vectors
+        // (the make_mut copied pointers, not note bodies)
+        assert!(Arc::ptr_eq(&snapshot[0], &s.records[0]));
+        assert!(!Arc::ptr_eq(&snapshot[1], &s.records[1]));
+        assert!(Arc::ptr_eq(&snapshot[2], &s.records[2]));
+    }
+
+    #[test]
+    fn find_record_binary_search_agrees_with_linear_scan() {
+        // Path set with the '/'-vs-alphanumeric byte-order trap ("dir/…" sorts
+        // before "dir2/…"): guards the comparator against sort-order drift.
+        let mut records = arcs(vec![
+            rec("dir2/x.md", ""),
+            rec("z.md", ""),
+            rec("a.md", ""),
+            rec("dir/nested.md", ""),
+            rec("m.md", ""),
+        ]);
+        // Sort exactly the way scan_notebook does.
+        records.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
+        for (i, r) in records.iter().enumerate() {
+            assert_eq!(
+                find_record(&records, &r.meta.path),
+                Some(i),
+                "hit each element incl. first/last"
+            );
+        }
+        assert_eq!(find_record(&records, "dir/nested.md"), Some(1)); // '/' < '2'
+        assert!(find_record(&records, "missing.md").is_none());
+        assert!(find_record(&records, "").is_none());
+        assert!(find_record(&records, "zz.md").is_none()); // past the end
+    }
+
+    #[test]
     fn own_writes_and_renames_keep_records_path_sorted() {
         let mut s = NotebookState::default();
         let t0 = Instant::now();
         s.load(
             PathBuf::from("/nb"),
-            vec![rec("a.md", "1"), rec("z.md", "2")],
+            arcs(vec![rec("a.md", "1"), rec("z.md", "2")]),
             HashMap::new(),
         );
         s.record_own_write(meta("m.md"), "created".to_string(), t0); // new note
@@ -254,7 +335,7 @@ mod tests {
         let mut s = NotebookState::default();
         s.load(
             PathBuf::from("/nb"),
-            vec![rec("a.md", "1"), rec("m.md", "2"), rec("z.md", "3")],
+            arcs(vec![rec("a.md", "1"), rec("m.md", "2"), rec("z.md", "3")]),
             HashMap::new(),
         );
         s.apply_external(vec![
@@ -275,7 +356,7 @@ mod tests {
         let t0 = Instant::now();
         s.load(
             PathBuf::from("/nb"),
-            vec![rec("a.md", "x"), rec("b.md", "y")],
+            arcs(vec![rec("a.md", "x"), rec("b.md", "y")]),
             HashMap::new(),
         );
         s.record_own_delete("a.md", t0);
@@ -287,7 +368,11 @@ mod tests {
     #[test]
     fn record_open_bumps_frecency_mru_style() {
         let mut s = NotebookState::default();
-        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
+        s.load(
+            PathBuf::from("/nb"),
+            arcs(vec![rec("a.md", "x")]),
+            HashMap::new(),
+        );
         s.record_open("a.md", 1_000);
         s.record_open("a.md", 1_000);
         let e = s.frecency.get("a.md").unwrap();
@@ -298,7 +383,11 @@ mod tests {
     #[test]
     fn record_own_rename_migrates_the_frecency_entry() {
         let mut s = NotebookState::default();
-        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
+        s.load(
+            PathBuf::from("/nb"),
+            arcs(vec![rec("a.md", "x")]),
+            HashMap::new(),
+        );
         s.record_open("a.md", 1_000);
         s.record_own_rename("a.md", meta("b.md"), "x".to_string(), Instant::now());
         assert!(!s.frecency.contains_key("a.md"));
@@ -312,7 +401,7 @@ mod tests {
         let mut s = NotebookState::default();
         s.load(
             PathBuf::from("/nb"),
-            vec![rec("a.md", "x"), rec("b.md", "y")],
+            arcs(vec![rec("a.md", "x"), rec("b.md", "y")]),
             HashMap::new(),
         );
         s.record_open("a.md", 1_000);

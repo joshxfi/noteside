@@ -2,6 +2,7 @@
 // scan runs in Rust over the cached records (fast, off the JS main thread) and
 // only the matching references cross the IPC boundary, not every note body.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::models::Backlink;
 use crate::notebook::NoteRecord;
@@ -69,7 +70,7 @@ struct ResolveIndex {
 }
 
 impl ResolveIndex {
-    fn build(records: &[NoteRecord]) -> Self {
+    fn build(records: &[Arc<NoteRecord>]) -> Self {
         let mut by_title = HashMap::with_capacity(records.len());
         let mut by_base = HashMap::with_capacity(records.len());
         let mut by_base_slug = HashMap::with_capacity(records.len());
@@ -119,15 +120,15 @@ impl ResolveIndex {
 
 /// Resolve a target to a note by decreasing specificity: exact title, exact
 /// filename, filename slug, title slug. Empty keys never match.
-pub fn resolve<'a>(target: &str, records: &'a [NoteRecord]) -> Option<&'a NoteRecord> {
+pub fn resolve<'a>(target: &str, records: &'a [Arc<NoteRecord>]) -> Option<&'a NoteRecord> {
     ResolveIndex::build(records)
         .lookup(target)
-        .map(|i| &records[i])
+        .map(|i| &*records[i])
 }
 
 /// Notes (other than `active_id`) whose body has a wikilink resolving to it.
 /// One reference line per source note. A per-target cache keeps it ~O(refs).
-pub fn backlinks(records: &[NoteRecord], active_id: &str) -> Vec<Backlink> {
+pub fn backlinks(records: &[Arc<NoteRecord>], active_id: &str) -> Vec<Backlink> {
     let index = ResolveIndex::build(records);
     // Keys borrow from the note bodies: a repeated target costs one hash
     // lookup, no allocation.
@@ -170,8 +171,8 @@ mod tests {
     use super::*;
     use crate::models::NoteMeta;
 
-    fn rec(path: &str, title: &str, body: &str) -> NoteRecord {
-        NoteRecord {
+    fn rec(path: &str, title: &str, body: &str) -> Arc<NoteRecord> {
+        Arc::new(NoteRecord {
             meta: NoteMeta {
                 id: path.into(),
                 path: path.into(),
@@ -182,7 +183,7 @@ mod tests {
                 pinned: false,
             },
             body: body.into(),
-        }
+        })
     }
 
     #[test]

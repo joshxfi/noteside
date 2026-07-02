@@ -9,6 +9,7 @@ use noteside_lib::notebook::{scan_notebook, NoteRecord};
 use noteside_lib::search::{content_search, fuzzy_files};
 use std::collections::HashMap;
 use std::fs;
+use std::sync::Arc;
 
 const WORDS: &[&str] = &[
     "kettle",
@@ -34,7 +35,7 @@ const WORDS: &[&str] = &[
 ];
 const FOLDERS: &[&str] = &["journal", "work", "ideas", "recipes", "notes"];
 
-fn make_records(n: usize) -> Vec<NoteRecord> {
+fn make_records(n: usize) -> Vec<Arc<NoteRecord>> {
     (0..n)
         .map(|i| {
             let folder = FOLDERS[i % FOLDERS.len()];
@@ -45,7 +46,7 @@ fn make_records(n: usize) -> Vec<NoteRecord> {
                 let b = WORDS[(i * 3 + l) % WORDS.len()];
                 body.push_str(&format!("line {l} about {a} and {b} in the {folder}.\n"));
             }
-            NoteRecord {
+            Arc::new(NoteRecord {
                 meta: NoteMeta {
                     id: path.clone(),
                     path,
@@ -56,7 +57,7 @@ fn make_records(n: usize) -> Vec<NoteRecord> {
                     pinned: false,
                 },
                 body,
-            }
+            })
         })
         .collect()
 }
