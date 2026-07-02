@@ -1,11 +1,21 @@
 use std::cell::RefCell;
 use std::cmp::Reverse;
+use std::collections::HashMap;
 
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 
+use crate::frecency::FrecencyEntry;
 use crate::models::{ContentHit, FileHit};
 use crate::notebook::NoteRecord;
+
+/// Frecency nudge on text matches, in 1/BOOST_SCALE fixed point (integer keys
+/// keep the tuple ordering exact): effective = nucleo_score * (BOOST_SCALE +
+/// BOOST_MAX * s/(s+BOOST_PIVOT)) / BOOST_SCALE — i.e. * (1 + 0.15 * s/(s+3)),
+/// saturating at +15% (154/1024) so text relevance always stays dominant.
+const BOOST_SCALE: u64 = 1024;
+const BOOST_MAX: u64 = 154;
+const BOOST_PIVOT: f64 = 3.0;
 
 thread_local! {
     // Matcher owns big scratch allocations; reuse it across calls (searches run
@@ -51,18 +61,50 @@ fn top_by_key<T, K: Ord, F: FnMut(&T) -> K + Copy>(items: &mut Vec<T>, limit: us
     items.sort_unstable_by_key(key);
 }
 
+/// The note's frecency score decayed to `now_ms`; 0 for a never-opened note
+/// (so an empty map reproduces pre-frecency ranking exactly).
+fn effective_frecency(frecency: &HashMap<String, FrecencyEntry>, path: &str, now_ms: u64) -> f64 {
+    if frecency.is_empty() {
+        return 0.0;
+    }
+    frecency.get(path).map_or(0.0, |e| e.effective(now_ms))
+}
+
 /// Fuzzy match over note paths and titles (Telescope/fzf-style), powered by
-/// nucleo. With an empty query, returns everything pinned-first then most-recent.
-pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<FileHit> {
+/// nucleo. With an empty query, returns everything pinned-first, then by open
+/// frecency, then most-recent; with a query, frecency is only a bounded nudge
+/// on the text score. Pure in `now_ms` — the command layer supplies the clock.
+pub fn fuzzy_files(
+    records: &[NoteRecord],
+    query: &str,
+    limit: usize,
+    frecency: &HashMap<String, FrecencyEntry>,
+    now_ms: u64,
+) -> Vec<FileHit> {
     let q = query.trim();
     if q.is_empty() {
-        let mut all: Vec<(usize, &NoteRecord)> = records.iter().enumerate().collect();
-        top_by_key(&mut all, limit, |&(i, r)| {
-            (Reverse(r.meta.pinned), Reverse(r.meta.updated), i)
+        // Precompute each record's effective frecency once (decay is a powf);
+        // non-negative f64s order identically to their IEEE bit patterns, so
+        // the bits slot into the integer sort key.
+        let mut all: Vec<(u64, usize, &NoteRecord)> = records
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let f = effective_frecency(frecency, &r.meta.path, now_ms);
+                (f.to_bits(), i, r)
+            })
+            .collect();
+        top_by_key(&mut all, limit, |&(f, i, r)| {
+            (
+                Reverse(r.meta.pinned),
+                Reverse(f),
+                Reverse(r.meta.updated),
+                i,
+            )
         });
         return all
             .into_iter()
-            .map(|(_, r)| file_hit(r, 0, Vec::new(), Vec::new()))
+            .map(|(_, _, r)| file_hit(r, 0, Vec::new(), Vec::new()))
             .collect();
     }
 
@@ -71,8 +113,10 @@ pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<Fil
         let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
         let mut buf: Vec<char> = Vec::new();
 
-        // Score-only pass over every record (no index tracking).
-        let mut scored: Vec<(u32, usize)> = Vec::new();
+        // Score-only pass over every record (no index tracking). Ranking uses
+        // the frecency-boosted fixed-point score; the reported `score` stays
+        // the raw nucleo score.
+        let mut scored: Vec<(u64, u32, usize)> = Vec::new();
         for (i, r) in records.iter().enumerate() {
             let path_score = pattern.score(Utf32Str::new(&r.meta.path, &mut buf), matcher);
             let title_score = pattern.score(Utf32Str::new(&r.meta.title, &mut buf), matcher);
@@ -81,13 +125,16 @@ pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<Fil
             }
             let p = path_score.unwrap_or(0);
             let t = title_score.map_or(0, |s| s.saturating_add(16));
-            scored.push((p.max(t), i));
+            let score = p.max(t);
+            let s = effective_frecency(frecency, &r.meta.path, now_ms);
+            let boost = (BOOST_MAX as f64 * s / (s + BOOST_PIVOT)) as u64;
+            scored.push((score as u64 * (BOOST_SCALE + boost), score, i));
         }
 
-        top_by_key(&mut scored, limit, |&(score, i)| {
+        top_by_key(&mut scored, limit, |&(boosted, _, i)| {
             let r = &records[i];
             (
-                Reverse(score),
+                Reverse(boosted),
                 Reverse(r.meta.pinned),
                 Reverse(r.meta.updated),
                 i,
@@ -98,7 +145,7 @@ pub fn fuzzy_files(records: &[NoteRecord], query: &str, limit: usize) -> Vec<Fil
         let mut indices: Vec<u32> = Vec::new();
         scored
             .into_iter()
-            .map(|(score, i)| {
+            .map(|(_, score, i)| {
                 let r = &records[i];
                 let positions =
                     fuzzy_match(&pattern, matcher, &r.meta.path, &mut buf, &mut indices)
@@ -449,7 +496,7 @@ mod tests {
             rec("b.md", "", true, 0),
             rec("c.md", "", false, 2),
         ];
-        let hits = fuzzy_files(&recs, "", 10);
+        let hits = fuzzy_files(&recs, "", 10, &HashMap::new(), 0);
         assert_eq!(hits.len(), 3);
         assert_eq!(hits[0].path, "b.md"); // pinned first
         assert_eq!(hits[1].path, "c.md"); // then updated desc
@@ -462,10 +509,10 @@ mod tests {
             rec("welcome.md", "", false, 0),
             rec("keymap.md", "", false, 0),
         ];
-        let hits = fuzzy_files(&recs, "wel", 10);
+        let hits = fuzzy_files(&recs, "wel", 10, &HashMap::new(), 0);
         assert_eq!(hits[0].path, "welcome.md");
         assert!(!hits[0].positions.is_empty());
-        assert!(fuzzy_files(&recs, "zzzzz", 10).is_empty());
+        assert!(fuzzy_files(&recs, "zzzzz", 10, &HashMap::new(), 0).is_empty());
     }
 
     #[test]
@@ -474,7 +521,7 @@ mod tests {
             rec_with_title("daily/2026-06-18.md", "Release Checklist", "", false, 0),
             rec_with_title("ideas/perf.md", "Performance Notes", "", false, 0),
         ];
-        let hits = fuzzy_files(&recs, "rel", 10);
+        let hits = fuzzy_files(&recs, "rel", 10, &HashMap::new(), 0);
         assert_eq!(hits[0].path, "daily/2026-06-18.md");
         assert!(hits[0].positions.is_empty());
         assert!(!hits[0].title_positions.is_empty());
@@ -524,11 +571,11 @@ mod tests {
             rec_with_title("notes/kettle.md", "Three", "", false, 1),
             rec_with_title("notes/kettle.md", "Four", "", false, 5),
         ];
-        let hits = fuzzy_files(&recs, "kettle", 2);
+        let hits = fuzzy_files(&recs, "kettle", 2, &HashMap::new(), 0);
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].title, "Two"); // pinned first
         assert_eq!(hits[1].title, "Four"); // then updated desc
-        let full = fuzzy_files(&recs, "kettle", 10);
+        let full = fuzzy_files(&recs, "kettle", 10, &HashMap::new(), 0);
         assert_eq!(full[2].title, "One"); // equal keys keep input order
         assert_eq!(full[3].title, "Three");
         assert!(!full.iter().any(|h| h.positions.is_empty()));
@@ -541,7 +588,7 @@ mod tests {
             rec("b.md", "", true, 0),
             rec("c.md", "", false, 7),
         ];
-        let page = fuzzy_files(&recs, "", 2);
+        let page = fuzzy_files(&recs, "", 2, &HashMap::new(), 0);
         assert_eq!(page.len(), 2);
         assert_eq!(page[0].path, "b.md");
         assert_eq!(page[1].path, "c.md");
@@ -710,5 +757,139 @@ mod tests {
         assert!(body_has_subsequence("ab\ncd", "acd"));
         assert!(body_has_subsequence("ΚΑΦΈΣ", "ς")); // final-sigma folding
         assert!(!body_has_subsequence("anything", ""));
+    }
+
+    fn frec(entries: &[(&str, f64, u64)]) -> HashMap<String, FrecencyEntry> {
+        entries
+            .iter()
+            .map(|&(path, score, last_ms)| (path.to_string(), FrecencyEntry { score, last_ms }))
+            .collect()
+    }
+
+    #[test]
+    fn empty_query_frecency_ranks_opened_above_unopened() {
+        let recs = vec![
+            rec("old-opened.md", "", false, 1), // stale, but opened once
+            rec("new-a.md", "", false, 10),
+            rec("new-b.md", "", false, 9),
+            rec("pin.md", "", true, 0),
+        ];
+        let f = frec(&[("old-opened.md", 1.0, 1_000)]);
+        let hits = fuzzy_files(&recs, "", 10, &f, 1_000);
+        assert_eq!(hits[0].path, "pin.md"); // pinned still outranks frecency
+        assert_eq!(hits[1].path, "old-opened.md"); // MRU bump beats fresher mtimes
+        assert_eq!(hits[2].path, "new-a.md"); // unopened keep updated-desc order
+        assert_eq!(hits[3].path, "new-b.md");
+    }
+
+    #[test]
+    fn query_boost_is_bounded_by_text_relevance() {
+        let recs = vec![
+            rec_with_title("kern/tottle.md", "Misc", "", false, 0), // weak, scattered match
+            rec_with_title("notes/one.md", "Kettle", "", false, 0), // strong title match
+        ];
+        let plain = fuzzy_files(&recs, "kettle", 10, &HashMap::new(), 0);
+        assert_eq!(plain[0].path, "notes/one.md");
+        // The premise the pin relies on: even a maxed-out boost (+15%) cannot
+        // close this score gap.
+        assert!(f64::from(plain[0].score) > f64::from(plain[1].score) * 1.16);
+
+        let f = frec(&[("kern/tottle.md", 1e9, 1_000)]); // absurdly hot note
+        let hits = fuzzy_files(&recs, "kettle", 10, &f, 1_000);
+        assert_eq!(hits[0].path, "notes/one.md"); // text relevance still wins
+        assert_eq!(hits[0].score, plain[0].score); // reported score stays raw nucleo
+    }
+
+    #[test]
+    fn query_equal_text_scores_break_toward_frecency() {
+        // Identical structure → identical nucleo scores; equal updated; input
+        // order would put `a` first. Frecency on `b` must flip the tie.
+        let recs = vec![
+            rec_with_title("notes/kettle-a.md", "One", "", false, 5),
+            rec_with_title("notes/kettle-b.md", "Two", "", false, 5),
+        ];
+        let plain = fuzzy_files(&recs, "kettle", 10, &HashMap::new(), 0);
+        assert_eq!(plain[0].score, plain[1].score); // the premise: a true text tie
+        assert_eq!(plain[0].path, "notes/kettle-a.md");
+
+        let f = frec(&[("notes/kettle-b.md", 2.0, 1_000)]);
+        let hits = fuzzy_files(&recs, "kettle", 10, &f, 1_000);
+        assert_eq!(hits[0].path, "notes/kettle-b.md");
+        assert_eq!(hits[1].path, "notes/kettle-a.md");
+    }
+
+    /// Regression pin: with an empty frecency map, `fuzzy_files` must be
+    /// byte-identical to the pre-frecency implementation (inlined here).
+    #[test]
+    fn empty_frecency_map_output_matches_the_pre_frecency_implementation() {
+        fn fuzzy_files_v1(records: &[NoteRecord], query: &str, limit: usize) -> Vec<FileHit> {
+            let q = query.trim();
+            if q.is_empty() {
+                let mut all: Vec<(usize, &NoteRecord)> = records.iter().enumerate().collect();
+                top_by_key(&mut all, limit, |&(i, r)| {
+                    (Reverse(r.meta.pinned), Reverse(r.meta.updated), i)
+                });
+                return all
+                    .into_iter()
+                    .map(|(_, r)| file_hit(r, 0, Vec::new(), Vec::new()))
+                    .collect();
+            }
+            MATCHER.with(|m| {
+                let matcher = &mut *m.borrow_mut();
+                let pattern = Pattern::parse(q, CaseMatching::Ignore, Normalization::Smart);
+                let mut buf: Vec<char> = Vec::new();
+                let mut scored: Vec<(u32, usize)> = Vec::new();
+                for (i, r) in records.iter().enumerate() {
+                    let path_score = pattern.score(Utf32Str::new(&r.meta.path, &mut buf), matcher);
+                    let title_score =
+                        pattern.score(Utf32Str::new(&r.meta.title, &mut buf), matcher);
+                    if path_score.is_none() && title_score.is_none() {
+                        continue;
+                    }
+                    let p = path_score.unwrap_or(0);
+                    let t = title_score.map_or(0, |s| s.saturating_add(16));
+                    scored.push((p.max(t), i));
+                }
+                top_by_key(&mut scored, limit, |&(score, i)| {
+                    let r = &records[i];
+                    (
+                        Reverse(score),
+                        Reverse(r.meta.pinned),
+                        Reverse(r.meta.updated),
+                        i,
+                    )
+                });
+                let mut indices: Vec<u32> = Vec::new();
+                scored
+                    .into_iter()
+                    .map(|(score, i)| {
+                        let r = &records[i];
+                        let positions =
+                            fuzzy_match(&pattern, matcher, &r.meta.path, &mut buf, &mut indices)
+                                .map_or_else(Vec::new, |m| m.1);
+                        let title_positions =
+                            fuzzy_match(&pattern, matcher, &r.meta.title, &mut buf, &mut indices)
+                                .map_or_else(Vec::new, |m| m.1);
+                        file_hit(r, score, positions, title_positions)
+                    })
+                    .collect()
+            })
+        }
+
+        let recs = vec![
+            rec_with_title("notes/kettle.md", "Kettle", "", false, 3),
+            rec_with_title("notes/kettle-two.md", "Kettle Two", "", true, 1),
+            rec_with_title("journal/keymap.md", "Keymap", "", false, 7),
+            rec_with_title("ideas/kelp.md", "Kelp", "", false, 7),
+            rec_with_title("welcome.md", "Welcome", "", true, 0),
+        ];
+        let empty = HashMap::new();
+        for (query, limit) in [("", 10), ("", 2), ("kettle", 10), ("ke", 3), ("k", 2)] {
+            assert_eq!(
+                serde_json::to_string(&fuzzy_files(&recs, query, limit, &empty, 12345)).unwrap(),
+                serde_json::to_string(&fuzzy_files_v1(&recs, query, limit)).unwrap(),
+                "diverged for query {query:?} limit {limit}"
+            );
+        }
     }
 }

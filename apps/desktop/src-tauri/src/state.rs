@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -5,6 +6,7 @@ use std::time::{Duration, Instant};
 use notify::RecommendedWatcher;
 use notify_debouncer_full::{Debouncer, FileIdMap};
 
+use crate::frecency::FrecencyEntry;
 use crate::models::NoteMeta;
 use crate::notebook::NoteRecord;
 
@@ -38,18 +40,40 @@ fn upsert_sorted(records: &mut Vec<NoteRecord>, rec: NoteRecord) {
 pub struct NotebookState {
     pub root: Option<PathBuf>,
     pub records: Arc<Vec<NoteRecord>>,
+    /// Per-note open-frecency, keyed by notebook-relative path. Loaded with the
+    /// notebook and snapshotted by search the same way `records` is.
+    pub frecency: Arc<HashMap<String, FrecencyEntry>>,
     /// When set, watcher events before this instant are echoes of our own write.
     /// Owned by the methods below — never set or read directly.
     suppress_until: Option<Instant>,
 }
 
 impl NotebookState {
-    /// Install a freshly-scanned notebook, clearing any pending suppression
-    /// (a fresh open is never an echo of a previous write).
-    pub fn load(&mut self, root: PathBuf, records: Vec<NoteRecord>) {
+    /// Install a freshly-scanned notebook (plus its persisted frecency map),
+    /// clearing any pending suppression (a fresh open is never an echo of a
+    /// previous write).
+    pub fn load(
+        &mut self,
+        root: PathBuf,
+        records: Vec<NoteRecord>,
+        frecency: HashMap<String, FrecencyEntry>,
+    ) {
         self.root = Some(root);
         self.records = Arc::new(records);
+        self.frecency = Arc::new(frecency);
         self.suppress_until = None;
+    }
+
+    /// Record a note open at `now_ms`: decay the note's running frecency score
+    /// to now, then add 1 (see `frecency::FrecencyEntry::bump`).
+    pub fn record_open(&mut self, rel: &str, now_ms: u64) {
+        Arc::make_mut(&mut self.frecency)
+            .entry(rel.to_string())
+            .or_insert(FrecencyEntry {
+                score: 0.0,
+                last_ms: now_ms,
+            })
+            .bump(now_ms);
     }
 
     /// Replace the index after an external change (the watcher's rescan).
@@ -66,7 +90,10 @@ impl NotebookState {
         for (path, rec) in updates {
             match rec {
                 Some(rec) => upsert_sorted(records, rec),
-                None => records.retain(|r| r.meta.path != path),
+                None => {
+                    records.retain(|r| r.meta.path != path);
+                    Arc::make_mut(&mut self.frecency).remove(&path);
+                }
             }
         }
     }
@@ -80,8 +107,9 @@ impl NotebookState {
     }
 
     /// Record our own rename: drop the old-path record, upsert the new-path record
-    /// (with refreshed meta + body), and arm the echo-suppression window so the
-    /// watcher ignores the move (which surfaces as a delete + create).
+    /// (with refreshed meta + body), migrate the frecency entry to the new path,
+    /// and arm the echo-suppression window so the watcher ignores the move (which
+    /// surfaces as a delete + create).
     pub fn record_own_rename(
         &mut self,
         old_path: &str,
@@ -89,16 +117,22 @@ impl NotebookState {
         body: String,
         now: Instant,
     ) {
+        let frecency = Arc::make_mut(&mut self.frecency);
+        if let Some(e) = frecency.remove(old_path) {
+            frecency.insert(meta.path.clone(), e);
+        }
         let records = Arc::make_mut(&mut self.records);
         records.retain(|r| r.meta.path != old_path);
         upsert_sorted(records, NoteRecord { meta, body });
         self.suppress_until = Some(now + SUPPRESS);
     }
 
-    /// Record our own delete: drop the record and arm the suppression window.
+    /// Record our own delete: drop the record (and its frecency entry) and arm
+    /// the suppression window.
     pub fn record_own_delete(&mut self, path: &str, now: Instant) {
         let records = Arc::make_mut(&mut self.records);
         records.retain(|r| r.meta.path != path);
+        Arc::make_mut(&mut self.frecency).remove(path);
         self.suppress_until = Some(now + SUPPRESS);
     }
 
@@ -176,7 +210,7 @@ mod tests {
         let t0 = Instant::now();
         s.record_own_write(meta("a.md"), "x".to_string(), t0);
         assert!(s.should_ignore_event(t0));
-        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")]);
+        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
         assert!(!s.should_ignore_event(t0)); // a fresh open is not our echo
         assert_eq!(s.root, Some(PathBuf::from("/nb")));
         assert_eq!(s.records.len(), 1);
@@ -205,6 +239,7 @@ mod tests {
         s.load(
             PathBuf::from("/nb"),
             vec![rec("a.md", "1"), rec("z.md", "2")],
+            HashMap::new(),
         );
         s.record_own_write(meta("m.md"), "created".to_string(), t0); // new note
         s.record_own_rename("m.md", meta("b.md"), "created".to_string(), t0);
@@ -220,6 +255,7 @@ mod tests {
         s.load(
             PathBuf::from("/nb"),
             vec![rec("a.md", "1"), rec("m.md", "2"), rec("z.md", "3")],
+            HashMap::new(),
         );
         s.apply_external(vec![
             ("m.md".to_string(), Some(rec("m.md", "2-updated"))), // in place
@@ -240,10 +276,50 @@ mod tests {
         s.load(
             PathBuf::from("/nb"),
             vec![rec("a.md", "x"), rec("b.md", "y")],
+            HashMap::new(),
         );
         s.record_own_delete("a.md", t0);
         assert_eq!(s.records.len(), 1);
         assert_eq!(s.records[0].meta.path, "b.md");
         assert!(s.should_ignore_event(t0));
+    }
+
+    #[test]
+    fn record_open_bumps_frecency_mru_style() {
+        let mut s = NotebookState::default();
+        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
+        s.record_open("a.md", 1_000);
+        s.record_open("a.md", 1_000);
+        let e = s.frecency.get("a.md").unwrap();
+        assert_eq!(e.score, 2.0); // two opens with no time passing: 0+1, then 1+1
+        assert_eq!(e.last_ms, 1_000);
+    }
+
+    #[test]
+    fn record_own_rename_migrates_the_frecency_entry() {
+        let mut s = NotebookState::default();
+        s.load(PathBuf::from("/nb"), vec![rec("a.md", "x")], HashMap::new());
+        s.record_open("a.md", 1_000);
+        s.record_own_rename("a.md", meta("b.md"), "x".to_string(), Instant::now());
+        assert!(!s.frecency.contains_key("a.md"));
+        let e = s.frecency.get("b.md").unwrap();
+        assert_eq!(e.score, 1.0);
+        assert_eq!(e.last_ms, 1_000);
+    }
+
+    #[test]
+    fn delete_and_external_remove_drop_the_frecency_entry() {
+        let mut s = NotebookState::default();
+        s.load(
+            PathBuf::from("/nb"),
+            vec![rec("a.md", "x"), rec("b.md", "y")],
+            HashMap::new(),
+        );
+        s.record_open("a.md", 1_000);
+        s.record_open("b.md", 1_000);
+        s.record_own_delete("a.md", Instant::now());
+        assert!(!s.frecency.contains_key("a.md"));
+        s.apply_external(vec![("b.md".to_string(), None)]);
+        assert!(!s.frecency.contains_key("b.md"));
     }
 }

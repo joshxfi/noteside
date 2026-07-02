@@ -53,6 +53,17 @@ describe("mock backend", () => {
     expect(meta.path).toBe("journal/keep-me.md"); // dir-stripped stem matched → no move
   });
 
+  it("recordOpen ranks a note above newer-but-unopened notes in the empty-query recents", async () => {
+    const before = await mockBackend.searchFiles("");
+    const last = before[before.length - 1]; // the stalest, lowest-ranked note
+    await mockBackend.recordOpen(last.path);
+    const after = await mockBackend.searchFiles("");
+    expect(after[0]?.path).toBe(last.path); // MRU: opened → top of recents
+    // never-opened notes keep their relative (updated desc) order behind it
+    const rest = after.slice(1).map((h) => h.path);
+    expect(rest).toEqual(before.map((h) => h.path).filter((p) => p !== last.path));
+  });
+
   it("renameNote renames within the note's directory (never hoists to the root)", async () => {
     await mockBackend.saveNote("journal/old-name.md", "# Fresh Title\n\nbody");
     const meta = await mockBackend.renameNote("journal/old-name.md");

@@ -9,6 +9,7 @@
 
 mod commands;
 mod error;
+pub mod frecency;
 pub mod links;
 pub mod models;
 pub mod notebook;
@@ -48,6 +49,7 @@ pub fn run() {
             commands::create_note,
             commands::rename_note,
             commands::delete_note,
+            commands::record_open,
             commands::search_files,
             commands::search_content,
             commands::backlinks,
