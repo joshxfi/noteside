@@ -24,24 +24,27 @@ See [Search](/search) for the difference.
 Don't use vim? Turn it off (`set vim = off` in your `~/.notesiderc`, or the settings
 panel) and these are all you need. They stay available with vim on, too.
 
-| Chord        | Command                           |
-| ------------ | --------------------------------- |
-| `⌘P`         | Find files & content              |
-| `⌘⇧P`        | Command palette (searchable)      |
-| `⌘⇧F`        | Search note contents (grep)       |
-| `⌘F`         | Find in the current note (toggle) |
-| `F3` / `⇧F3` | Next / previous search match      |
-| `⌘N`         | New note                          |
-| `⌘S`         | Save note                         |
-| `⌘W`         | Close note                        |
-| `⌘⇧T`        | Reopen closed note                |
-| `⌘J` / `⌘K`  | Next / previous note              |
-| `⌥↵`         | Follow link under cursor          |
-| `⌘B`         | Toggle the sidebar                |
-| `⌘E`         | Toggle inline live-preview        |
-| `⌘⇧L`        | Linked references panel           |
-| `⌘,`         | Settings panel                    |
-| `⌘/`         | Keyboard cheatsheet               |
+| Chord         | Command                           |
+| ------------- | --------------------------------- |
+| `⌘P`          | Find files & content              |
+| `⌘⇧P`         | Command palette (searchable)      |
+| `⌘⇧F`         | Search note contents (grep)       |
+| `⌘F`          | Find in the current note (toggle) |
+| `F3` / `⇧F3`  | Next / previous search match      |
+| `⌘N`          | New note                          |
+| `⌘S`          | Save note                         |
+| `⌘W`          | Close note                        |
+| `⌘⇧T`         | Reopen closed note                |
+| `⌘J` / `⌘K`   | Next / previous note              |
+| `⌥↵`          | Follow link under cursor          |
+| `⌘B`          | Toggle the sidebar                |
+| `⌘E`          | Toggle inline live-preview        |
+| `⌘=` / `⌘-`   | Editor font larger / smaller      |
+| `⌘0`          | Editor font reset                 |
+| `⌘⇧=` / `⌘⇧-` | Interface larger / smaller        |
+| `⌘⇧L`         | Linked references panel           |
+| `⌘,`          | Settings panel                    |
+| `⌘/`          | Keyboard cheatsheet               |
 
 `⌘` is Cmd on macOS, Ctrl elsewhere. Forgot one? `⌘/` opens the cheatsheet — which also
 **edits** them (see [Editing shortcuts](#editing-shortcuts) below). Or remap with
@@ -61,6 +64,7 @@ the app:
 | `:backlinks` (`:back`) | Linked-references panel for the current note  |
 | `:new` / `:rm`         | New note · delete note                        |
 | `:preview`             | Toggle inline live-preview                    |
+| `:theme` (`:colo`)     | Theme picker (live preview)                   |
 | `:nav`                 | Toggle the sidebar                            |
 | `:commands`            | Open the searchable command palette           |
 | `:settings` `:config`  | Settings panel · edit `~/.notesiderc`         |
@@ -84,6 +88,7 @@ Tap `<Space>` in normal mode to open a which-key menu, then a single key:
 | `<Space> b` | Toggle the sidebar   |
 | `<Space> p` | Toggle live-preview  |
 | `<Space> l` | Linked references    |
+| `<Space> t` | Theme picker         |
 | `<Space> ,` | Settings             |
 | `<Space> c` | Edit `~/.notesiderc` |
 

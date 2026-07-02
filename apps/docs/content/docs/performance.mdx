@@ -23,12 +23,14 @@ your notes stay plain Markdown files on disk.
 
 Measured with `cargo bench` on a modern laptop:
 
-| Operation                      | Result                                               |
-| ------------------------------ | ---------------------------------------------------- |
-| Fuzzy file & title search      | **sub-millisecond**, even across 50,000 notes        |
-| Content search (`:grep`)       | ~2 ms at 1k notes, ~20 ms at 10k, ~100 ms at 50k     |
-| Opening a 10,000-note notebook | ~150 ms, one time                                    |
-| Scrolling the sidebar          | virtualized past 100 notes — only visible rows mount |
-| Backlinks                      | computed in Rust, off the UI thread                  |
+| Operation                      | Result                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Fuzzy file & title search      | **sub-millisecond** at 10,000 notes; ~1 ms at 50,000                                                          |
+| Content search (`:grep`)       | typical query ~0.1 ms; worst case (a query matching nothing) ~0.5 ms at 1k notes, ~3 ms at 10k, ~15 ms at 50k |
+| Opening a 10,000-note notebook | ~90 ms, one time (files read in parallel)                                                                     |
+| External edits                 | the watcher re-reads just the touched files                                                                   |
+| Scrolling the sidebar          | virtualized past 100 notes — only visible rows mount                                                          |
+| Backlinks                      | computed in Rust, off the UI thread                                                                           |
+| Typing                         | never re-renders the UI; autosave is debounced off the keystroke path                                         |
 
 <Callout>No database, no daemon, no indexer to wait on — the fast path is the only path.</Callout>
