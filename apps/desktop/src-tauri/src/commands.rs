@@ -11,7 +11,7 @@ use crate::links;
 use crate::models::{Backlink, ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
 use crate::search;
-use crate::state::AppState;
+use crate::state::{find_record, AppState};
 use crate::watcher;
 
 async fn blocking<T, F>(f: F) -> Result<T>
@@ -60,7 +60,7 @@ async fn persist_frecency(
     .await;
 }
 
-fn sorted_metas(records: &[NoteRecord]) -> Vec<NoteMeta> {
+fn sorted_metas(records: &[Arc<NoteRecord>]) -> Vec<NoteMeta> {
     let mut metas: Vec<NoteMeta> = records.iter().map(|r| r.meta.clone()).collect();
     metas.sort_by(|a, b| b.pinned.cmp(&a.pinned).then(b.updated.cmp(&a.updated)));
     metas
@@ -132,15 +132,17 @@ pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteD
 /// `read_note`, which reads the authoritative file from disk.
 #[tauri::command]
 pub fn preview_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
-    let g = state.notebook.lock().unwrap();
-    if g.root.is_none() {
-        return Err(AppError::NoNotebook);
-    }
-    let rec = g
-        .records
-        .iter()
-        .find(|r| r.meta.path == path)
-        .ok_or_else(|| AppError::Msg("note is not in the notebook index".into()))?;
+    // Clone the record's Arc under the lock; the string copies for the IPC
+    // payload happen after it is released.
+    let rec = {
+        let g = state.notebook.lock().unwrap();
+        if g.root.is_none() {
+            return Err(AppError::NoNotebook);
+        }
+        let i = find_record(&g.records, &path)
+            .ok_or_else(|| AppError::Msg("note is not in the notebook index".into()))?;
+        g.records[i].clone()
+    };
     Ok(NoteDoc {
         meta: rec.meta.clone(),
         body: rec.body.clone(),
@@ -208,11 +210,7 @@ pub async fn rename_note(
     let (root, recorded) = {
         let g = state.notebook.lock().unwrap();
         let root = g.root.clone().ok_or(AppError::NoNotebook)?;
-        let body = g
-            .records
-            .iter()
-            .find(|r| r.meta.path == path)
-            .map(|r| r.body.clone());
+        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
         (root, body)
     };
     let persist_root = root.clone();
@@ -292,7 +290,7 @@ pub async fn record_open(path: String, app: AppHandle, state: State<'_, AppState
         };
         // Only indexed notes count — synthetic buffers (e.g. the config
         // buffer) and stale paths must not accumulate in the map.
-        if !g.records.iter().any(|r| r.meta.path == path) {
+        if find_record(&g.records, &path).is_none() {
             return Ok(());
         }
         g.record_open(&path, now);

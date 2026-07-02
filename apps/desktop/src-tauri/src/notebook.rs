@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use walkdir::WalkDir;
@@ -18,7 +19,9 @@ pub struct NoteRecord {
 /// directories (including `.noteside/` and `.git/`) are skipped. The reads fan
 /// out across threads, then the result is sorted by path: a scan must be
 /// deterministic because wikilink resolution tie-breaks on the first record.
-pub fn scan_notebook(root: &Path) -> Vec<NoteRecord> {
+/// Records come `Arc`-wrapped: the index treats them as immutable values, so
+/// state mutations shallow-copy the index instead of cloning note bodies.
+pub fn scan_notebook(root: &Path) -> Vec<Arc<NoteRecord>> {
     let paths: Vec<PathBuf> = WalkDir::new(root)
         .into_iter()
         .filter_entry(|e| !is_hidden(e.path()))
@@ -32,13 +35,13 @@ pub fn scan_notebook(root: &Path) -> Vec<NoteRecord> {
     let workers = std::thread::available_parallelism()
         .map_or(1, |n| n.get())
         .min(paths.len());
-    let read_all = |paths: &[PathBuf]| -> Vec<NoteRecord> {
+    let read_all = |paths: &[PathBuf]| -> Vec<Arc<NoteRecord>> {
         paths
             .iter()
-            .filter_map(|p| read_record(root, p).ok())
+            .filter_map(|p| read_record(root, p).ok().map(Arc::new))
             .collect()
     };
-    let mut out: Vec<NoteRecord> = if workers <= 1 {
+    let mut out: Vec<Arc<NoteRecord>> = if workers <= 1 {
         read_all(&paths)
     } else {
         let chunk_len = paths.len().div_ceil(workers);

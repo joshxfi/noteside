@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
@@ -75,7 +76,7 @@ fn effective_frecency(frecency: &HashMap<String, FrecencyEntry>, path: &str, now
 /// frecency, then most-recent; with a query, frecency is only a bounded nudge
 /// on the text score. Pure in `now_ms` — the command layer supplies the clock.
 pub fn fuzzy_files(
-    records: &[NoteRecord],
+    records: &[Arc<NoteRecord>],
     query: &str,
     limit: usize,
     frecency: &HashMap<String, FrecencyEntry>,
@@ -91,7 +92,7 @@ pub fn fuzzy_files(
             .enumerate()
             .map(|(i, r)| {
                 let f = effective_frecency(frecency, &r.meta.path, now_ms);
-                (f.to_bits(), i, r)
+                (f.to_bits(), i, &**r)
             })
             .collect();
         top_by_key(&mut all, limit, |&(f, i, r)| {
@@ -163,7 +164,7 @@ pub fn fuzzy_files(
 /// finder UI: `plain` substring, `regex`, and `fuzzy` subsequence. Byte offsets
 /// in `ranges` are fine for ASCII; multi-byte alignment is a known v1 limitation.
 pub fn content_search(
-    records: &[NoteRecord],
+    records: &[Arc<NoteRecord>],
     query: &str,
     mode: &str,
     limit: usize,
@@ -454,7 +455,7 @@ mod tests {
     use super::*;
     use crate::models::NoteMeta;
 
-    fn rec(path: &str, body: &str, pinned: bool, updated: i64) -> NoteRecord {
+    fn rec(path: &str, body: &str, pinned: bool, updated: i64) -> Arc<NoteRecord> {
         rec_with_title(path, path, body, pinned, updated)
     }
 
@@ -464,8 +465,8 @@ mod tests {
         body: &str,
         pinned: bool,
         updated: i64,
-    ) -> NoteRecord {
-        NoteRecord {
+    ) -> Arc<NoteRecord> {
+        Arc::new(NoteRecord {
             meta: NoteMeta {
                 id: path.into(),
                 path: path.into(),
@@ -476,13 +477,13 @@ mod tests {
                 pinned,
             },
             body: body.into(),
-        }
+        })
     }
 
     /// Prepend PREFILTER_AFTER non-matching notes so `content_search` actually
     /// reaches the prefilter path for the records under test.
-    fn pad(recs: Vec<NoteRecord>) -> Vec<NoteRecord> {
-        let mut out: Vec<NoteRecord> = (0..PREFILTER_AFTER)
+    fn pad(recs: Vec<Arc<NoteRecord>>) -> Vec<Arc<NoteRecord>> {
+        let mut out: Vec<Arc<NoteRecord>> = (0..PREFILTER_AFTER)
             .map(|i| rec(&format!("pad-{i}.md"), "zz", false, 0))
             .collect();
         out.extend(recs);
@@ -822,10 +823,11 @@ mod tests {
     /// byte-identical to the pre-frecency implementation (inlined here).
     #[test]
     fn empty_frecency_map_output_matches_the_pre_frecency_implementation() {
-        fn fuzzy_files_v1(records: &[NoteRecord], query: &str, limit: usize) -> Vec<FileHit> {
+        fn fuzzy_files_v1(records: &[Arc<NoteRecord>], query: &str, limit: usize) -> Vec<FileHit> {
             let q = query.trim();
             if q.is_empty() {
-                let mut all: Vec<(usize, &NoteRecord)> = records.iter().enumerate().collect();
+                let mut all: Vec<(usize, &NoteRecord)> =
+                    records.iter().enumerate().map(|(i, r)| (i, &**r)).collect();
                 top_by_key(&mut all, limit, |&(i, r)| {
                     (Reverse(r.meta.pinned), Reverse(r.meta.updated), i)
                 });

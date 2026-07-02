@@ -22,7 +22,7 @@ enum PathChange {
 /// or (whenever anything is ambiguous) rescan the whole notebook.
 enum Refresh {
     Targeted(Vec<(String, Option<NoteRecord>)>),
-    Full(Vec<NoteRecord>),
+    Full(Vec<Arc<NoteRecord>>),
 }
 
 /// Map a debounced batch to targeted per-path changes, or `None` when only a
