@@ -10,8 +10,8 @@ export type BootConfig = {
   vimMode?: boolean;
   cursor?: "block" | "bar" | "underline";
   cursorBlink?: boolean;
-  theme?: "light" | "dark";
-  accent?: string;
+  /** A theme id, label, or the light/dark aliases (resolveThemeId normalizes). */
+  theme?: string;
   [key: string]: unknown;
 };
 

@@ -1,7 +1,7 @@
 import { boot, expect, test } from "./fixtures";
 
 test.describe("settings apply live", () => {
-  test("theme and accent update the document immediately", async ({ page }) => {
+  test("picking a theme updates the document immediately", async ({ page }) => {
     await boot(page, { theme: "light" });
     const html = page.locator("html");
     await expect(html).toHaveAttribute("data-theme", "light");
@@ -9,15 +9,19 @@ test.describe("settings apply live", () => {
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator(".set-panel").waitFor();
 
-    await page.getByRole("button", { name: "Dark", exact: true }).click();
-    await expect(html).toHaveAttribute("data-theme", "dark");
+    // The Theme row opens the two-column live-preview picker.
+    await page.getByRole("button", { name: /Noteside Light/ }).click();
+    await page.locator(".thm-cols").waitFor();
 
-    const accentBase = () =>
-      page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--accent-base").trim(),
-      );
-    const before = await accentBase();
-    await page.locator(".set-swatch").last().click();
-    await expect.poll(accentBase).not.toBe(before);
+    // A builtin theme applies no inline overrides — the base16 pick must land
+    // its palette inline on <html> (and flip data-theme) with no reload.
+    const paperVar = () =>
+      page.evaluate(() => document.documentElement.style.getPropertyValue("--paper").trim());
+    expect(await paperVar()).toBe("");
+
+    await page.locator(".thm-row", { hasText: "Catppuccin Mocha" }).click();
+    await expect(html).toHaveAttribute("data-theme", "dark");
+    await expect.poll(paperVar).not.toBe("");
+    await expect(page.locator(".thm-cols")).toHaveCount(0); // click commits + closes
   });
 });
