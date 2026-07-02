@@ -6,7 +6,12 @@ import { useEffect, useState } from "react";
 import { isTauri } from "./use-window-controls";
 
 export function useAppVersion(): string {
-  const [version, setVersion] = useState(__APP_VERSION__);
+  // typeof-guarded: Vite's `define` inlines the literal (the guard folds away),
+  // while other bundlers (tests, the design-sync converter) get the fallback
+  // instead of a ReferenceError.
+  const [version, setVersion] = useState(
+    typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev",
+  );
   useEffect(() => {
     if (!isTauri()) return;
     void import("@tauri-apps/api/app")
