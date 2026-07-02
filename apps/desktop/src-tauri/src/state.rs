@@ -12,6 +12,19 @@ use crate::notebook::NoteRecord;
 /// the echo of that write (not an external change) and ignored.
 const SUPPRESS: Duration = Duration::from_millis(700);
 
+/// Update in place when the path is already indexed, otherwise insert at the
+/// path-sorted position: `scan_notebook` returns path-sorted records, and every
+/// in-place mutation must preserve that order so wikilink resolution's
+/// first-record tie-break stays deterministic.
+fn upsert_sorted(records: &mut Vec<NoteRecord>, rec: NoteRecord) {
+    if let Some(existing) = records.iter_mut().find(|r| r.meta.path == rec.meta.path) {
+        *existing = rec;
+    } else {
+        let at = records.partition_point(|r| r.meta.path < rec.meta.path);
+        records.insert(at, rec);
+    }
+}
+
 /// The open notebook plus its in-memory index (rebuilt from files on open and kept
 /// in sync on save / external change). Plain in-memory structures are faster and
 /// simpler than a database here, and stay fast at any realistic notebook size.
@@ -44,31 +57,41 @@ impl NotebookState {
         self.records = Arc::new(records);
     }
 
-    /// Record our own write: upsert the record in place (no reorder) and arm the
-    /// echo-suppression window from `now`.
+    /// Apply targeted external changes from the watcher without a full rescan:
+    /// `Some(record)` upserts (new paths at their path-sorted position, since
+    /// scan output is path-sorted), `None` removes. Ends in the same state a
+    /// full rescan would have produced for those paths.
+    pub fn apply_external(&mut self, updates: Vec<(String, Option<NoteRecord>)>) {
+        let records = Arc::make_mut(&mut self.records);
+        for (path, rec) in updates {
+            match rec {
+                Some(rec) => upsert_sorted(records, rec),
+                None => records.retain(|r| r.meta.path != path),
+            }
+        }
+    }
+
+    /// Record our own write: upsert the record (existing paths in place, new
+    /// paths path-sorted) and arm the echo-suppression window from `now`.
     pub fn record_own_write(&mut self, meta: NoteMeta, body: String, now: Instant) {
         let records = Arc::make_mut(&mut self.records);
-        if let Some(rec) = records.iter_mut().find(|r| r.meta.path == meta.path) {
-            rec.meta = meta;
-            rec.body = body;
-        } else {
-            records.push(NoteRecord { meta, body });
-        }
+        upsert_sorted(records, NoteRecord { meta, body });
         self.suppress_until = Some(now + SUPPRESS);
     }
 
     /// Record our own rename: drop the old-path record, upsert the new-path record
     /// (with refreshed meta + body), and arm the echo-suppression window so the
     /// watcher ignores the move (which surfaces as a delete + create).
-    pub fn record_own_rename(&mut self, old_path: &str, meta: NoteMeta, body: String, now: Instant) {
+    pub fn record_own_rename(
+        &mut self,
+        old_path: &str,
+        meta: NoteMeta,
+        body: String,
+        now: Instant,
+    ) {
         let records = Arc::make_mut(&mut self.records);
         records.retain(|r| r.meta.path != old_path);
-        if let Some(rec) = records.iter_mut().find(|r| r.meta.path == meta.path) {
-            rec.meta = meta;
-            rec.body = body;
-        } else {
-            records.push(NoteRecord { meta, body });
-        }
+        upsert_sorted(records, NoteRecord { meta, body });
         self.suppress_until = Some(now + SUPPRESS);
     }
 
@@ -173,6 +196,41 @@ mod tests {
             "same path updates in place, no new record"
         );
         assert_eq!(s.records[0].body, "v2");
+    }
+
+    #[test]
+    fn own_writes_and_renames_keep_records_path_sorted() {
+        let mut s = NotebookState::default();
+        let t0 = Instant::now();
+        s.load(
+            PathBuf::from("/nb"),
+            vec![rec("a.md", "1"), rec("z.md", "2")],
+        );
+        s.record_own_write(meta("m.md"), "created".to_string(), t0); // new note
+        s.record_own_rename("m.md", meta("b.md"), "created".to_string(), t0);
+        s.apply_external(vec![("c.md".to_string(), Some(rec("c.md", "external")))]);
+        let paths: Vec<&str> = s.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(paths, vec!["a.md", "b.md", "c.md", "z.md"]);
+        assert_eq!(s.records[1].body, "created");
+    }
+
+    #[test]
+    fn apply_external_upserts_sorted_and_removes_without_arming_suppression() {
+        let mut s = NotebookState::default();
+        s.load(
+            PathBuf::from("/nb"),
+            vec![rec("a.md", "1"), rec("m.md", "2"), rec("z.md", "3")],
+        );
+        s.apply_external(vec![
+            ("m.md".to_string(), Some(rec("m.md", "2-updated"))), // in place
+            ("c.md".to_string(), Some(rec("c.md", "new"))),       // sorted insert
+            ("z.md".to_string(), None),                           // remove
+        ]);
+        let paths: Vec<&str> = s.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(paths, vec!["a.md", "c.md", "m.md"]);
+        assert_eq!(s.records[2].body, "2-updated");
+        // External changes are not our own writes — no echo suppression.
+        assert!(!s.should_ignore_event(Instant::now()));
     }
 
     #[test]

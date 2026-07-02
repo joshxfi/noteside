@@ -5,6 +5,7 @@ import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
 import { urlAt, wikilinkAt } from "../links";
 import { COMMANDS, type Command } from "./commands";
+import { registerVimApplier } from "./vim-config";
 
 export type AppCommand =
   | "find"
@@ -41,8 +42,9 @@ export function setActiveHandlers(h: EditorHandlers | null) {
 
 // Insert-mode escape mapping (e.g. "jj" -> <Esc>), synced from Settings. Vim is
 // a global singleton, so the mapping applies to whatever editor is mounted.
+// App sets these through the CM-free vim-config bridge (this chunk is lazy).
 let currentEscMap = "";
-export function setInsertEscape(seq: string) {
+function applyInsertEscape(seq: string) {
   if (seq === currentEscMap) return;
   if (currentEscMap) {
     try {
@@ -69,7 +71,7 @@ function keymapCtx(cmd: string): string {
   if (c.startsWith("i")) return "insert";
   return "normal";
 }
-export function setUserKeymaps(lines: string[]) {
+function applyUserKeymaps(lines: string[]) {
   for (const { lhs, ctx } of appliedKeymaps) {
     try {
       Vim.unmap(lhs, ctx);
@@ -92,6 +94,7 @@ export function setUserKeymaps(lines: string[]) {
     }
   }
 }
+registerVimApplier({ escMap: applyInsertEscape, keymaps: applyUserKeymaps });
 
 // `:follow` (and `gf` / `gx`): open whatever is under the cursor — a [[wikilink]]
 // jumps to its note, otherwise an http(s)/mailto URL (bare or a markdown

@@ -53,6 +53,12 @@ describe("resolveLink", () => {
     expect(resolveLink("hello-world", notes)?.id).toBe("hello-world.md");
     expect(resolveLink("hello-world", [...notes].reverse())?.id).toBe("hello-world.md");
   });
+  it("breaks a same-tier tie by list order (first note wins)", () => {
+    const a = meta("a.md", "Dup");
+    const b = meta("b.md", "Dup");
+    expect(resolveLink("Dup", [a, b])?.id).toBe("a.md");
+    expect(resolveLink("Dup", [b, a])?.id).toBe("b.md");
+  });
 });
 
 describe("wikilinkAt", () => {
@@ -133,5 +139,15 @@ describe("computeBacklinks", () => {
   it("returns nothing when no note links to the target", () => {
     const docs = [doc(NOTES[0], "no links"), doc(NOTES[1], "still none")];
     expect(computeBacklinks("untitled.md", docs, NOTES)).toEqual([]);
+  });
+
+  it("resolves a tied target to the first matching note in the list", () => {
+    const a = meta("a.md", "Dup");
+    const b = meta("b.md", "Dup");
+    const src = meta("src.md", "Source");
+    const docs = [doc(src, "see [[Dup]]")];
+    const notes = [a, b, src];
+    expect(computeBacklinks("a.md", docs, notes).map((x) => x.id)).toEqual(["src.md"]);
+    expect(computeBacklinks("b.md", docs, notes)).toEqual([]);
   });
 });

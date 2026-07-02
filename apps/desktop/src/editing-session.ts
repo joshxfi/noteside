@@ -6,6 +6,7 @@
 // testable in the node env. See editing-session.test.ts.
 import { type Autosave, createAutosave } from "./autosave";
 import type { Backend, NoteDoc, NoteMeta } from "./backend/types";
+import { slugifyTitle, stemMatchesSlug } from "./links";
 
 /** The synthetic id of the `~/.notesiderc` config buffer — a buffer kind, not a note. */
 export const CONFIG_ID = "config";
@@ -167,26 +168,31 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // The id-pinned note save (autosave timer + explicit :w). Mirrors App's doSaveNote:
   // bound to an explicit id, so a queued save can never write one note's text into
   // another after a switch; only touches the on-screen buffer if `id` is still active.
-  // Resolves true only when the write landed — rename-on-save gates on it.
-  async function persistNote(id: string, text: string, seq = editSeq): Promise<boolean> {
-    if (!id || id === CONFIG_ID) return false;
+  // Resolves with the saved meta only when the write landed — rename-on-save gates on it.
+  async function persistNote(id: string, text: string, seq = editSeq): Promise<NoteMeta | null> {
+    if (!id || id === CONFIG_ID) return null;
     try {
       const meta = await backend.saveNote(id, text);
       onNoteSaved(meta);
       if (activeId === id) {
         noteSaved = text;
+        // Keep the mount seed in lockstep with the baseline: a later remount
+        // (vim toggle) must reseed from the last-saved text, not open-time text.
+        noteInitial = text;
         noteDirty = seq !== editSeq;
         commit();
       }
-      return true;
+      return meta;
     } catch (e) {
       notify(`save failed: ${e}`);
-      return false;
+      return null;
     }
   }
 
   const autosaver: Autosave = createAutosave(
-    (id, text, seq) => void persistNote(id, text, seq),
+    // Returns the promise so flush() can await the write landing (open() orders
+    // its read after it).
+    (id, text, seq) => persistNote(id, text, seq),
     deps.autosaveMs ?? DEFAULT_AUTOSAVE_MS,
   );
 
@@ -195,8 +201,19 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // rename the file to match the title's slug (no-op when it already matches). The
   // active buffer's id migrates in place; because editorKey excludes activeId there
   // is no remount (cursor preserved), and title-based [[links]] resolve unchanged.
-  async function maybeRename(id: string): Promise<void> {
+  async function maybeRename(id: string, savedTitle: string): Promise<void> {
     if (!id || id === CONFIG_ID || activeId !== id) return; // switched away → skip
+    // Pre-check with the meta the save just returned: when the filename already
+    // represents the title (the common case), skip the rename IPC entirely. The
+    // backend applies the same stem/slug rule, so this can't diverge.
+    // Only trusted for ASCII titles: links.ts slugs ASCII identically to Rust's
+    // slugify, but Rust keeps Unicode alphanumerics (CJK, accents) the JS slug
+    // strips — for those, always send the IPC and let the backend's no-op decide.
+    const stem = id.slice(id.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    // eslint-disable-next-line no-control-regex
+    if (/^[\x00-\x7F]*$/.test(savedTitle) && stemMatchesSlug(stem, slugifyTitle(savedTitle))) {
+      return;
+    }
     let meta: NoteMeta;
     try {
       meta = await backend.renameNote(id);
@@ -220,8 +237,11 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   async function open(id: string, line = 0): Promise<void> {
-    autosaver.flush(); // land the outgoing buffer's queued save BEFORE reading the next
-    const token = ++loadToken;
+    const token = ++loadToken; // claimed BEFORE the flush await so :q can supersede us
+    // Land the outgoing buffer's queued save BEFORE reading the next — awaited,
+    // or a same-note reopen could read pre-flush bytes and seed a stale buffer.
+    await autosaver.flush();
+    if (token !== loadToken) return; // user navigated away during the flush
     let doc: NoteDoc;
     try {
       doc = await backend.readNote(id);
@@ -266,12 +286,14 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       const id = activeId;
       // Rename only after the write LANDED — a failed save must not trigger a
       // rename derived from the stale on-disk content.
-      void persistNote(id, text, editSeq).then((ok) => (ok ? maybeRename(id) : undefined));
+      void persistNote(id, text, editSeq).then((meta) =>
+        meta ? maybeRename(id, meta.title) : undefined,
+      );
     }
   }
 
   function quit(): void {
-    autosaver.flush(); // land queued edits of the buffer being abandoned
+    void autosaver.flush(); // land queued edits of the buffer being abandoned
     loadToken += 1; // a pending open resolving after :q must not re-open
     if (activeId === CONFIG_ID) {
       activeId = lastNoteId && lastNoteId !== CONFIG_ID ? lastNoteId : null;
@@ -354,7 +376,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     reconcile,
     reopenLast,
     close,
-    flush: () => autosaver.flush(),
+    flush: () => void autosaver.flush(),
     cancelAutosave: () => autosaver.cancel(),
   };
 }

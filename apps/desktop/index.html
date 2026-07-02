@@ -12,6 +12,20 @@
         document.documentElement.classList.add("embed");
       // Native window only (not the landing iframe) — used to round the window corners.
       if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("tauri");
+      // Theme mirror (written by the config-apply effect): set data-theme + the
+      // theme's inline vars BEFORE first paint, so a dark/base16 user never sees
+      // a light flash while the config store loads. The store stays the source of
+      // truth — this is a paint-time hint only.
+      try {
+        var t = JSON.parse(localStorage.getItem("noteside:boot-theme"));
+        if (t && (t.mode === "dark" || t.mode === "light")) {
+          document.documentElement.setAttribute("data-theme", t.mode);
+          if (t.vars)
+            for (var k in t.vars)
+              if (k.indexOf("--") === 0 && typeof t.vars[k] === "string")
+                document.documentElement.style.setProperty(k, t.vars[k]);
+        }
+      } catch (e) {}
     </script>
   </head>
   <body>

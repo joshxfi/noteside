@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -15,25 +15,45 @@ pub struct NoteRecord {
 }
 
 /// Walk a notebook folder and read every Markdown file into a record. Hidden
-/// directories (including `.noteside/` and `.git/`) are skipped.
+/// directories (including `.noteside/` and `.git/`) are skipped. The reads fan
+/// out across threads, then the result is sorted by path: a scan must be
+/// deterministic because wikilink resolution tie-breaks on the first record.
 pub fn scan_notebook(root: &Path) -> Vec<NoteRecord> {
-    let mut out = Vec::new();
-    for entry in WalkDir::new(root)
+    let paths: Vec<PathBuf> = WalkDir::new(root)
         .into_iter()
         .filter_entry(|e| !is_hidden(e.path()))
         .filter_map(|e| e.ok())
-    {
-        let p = entry.path();
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        if p.extension().and_then(|e| e.to_str()) != Some("md") {
-            continue;
-        }
-        if let Ok(rec) = read_record(root, p) {
-            out.push(rec);
-        }
-    }
+        .filter(|e| {
+            e.file_type().is_file() && e.path().extension().and_then(|x| x.to_str()) == Some("md")
+        })
+        .map(|e| e.into_path())
+        .collect();
+
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(paths.len());
+    let read_all = |paths: &[PathBuf]| -> Vec<NoteRecord> {
+        paths
+            .iter()
+            .filter_map(|p| read_record(root, p).ok())
+            .collect()
+    };
+    let mut out: Vec<NoteRecord> = if workers <= 1 {
+        read_all(&paths)
+    } else {
+        let chunk_len = paths.len().div_ceil(workers);
+        std::thread::scope(|s| {
+            let handles: Vec<_> = paths
+                .chunks(chunk_len)
+                .map(|chunk| s.spawn(move || read_all(chunk)))
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().expect("scan worker panicked"))
+                .collect()
+        })
+    };
+    out.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
     out
 }
 
@@ -78,9 +98,20 @@ pub fn rel_path(root: &Path, abs: &Path) -> String {
 }
 
 pub fn read_record(root: &Path, abs: &Path) -> std::io::Result<NoteRecord> {
-    let text = fs::read_to_string(abs)?;
+    // One open handle serves the stat (mtime + size hint) and the read — no
+    // second path lookup per file.
+    let mut f = fs::File::open(abs)?;
+    let stat = f.metadata().ok();
+    let updated = stat
+        .as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let mut text = String::with_capacity(stat.map_or(0, |m| m.len() as usize));
+    f.read_to_string(&mut text)?;
     let rel = rel_path(root, abs);
-    let meta = parse_meta(rel, &text, mtime_millis(abs));
+    let meta = parse_meta(rel, &text, updated);
     Ok(NoteRecord { meta, body: text })
 }
 
@@ -341,6 +372,34 @@ mod tests {
         let (none, zero) = split_frontmatter("---\ntitle: x\nstill going");
         assert!(none.is_none());
         assert_eq!(zero, 0);
+    }
+
+    #[test]
+    fn scan_notebook_is_path_sorted_and_skips_hidden_and_non_md() {
+        let dir = std::env::temp_dir().join(format!("noteside-scan-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, body) in [
+            ("zeta.md", "# Z"),
+            ("alpha.md", "# A"),
+            ("sub/nested.md", "# N"),
+            ("sub/deeper/leaf.md", "# L"),
+            ("notes.txt", "not md"),
+            (".hidden/secret.md", "skipped"),
+        ] {
+            let p = dir.join(path);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, body).unwrap();
+        }
+        let recs = scan_notebook(&dir);
+        let paths: Vec<&str> = recs.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec!["alpha.md", "sub/deeper/leaf.md", "sub/nested.md", "zeta.md"]
+        );
+        assert_eq!(recs[0].meta.title, "A");
+        assert_eq!(recs[0].body, "# A");
+        assert!(recs.iter().all(|r| r.meta.updated > 0));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

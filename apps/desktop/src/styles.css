@@ -257,6 +257,9 @@ body {
   border-right: 1px solid var(--rule-soft);
   display: flex;
   flex-direction: column;
+  /* The collapse animates the parent's width; containment stops each frame's
+     relayout at this fixed-width box instead of rerunning the whole sidebar. */
+  contain: layout paint style;
 }
 .av-brand {
   padding: 20px 20px 14px;
@@ -1424,6 +1427,11 @@ mark.fnd-hl {
   background: var(--active-line);
   color: var(--ink);
   box-shadow: 0 0 0 4px var(--active-line);
+}
+.fnd-prevmore {
+  color: var(--ink-faint);
+  text-align: center;
+  font-style: italic;
 }
 .fnd-prevempty {
   padding: 26px;
