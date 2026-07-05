@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS, UI_FONTS } from "../settings";
 import { previewGradient, themeById } from "../themes";
-import { checkForUpdate, RELEASES_LATEST, type UpdateCheck } from "../check-update";
+import { checkForUpdate, DOWNLOAD_PAGE, type UpdateCheck } from "../check-update";
 import { openExternal } from "../open-external";
 import { useAppVersion } from "../use-app-version";
 
@@ -94,9 +94,10 @@ export function SettingsPanel({
     setAbout(await checkForUpdate(version));
   };
   // The About row's keyboard/click action: once an update is found (or the check
-  // failed) it opens the releases page; otherwise it (re-)runs the check.
+  // failed) it opens the landing's OS-aware download section; otherwise it
+  // (re-)runs the check.
   const onAboutAction = () => {
-    if (about.kind === "available" || about.kind === "error") void openExternal(RELEASES_LATEST);
+    if (about.kind === "available" || about.kind === "error") void openExternal(DOWNLOAD_PAGE);
     else void runCheck();
   };
   const aboutControl = () => {
@@ -119,7 +120,7 @@ export function SettingsPanel({
       case "error":
         return (
           <button type="button" tabIndex={-1} className="set-editfile" onClick={onAboutAction}>
-            Couldn't check — open releases&nbsp;→
+            Couldn't check — open downloads&nbsp;→
           </button>
         );
       default:

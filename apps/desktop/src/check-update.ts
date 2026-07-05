@@ -4,7 +4,9 @@
 // The repo mirrors apps/landing/src/downloads.ts (a separate package we can't import).
 const REPO = "joshxfi/noteside";
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
-export const RELEASES_LATEST = `https://github.com/${REPO}/releases/latest`;
+/** Where "get the update" sends the user: the landing's download section, which
+ *  auto-detects the visitor's OS — friendlier than the raw GitHub releases page. */
+export const DOWNLOAD_PAGE = "https://noteside.app/#get";
 
 export type UpdateCheck =
   | { kind: "current" }
