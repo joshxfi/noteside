@@ -512,8 +512,22 @@ export function App() {
     let unlisten: (() => void) | undefined;
     let disposed = false;
     if (isTauri()) {
+      // CAUTION: registering onCloseRequested makes Tauri core intercept the
+      // native close and rely on the JS wrapper calling window.destroy() —
+      // which needs `core:window:allow-destroy` in capabilities/default.json
+      // (missing = the X button silently does nothing; shipped as the v1.3.0
+      // bug). tauri-capabilities.test.ts pins that coupling. The handler must
+      // also never throw, or destroy() is skipped and close breaks again.
       void import("@tauri-apps/api/window")
-        .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(() => flushConfig()))
+        .then(({ getCurrentWindow }) =>
+          getCurrentWindow().onCloseRequested(() => {
+            try {
+              flushConfig();
+            } catch {
+              /* never block closing over a failed flush */
+            }
+          }),
+        )
         .then((u) => {
           if (disposed) u();
           else unlisten = u;
