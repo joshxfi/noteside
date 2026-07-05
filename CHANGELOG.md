@@ -1,3 +1,14 @@
+## [1.3.1](https://github.com/joshxfi/noteside/compare/v1.3.0...v1.3.1) (2026-07-05)
+
+### Bug Fixes
+
+* **desktop:** grant window destroy so the native close button works with the close-requested hook ([e0eaa67](https://github.com/joshxfi/noteside/commit/e0eaa672df130e444713ee9d5dc44a22cead5a99))
+* **desktop:** make the capability regression test a pure JSON import (CI has no node types) ([97a5d58](https://github.com/joshxfi/noteside/commit/97a5d5804f228292d3e6f2b4175c831e13e513cb))
+
+### Polish
+
+* **desktop:** send update downloads to the OS-aware landing page instead of GitHub releases ([2c86a17](https://github.com/joshxfi/noteside/commit/2c86a179055b19ed15139af7031c0d3ca9ef2ba1))
+
 ## [1.3.0](https://github.com/joshxfi/noteside/compare/v1.2.0...v1.3.0) (2026-07-05)
 
 ### Features
