@@ -1,3 +1,37 @@
+## [1.3.0](https://github.com/joshxfi/noteside/compare/v1.2.0...v1.3.0) (2026-07-05)
+
+### Features
+
+* **desktop:** add theme selection with curated base16 palettes ([d23dbdf](https://github.com/joshxfi/noteside/commit/d23dbdf51ff69dccd52dffe7ca9378088bdb4739))
+* **desktop:** frecency-ranked finder recents and fuzzy results ([47c5e71](https://github.com/joshxfi/noteside/commit/47c5e7146f4b77efda3cbc39b331ffd32dc6d3f5))
+* **desktop:** Mod± editor font zoom and Mod-Shift± interface zoom ([f6f2dae](https://github.com/joshxfi/noteside/commit/f6f2dae983ed8bdc815e609ed00eb297938105a9))
+* **desktop:** rename note files to match their title on save ([754fe0f](https://github.com/joshxfi/noteside/commit/754fe0fe109ee05fc02cac87aed779c8a6d73ff7))
+* **desktop:** two-column theme picker opening on the current theme, plus more curated themes ([b3ea1fc](https://github.com/joshxfi/noteside/commit/b3ea1fce85433e74a0b959aa630b7a68bfdfa408))
+* **desktop:** use native window chrome (macOS overlay titlebar) ([5471c40](https://github.com/joshxfi/noteside/commit/5471c402d0f274241cb8d94cc27f4c2f5400b349))
+* **landing:** add changelog page ([1d74512](https://github.com/joshxfi/noteside/commit/1d74512f6ac69965fc73288bd50109d9b539e065))
+
+### Bug Fixes
+
+* **desktop:** keep window corners rounded when an overlay is open ([576915f](https://github.com/joshxfi/noteside/commit/576915fc5684cb135a118f00a6a6ce16ec2b0824))
+* **desktop:** match shifted zoom chords by glyph so Linux/WebKitGTK keyCodes can't defeat them ([438a883](https://github.com/joshxfi/noteside/commit/438a8838481714662a6f1fec7e13a23726f810cd))
+* **desktop:** resolve review findings in rename-on-save and themes ([1a79f2f](https://github.com/joshxfi/noteside/commit/1a79f2f46069bbd4ea28804caf6472aa7986fc7e))
+* **desktop:** tolerate a missing __APP_VERSION__ define outside Vite ([921bd2e](https://github.com/joshxfi/noteside/commit/921bd2e75056b77e17ec339c77691de07907ae2c))
+
+### Performance
+
+* **desktop:** copy-on-write per-record notebook index with binary-search lookups ([e2e9ab6](https://github.com/joshxfi/noteside/commit/e2e9ab6e98b846f38c45572019db5eae44b74db6))
+* **desktop:** faster search/scan/render hot paths, lazy editor chunk, woff2-only fonts ([da6e927](https://github.com/joshxfi/noteside/commit/da6e927802fa37405e5ec0b81a57bb161f7eec6f))
+
+### Polish
+
+* **desktop:** align, unify color, and tighten the titlebar toolbar buttons ([3dad21b](https://github.com/joshxfi/noteside/commit/3dad21bc6cb64f6da0d811e1ce4d0cf03d838514))
+* **desktop:** center native traffic lights and remove the unsaved-note dot ([ed791db](https://github.com/joshxfi/noteside/commit/ed791dba28a86001def6201906acf51a96254bca))
+
+### Documentation
+
+* catch the site and README up to themes, rename-on-save, frecency, zoom, and the new perf numbers ([475041a](https://github.com/joshxfi/noteside/commit/475041aa869ab815701eed3b88c39ec93de04df0))
+* spell out that :colo is vim's :colorscheme abbreviation ([6714001](https://github.com/joshxfi/noteside/commit/6714001630e433930f64d13041347bb9fadcacab))
+
 ## [1.2.0](https://github.com/joshxfi/noteside/compare/v1.1.0...v1.2.0) (2026-06-30)
 
 ### Features
