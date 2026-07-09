@@ -431,6 +431,7 @@ export function App() {
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
   // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
   const [onboarding, setOnboarding] = useState(false);
@@ -438,9 +439,20 @@ export function App() {
   const configLoaded = useRef(false);
 
   const flash = useCallback((msg: string) => {
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
     setToast(msg);
-    setTimeout(() => setToast((m) => (m === msg ? null : m)), 1600);
+    toastTimer.current = window.setTimeout(() => {
+      toastTimer.current = null;
+      setToast(null);
+    }, 1600);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    },
+    [],
+  );
 
   // The editing session owns the whole per-buffer loop: working/saved/dirty,
   // autosave, open/save/quit, the config buffer kind, external reconcile, and the
