@@ -12,7 +12,15 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { FileText, PanelLeft, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  FileText,
+  Library,
+  PanelLeft,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/ex-commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
@@ -23,6 +31,7 @@ import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
 import { type NoteMenuItem, NoteContextMenu } from "./components/note-context-menu";
+import { NotebookSwitcher } from "./components/notebook-switcher";
 import { Onboarding } from "./components/onboarding";
 import {
   cheatsheetCommands,
@@ -407,6 +416,9 @@ export function App() {
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const [notebookSwitcherOpen, setNotebookSwitcherOpen] = useState(false);
+  // The open notebook's path — drives the switcher's "current" marker + no-op guard.
+  const [notebookPath, setNotebookPath] = useState<string | null>(null);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
@@ -557,9 +569,29 @@ export function App() {
     const metas = await backend.openNotebook(path);
     setNotes(metas);
     void backend.setLastNotebook(path);
+    void backend.rememberNotebook(path); // feed the switcher's recents (MRU)
+    setNotebookPath(path);
     setStatus("ready");
     if (metas.length) await session.open(metas[0].id);
     else session.close();
+  };
+
+  // Switch to another notebook (from the switcher). Flush the current buffer's
+  // queued save FIRST — it must land in the OLD notebook, before openNotebook swaps
+  // the backend index out from under it. A no-op when it's already the open one.
+  const switchNotebook = async (path: string) => {
+    if (path === notebookPath) return;
+    await session.flush();
+    try {
+      await openNotebook(path);
+    } catch (e) {
+      flash(`couldn't open notebook: ${e}`);
+    }
+  };
+  // Switcher "Open folder…": native dialog → switch to the chosen folder.
+  const pickAndSwitchNotebook = async () => {
+    const path = await backend.pickNotebook();
+    if (path) await switchNotebook(path);
   };
 
   // boot: load config + last notebook in parallel (independent reads)
@@ -746,6 +778,10 @@ export function App() {
     setThemePickerOpen(false);
     setRefocus((r) => r + 1);
   };
+  const closeNotebookSwitcher = () => {
+    setNotebookSwitcherOpen(false);
+    setRefocus((r) => r + 1);
+  };
 
   // Step to the adjacent note in the sidebar list (Mod-j / Mod-k). Clamps at the
   // ends; opening flushes any pending save of the outgoing buffer.
@@ -776,6 +812,7 @@ export function App() {
   const onCommand = (c: AppCommand) => {
     if (c === "find") openFinder("all");
     else if (c === "grep") openFinder("content");
+    else if (c === "notebooks") setNotebookSwitcherOpen(true);
     else if (c === "nav") toggleNav();
     else if (c === "settings") openSettings();
     else if (c === "theme") setThemePickerOpen(true);
@@ -816,6 +853,7 @@ export function App() {
       cheatsheetOpen ||
       settingsOpen ||
       themePickerOpen ||
+      notebookSwitcherOpen ||
       backlinks ||
       menu
     ),
@@ -874,6 +912,14 @@ export function App() {
             aria-label="search"
           >
             <Search size={15} aria-hidden="true" />
+          </button>
+          <button
+            className="av-iconbtn"
+            onClick={() => setNotebookSwitcherOpen(true)}
+            title={`switch notebook (${chordLabel("Mod-o")})`}
+            aria-label="switch notebook"
+          >
+            <Library size={15} aria-hidden="true" />
           </button>
           {!isTauri() && (
             <div className="av-title" data-tauri-drag-region>
@@ -969,6 +1015,14 @@ export function App() {
             current={cfg.theme}
             onCommit={(id) => setCfgPatch({ theme: id })}
             onClose={closeThemePicker}
+          />
+        )}
+        {notebookSwitcherOpen && (
+          <NotebookSwitcher
+            current={notebookPath}
+            onSwitch={(p) => void switchNotebook(p)}
+            onOpenFolder={() => void pickAndSwitchNotebook()}
+            onClose={closeNotebookSwitcher}
           />
         )}
         {finder && (

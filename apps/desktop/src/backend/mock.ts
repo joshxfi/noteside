@@ -4,17 +4,31 @@
 import { NOTES } from "../data";
 import { computeBacklinks, slugifyTitle, stemMatchesSlug } from "../links";
 import type { Config } from "../settings";
-import type { Backend, ContentHit, FileHit, GrepMode, NoteDoc, NoteMeta } from "./types";
+import type {
+  Backend,
+  ContentHit,
+  FileHit,
+  GrepMode,
+  NoteDoc,
+  NoteMeta,
+  NotebookRef,
+} from "./types";
 
 interface Rec {
   meta: NoteMeta;
   body: string;
 }
+type FrecencyMap = Map<string, { s: number; t: number }>;
+interface Notebook {
+  recs: Map<string, Rec>;
+  frecency: FrecencyMap;
+  lastOpened: number;
+}
+type Seed = { path: string; title: string; body: string; tag?: string };
 
-function seed(): Map<string, Rec> {
+function seedRecs(notes: Seed[], baseTime: number): Map<string, Rec> {
   const m = new Map<string, Rec>();
-  const now = Date.now();
-  NOTES.forEach((n, i) => {
+  notes.forEach((n, i) => {
     m.set(n.path, {
       meta: {
         id: n.path,
@@ -22,7 +36,7 @@ function seed(): Map<string, Rec> {
         title: n.title,
         tags: n.tag ? [n.tag] : [],
         created: null,
-        updated: now - i * 3_600_000,
+        updated: baseTime - i * 3_600_000,
         pinned: false,
       },
       body: n.body,
@@ -31,13 +45,62 @@ function seed(): Map<string, Rec> {
   return m;
 }
 
-const recs = seed();
+// A second demo notebook so the switcher (and switching) are exercisable in
+// browser dev, the landing demo, and e2e. `/demo-notebook` stays the default that
+// the boot flow + e2e open; it seeds from the shared NOTES.
+const JOURNAL: Seed[] = [
+  {
+    path: "monday.md",
+    title: "Monday",
+    body: "# Monday\n\nStand-up notes and the week ahead.\n",
+    tag: "log",
+  },
+  {
+    path: "ideas.md",
+    title: "Ideas",
+    body: "# Ideas\n\n- a calmer inbox\n- revisit [[Monday]]\n",
+    tag: "log",
+  },
+];
+
+const DEMO = "/demo-notebook";
+const NOW0 = Date.now();
+const demoNb: Notebook = { recs: seedRecs(NOTES, NOW0), frecency: new Map(), lastOpened: NOW0 };
+const notebooks = new Map<string, Notebook>([
+  [DEMO, demoNb],
+  [
+    "/demo-journal",
+    { recs: seedRecs(JOURNAL, NOW0), frecency: new Map(), lastOpened: NOW0 - 3 * 86_400_000 },
+  ],
+]);
+
+// `current` names the open notebook; `recs`/`frecency` are REBOUND (not copied) to
+// its maps when it switches, so every helper below reads the live notebook through
+// these bindings — mirroring the Rust `NotebookState::load` swap.
+let current = DEMO;
+let recs = demoNb.recs;
+let frecency = demoNb.frecency;
+
+// MRU order of notebook paths (front = most recent), mirroring the tauri store's
+// `notebooks` array. `lastOpened` is display-only, so equal timestamps never
+// reorder — the array is authoritative (a timestamp sort would tie in the demo).
+const mru: string[] = [DEMO, "/demo-journal"];
+function bump(path: string): void {
+  const i = mru.indexOf(path);
+  if (i >= 0) mru.splice(i, 1);
+  mru.unshift(path);
+}
+
 const LS = (k: string) => `noteside:${k}`;
+
+function notebookName(path: string): string {
+  const parts = path.replace(/[\\/]+$/, "").split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+}
 
 // Frecency (mirrors the Rust store): exponential decay with a 7-day half-life;
 // each open adds 1 to the decayed score. In-memory only — the demo is ephemeral.
 const HALF_LIFE_MS = 7 * 24 * 3_600_000;
-const frecency = new Map<string, { s: number; t: number }>();
 
 function decayed(e: { s: number; t: number }, now: number): number {
   return e.s * Math.pow(0.5, (now - e.t) / HALF_LIFE_MS);
@@ -200,11 +263,41 @@ export const mockBackend: Backend = {
   async pickNotebook() {
     return "/demo-notebook";
   },
-  async openNotebook() {
+  async openNotebook(path) {
+    let nb = notebooks.get(path);
+    if (!nb) {
+      nb = { recs: new Map(), frecency: new Map(), lastOpened: Date.now() };
+      notebooks.set(path, nb);
+    }
+    current = path;
+    recs = nb.recs;
+    frecency = nb.frecency;
+    nb.lastOpened = Date.now();
+    bump(path);
     return metas();
   },
   async currentNotebook() {
-    return "/demo-notebook";
+    return current;
+  },
+  async listNotebooks() {
+    const out: NotebookRef[] = [];
+    for (const path of mru) {
+      const nb = notebooks.get(path);
+      if (nb) out.push({ path, name: notebookName(path), lastOpened: nb.lastOpened });
+    }
+    return out;
+  },
+  async rememberNotebook(path) {
+    const nb = notebooks.get(path);
+    if (nb) nb.lastOpened = Date.now();
+    else notebooks.set(path, { recs: new Map(), frecency: new Map(), lastOpened: Date.now() });
+    bump(path);
+  },
+  async removeRecentNotebook(path) {
+    if (path === current) return;
+    notebooks.delete(path);
+    const i = mru.indexOf(path);
+    if (i >= 0) mru.splice(i, 1);
   },
   async listNotes() {
     return metas();

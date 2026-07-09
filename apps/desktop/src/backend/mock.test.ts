@@ -85,3 +85,50 @@ describe("mock backend", () => {
     expect((await mockBackend.searchFiles("Alpha")).some((h) => h.path === a.path)).toBe(false);
   });
 });
+
+// The mock now backs the notebook switcher too — it seeds a second notebook so
+// switching is exercisable in the demo/e2e. These run after the block above (which
+// only touches /demo-notebook) and each restores current to /demo-notebook.
+describe("mock backend — notebooks", () => {
+  it("lists the seeded notebooks with folder-basename names", async () => {
+    const nbs = await mockBackend.listNotebooks();
+    expect(nbs.some((n) => n.path === "/demo-notebook")).toBe(true);
+    const journal = nbs.find((n) => n.path === "/demo-journal");
+    expect(journal?.name).toBe("demo-journal");
+  });
+
+  it("openNotebook swaps the note set and current path", async () => {
+    expect((await mockBackend.listNotes()).some((n) => n.path === "welcome.md")).toBe(true);
+
+    const journal = await mockBackend.openNotebook("/demo-journal");
+    expect(journal.some((n) => n.path === "monday.md")).toBe(true);
+    expect(journal.some((n) => n.path === "welcome.md")).toBe(false);
+    expect(await mockBackend.currentNotebook()).toBe("/demo-journal");
+
+    const back = await mockBackend.openNotebook("/demo-notebook");
+    expect(back.some((n) => n.path === "welcome.md")).toBe(true);
+    expect(await mockBackend.currentNotebook()).toBe("/demo-notebook");
+  });
+
+  it("frecency is isolated per notebook", async () => {
+    await mockBackend.openNotebook("/demo-journal");
+    await mockBackend.recordOpen("ideas.md");
+    expect((await mockBackend.searchFiles(""))[0]?.path).toBe("ideas.md"); // opened → top
+
+    await mockBackend.openNotebook("/demo-notebook");
+    // the journal's note (and its frecency) must not leak into this notebook
+    expect((await mockBackend.searchFiles("")).some((h) => h.path === "ideas.md")).toBe(false);
+  });
+
+  it("opening an unknown folder creates an empty notebook", async () => {
+    expect(await mockBackend.openNotebook("/brand-new")).toEqual([]);
+    expect((await mockBackend.listNotebooks()).some((n) => n.path === "/brand-new")).toBe(true);
+    await mockBackend.openNotebook("/demo-notebook"); // restore
+  });
+
+  it("rememberNotebook moves a notebook to the front of the recents", async () => {
+    await mockBackend.rememberNotebook("/demo-journal");
+    expect((await mockBackend.listNotebooks())[0]?.path).toBe("/demo-journal");
+    await mockBackend.rememberNotebook("/demo-notebook"); // restore MRU order
+  });
+});
