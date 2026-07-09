@@ -108,6 +108,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // switched away from. (The mock backend resolves in order; the real IPC backend
   // can resolve out of order.)
   let loadToken = 0;
+  let reconcileSeq = 0; // bumped per reconcile() so an older, slower read can't overwrite a newer one
 
   const listeners = new Set<() => void>();
 
@@ -318,12 +319,14 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
 
   async function reconcile(): Promise<void> {
     const token = loadToken; // reactive: bail if the user navigates mid-scan
+    const myReconcile = ++reconcileSeq; // this call is now the latest reconcile
     let list: NoteMeta[];
     try {
       list = await backend.listNotes();
     } catch {
       return;
     }
+    if (myReconcile !== reconcileSeq) return; // a newer reconcile superseded us
     onNotesChanged(list); // sidebar refresh is independent of the active buffer
     if (token !== loadToken) return; // user navigated during the scan
     if (activeId === null || activeId === CONFIG_ID) return;
@@ -339,7 +342,10 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       // Bail if the user navigated (token) OR the active buffer changed (id) during
       // the read — otherwise a late resolve would seed the wrong buffer with this
       // note's body, and the next keystroke would autosave it into the wrong file.
-      if (token !== loadToken || activeId !== id || noteDirty) return;
+      // ...and bail if a newer reconcile started: its read is at least as fresh,
+      // so this older/slower read must not overwrite the buffer with staler content.
+      if (token !== loadToken || activeId !== id || noteDirty || myReconcile !== reconcileSeq)
+        return;
       if (doc.body !== noteSaved) {
         noteInitial = doc.body;
         noteSaved = doc.body;

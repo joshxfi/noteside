@@ -269,6 +269,72 @@ describe("editingSession", () => {
     expect(s.savedText).toBe("B");
   });
 
+  it("reconcile() ignores a stale read superseded by a newer reconcile", async () => {
+    const bodies = new Map<string, string>([["a.md", "v1"]]);
+    let readDelay = 0;
+    const meta = (id: string): NoteMeta => ({
+      id,
+      path: id,
+      title: id.replace(/\.md$/, ""),
+      tags: [],
+      created: null,
+      updated: 0,
+      pinned: false,
+    });
+    const backend: Pick<
+      Backend,
+      "readNote" | "saveNote" | "renameNote" | "listNotes" | "recordOpen"
+    > = {
+      async recordOpen() {},
+      async listNotes() {
+        return [...bodies.keys()].map(meta);
+      },
+      async saveNote(id, body) {
+        bodies.set(id, body);
+        return meta(id);
+      },
+      async renameNote(id) {
+        return meta(id);
+      },
+      async readNote(id) {
+        const snapshot = bodies.get(id); // captured at DISPATCH time
+        const d = readDelay;
+        if (d > 0) await new Promise<void>((r) => setTimeout(r, d));
+        if (snapshot === undefined) throw new Error("not found");
+        return { ...meta(id), body: snapshot };
+      },
+    };
+    const notices: string[] = [];
+    const session = createEditingSession({
+      backend,
+      autosaveMs: 800,
+      notify: (m) => notices.push(m),
+      onConfigApply: () => {},
+      onNoteSaved: () => {},
+      onNoteRenamed: () => {},
+      onNotesChanged: () => {},
+    });
+
+    await session.open("a.md"); // clean on v1
+
+    bodies.set("a.md", "v2");
+    readDelay = 100;
+    const slow = session.reconcile(); // reconcile #1: dispatches a slow read, snapshots v2
+    await vi.advanceTimersByTimeAsync(0); // let #1 pass listNotes and dispatch its read
+
+    bodies.set("a.md", "v3");
+    readDelay = 5;
+    const fast = session.reconcile(); // reconcile #2: dispatches a fast read, snapshots v3
+    await vi.advanceTimersByTimeAsync(5);
+    await fast; // #2 resolves first → applies v3
+    await vi.advanceTimersByTimeAsync(100);
+    await slow; // #1 (stale) resolves last
+
+    const s = session.getSnapshot();
+    expect(s.savedText).toBe("v3"); // NOT regressed to "v2" by the stale read
+    expect(s.initialText).toBe("v3");
+  });
+
   it("C2: editorKey changes when re-opening the SAME note at the SAME line", async () => {
     const { session } = makeSession({ "a.md": "A" });
     await session.open("a.md", 0);
