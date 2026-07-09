@@ -576,15 +576,22 @@ export function App() {
     else session.close();
   };
 
-  // Switch to another notebook (from the switcher). Flush the current buffer's
-  // queued save FIRST — it must land in the OLD notebook, before openNotebook swaps
-  // the backend index out from under it. A no-op when it's already the open one.
+  // Switch to another notebook (from the switcher). A no-op when it's already open.
   const switchNotebook = async (path: string) => {
     if (path === notebookPath) return;
+    // Deactivate the outgoing buffer FIRST, synchronously (before any await): once
+    // activeId is null, session.change() no-ops, so a keystroke landing in the
+    // async window below — the overlay's onClose refocuses the old editor — can't
+    // queue a save that would fire AFTER the index swaps and write the old note's
+    // text into the NEW notebook. The pre-switch queued save survives in the
+    // autosaver and flush() still lands it in the OLD notebook (the index is
+    // unchanged until openNotebook).
+    session.close();
     await session.flush();
     try {
       await openNotebook(path);
     } catch (e) {
+      void backend.removeRecentNotebook(path); // a folder that's gone shouldn't linger in recents
       flash(`couldn't open notebook: ${e}`);
     }
   };

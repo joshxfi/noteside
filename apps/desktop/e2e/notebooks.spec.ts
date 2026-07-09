@@ -60,4 +60,26 @@ test.describe("notebook switcher", () => {
     await expect(page.locator(".nb-panel")).toHaveCount(0);
     await expect(page.locator(".av-item")).toHaveCount(before); // nothing switched
   });
+
+  // Pins the switch-flow invariant: a pending edit must flush into the ORIGIN
+  // notebook before the index swaps. Reorder/drop the flush in switchNotebook and
+  // the marker would land in the new notebook (or be lost) → this fails.
+  test("a pending edit persists to the origin notebook across a switch", async ({ page }) => {
+    await boot(page); // opens /demo-notebook, first note = Welcome
+    await page.locator(".cm-content").click();
+    await page.keyboard.type("\nSWITCH_MARKER_42");
+
+    // switch to the journal, then back — without waiting out the autosave debounce
+    await page.locator('button[aria-label="switch notebook"]').click();
+    await page.locator(".nb-list .fnd-row").filter({ hasText: "demo-journal" }).click();
+    await expect(page.locator(".av-item").filter({ hasText: "Monday" })).toHaveCount(1);
+    await page.locator('button[aria-label="switch notebook"]').click();
+    await page.locator(".nb-list .fnd-row").filter({ hasText: "demo-notebook" }).click();
+
+    // back in the origin notebook: the just-saved note is the freshest, so it
+    // reopens — the marker survived the switch, proving switchNotebook flushed into
+    // the ORIGIN notebook before the index swapped. (A save re-derives the title
+    // from the first body line, so we assert on the editor, not the sidebar row.)
+    await expect(page.locator(".cm-content")).toContainText("SWITCH_MARKER_42");
+  });
 });
