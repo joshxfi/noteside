@@ -118,7 +118,29 @@ pub fn start_watcher(
         Duration::from_millis(400),
         None,
         move |result: DebounceEventResult| {
-            let Ok(events) = result else { return };
+            let events = match result {
+                Ok(events) => events,
+                // A backend error (notably event-queue overflow) means we may have
+                // missed changes — fall back to a full rescan, exactly like an
+                // ambiguous batch. No paths are available here, so skip the .md
+                // prefilter and the echo-suppression check and rescan wholesale.
+                Err(_) => {
+                    let r = {
+                        let Ok(g) = notebook.lock() else { return };
+                        let Some(r) = g.root.clone() else { return };
+                        r
+                    };
+                    let records = notebook::scan_notebook(&r);
+                    let Ok(mut g) = notebook.lock() else { return };
+                    if g.root.as_ref() != Some(&r) {
+                        return; // notebook switched while the rescan was running
+                    }
+                    g.set_records(records);
+                    drop(g);
+                    let _ = app.emit("notebook:changed", ());
+                    return;
+                }
+            };
             let touches_md = events.iter().any(|e| {
                 e.paths
                     .iter()
