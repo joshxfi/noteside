@@ -72,4 +72,16 @@ describe("mock backend", () => {
     await expect(mockBackend.readNote("journal/old-name.md")).rejects.toThrow();
     expect((await mockBackend.readNote("journal/fresh-title.md")).body).toContain("Fresh Title");
   });
+
+  it("deleteNote removes the note from listing and search", async () => {
+    const a = await mockBackend.createNote("Alpha To Delete");
+    await mockBackend.recordOpen(a.path); // give it frecency so it'd rank in recents
+    expect((await mockBackend.searchFiles("")).some((h) => h.path === a.path)).toBe(true);
+
+    await mockBackend.deleteNote(a.path);
+
+    expect((await mockBackend.listNotes()).some((n) => n.path === a.path)).toBe(false);
+    expect((await mockBackend.searchFiles("")).some((h) => h.path === a.path)).toBe(false);
+    expect((await mockBackend.searchFiles("Alpha")).some((h) => h.path === a.path)).toBe(false);
+  });
 });
