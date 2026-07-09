@@ -1744,6 +1744,104 @@ html.tauri.macos .av-titlebar {
   color: var(--ink-soft);
 }
 
+/* ── note context menu (right-click a sidebar row) ── */
+.ctx-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 170px;
+  max-width: 264px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--paper);
+  border: 1px solid var(--win-border);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+  outline: none;
+  animation: set-fade 0.1s ease-out;
+}
+.ctx-title {
+  padding: 5px 9px 7px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-family: var(--mono);
+  font-size: calc(10.5px * var(--ui-scale));
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: calc(12.5px * var(--ui-scale));
+  color: var(--ink);
+}
+.ctx-item.is-active {
+  background: var(--active-line);
+}
+.ctx-item.danger {
+  color: var(--danger);
+}
+.ctx-item.danger.is-active {
+  background: color-mix(in oklab, var(--paper), var(--danger) 12%);
+}
+.ctx-glyph {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  color: var(--ink-faint);
+}
+.ctx-item.danger .ctx-glyph {
+  color: var(--danger);
+}
+.ctx-confirm {
+  padding: 8px 9px 9px;
+}
+.ctx-confirm-text {
+  font-family: var(--serif);
+  font-size: calc(13.5px * var(--ui-scale));
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.ctx-confirm-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ctx-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: calc(11.5px * var(--ui-scale));
+  cursor: pointer;
+}
+.ctx-btn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.ctx-btn.danger {
+  border-color: color-mix(in oklab, var(--rule), var(--danger) 40%);
+  color: var(--danger);
+}
+.ctx-btn.danger:hover {
+  background: color-mix(in oklab, var(--paper), var(--danger) 12%);
+}
+
 /* keyboard cheatsheet (Mod-/) — a wider, multi-column reference */
 .cheat-panel {
   width: min(680px, 100%);
