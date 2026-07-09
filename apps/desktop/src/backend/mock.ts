@@ -299,6 +299,17 @@ export const mockBackend: Backend = {
     const i = mru.indexOf(path);
     if (i >= 0) mru.splice(i, 1);
   },
+  async createNotebook(parent, name) {
+    // Mirror the Rust sanitizer: one path segment, no separators/reserved chars.
+    // eslint-disable-next-line no-control-regex
+    const folder = name
+      .replace(/[\x00-\x1f/\\:*?"<>|]/g, "")
+      .replace(/^\.+|\.+$/g, "")
+      .trim();
+    const seg = folder || "untitled";
+    return !parent || parent === "/" ? `/${seg}` : `${parent.replace(/\/+$/, "")}/${seg}`;
+    // The empty notebook itself is materialized lazily by openNotebook.
+  },
   async listNotes() {
     return metas();
   },

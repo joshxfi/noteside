@@ -131,4 +131,13 @@ describe("mock backend — notebooks", () => {
     expect((await mockBackend.listNotebooks())[0]?.path).toBe("/demo-journal");
     await mockBackend.rememberNotebook("/demo-notebook"); // restore MRU order
   });
+
+  it("createNotebook builds a sanitized path under the parent; opening it is empty", async () => {
+    expect(await mockBackend.createNotebook("/", "My Fresh Notebook")).toBe("/My Fresh Notebook");
+    expect(await mockBackend.createNotebook("/vault", "work:2?")).toBe("/vault/work2");
+
+    expect(await mockBackend.openNotebook("/My Fresh Notebook")).toEqual([]);
+    expect((await mockBackend.listNotebooks())[0]?.path).toBe("/My Fresh Notebook");
+    await mockBackend.openNotebook("/demo-notebook"); // restore current
+  });
 });

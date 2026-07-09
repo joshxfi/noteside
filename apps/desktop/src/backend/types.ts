@@ -65,6 +65,9 @@ export interface Backend {
   rememberNotebook(path: string): Promise<void>;
   /** Drop a notebook from the recents list (e.g. its folder no longer exists). */
   removeRecentNotebook(path: string): Promise<void>;
+  /** Create a new notebook folder `name` under `parent`; returns its path (then
+   *  the caller opens it). The name is sanitized to one path segment. */
+  createNotebook(parent: string, name: string): Promise<string>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
   /** Preview text from the in-memory notebook index; opening still uses readNote. */

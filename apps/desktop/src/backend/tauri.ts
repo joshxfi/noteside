@@ -40,6 +40,7 @@ export const tauriBackend: Backend = {
     return typeof res === "string" ? res : null;
   },
   openNotebook: (path) => invoke<NoteMeta[]>("open_notebook", { path }),
+  createNotebook: (parent, name) => invoke<string>("create_notebook", { parent, name }),
   currentNotebook: () => invoke<string | null>("current_notebook"),
   async listNotebooks() {
     return await readNotebooks(await store());

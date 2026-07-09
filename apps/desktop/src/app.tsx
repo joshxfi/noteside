@@ -593,6 +593,15 @@ export function App() {
     const path = await backend.pickNotebook();
     if (path) await switchNotebook(path);
   };
+  // Switcher "New notebook…": create the folder, then open it (empty → empty state).
+  const createNotebook = async (parent: string, name: string) => {
+    try {
+      const path = await backend.createNotebook(parent, name);
+      await switchNotebook(path);
+    } catch (e) {
+      flash(`couldn't create notebook: ${e}`);
+    }
+  };
 
   // boot: load config + last notebook in parallel (independent reads)
   useEffect(() => {
@@ -1022,6 +1031,7 @@ export function App() {
             current={notebookPath}
             onSwitch={(p) => void switchNotebook(p)}
             onOpenFolder={() => void pickAndSwitchNotebook()}
+            onCreate={(parent, name) => void createNotebook(parent, name)}
             onClose={closeNotebookSwitcher}
           />
         )}

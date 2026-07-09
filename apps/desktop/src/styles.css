@@ -1478,6 +1478,53 @@ mark.fnd-hl {
 .nb-open.is-sel .nb-openicon {
   color: var(--accent);
 }
+.nb-create {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.nb-createloc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--ink-soft);
+}
+.nb-createlabel {
+  flex: none;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: calc(10px * var(--ui-scale));
+}
+.nb-createpath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nb-change {
+  flex: none;
+  font-family: var(--mono);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.nb-change:hover {
+  background: var(--paper-3);
+}
+.nb-createhint {
+  font-family: var(--mono);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--ink-faint);
+}
 
 /* ── embedded (?embed) — fill the frame edge-to-edge, no desktop backdrop ── */
 html.embed,

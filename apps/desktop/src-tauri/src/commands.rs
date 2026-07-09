@@ -66,6 +66,49 @@ fn sorted_metas(records: &[Arc<NoteRecord>]) -> Vec<NoteMeta> {
     metas
 }
 
+/// Sanitize a user-typed notebook name into a single safe path segment: drop
+/// control + reserved filesystem characters and leading/trailing dots/space.
+/// Returns None when nothing usable remains (so the caller can reject it).
+fn sanitize_folder(name: &str) -> Option<String> {
+    let cleaned: String = name
+        .trim()
+        .chars()
+        .filter(|c| {
+            !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        })
+        .collect();
+    let cleaned = cleaned.trim().trim_matches('.').trim();
+    (!cleaned.is_empty()).then(|| cleaned.to_string())
+}
+
+/// Create a new notebook folder named `name` under `parent` and return its path.
+/// The name is sanitized to one path segment; an already-existing directory is
+/// fine (the caller then `open_notebook`s the returned path).
+#[tauri::command]
+pub async fn create_notebook(parent: String, name: String) -> Result<String> {
+    let folder =
+        sanitize_folder(&name).ok_or_else(|| AppError::Msg("notebook name is empty".into()))?;
+    let parent = PathBuf::from(&parent);
+    if !parent.is_dir() {
+        return Err(AppError::Msg(format!(
+            "not a directory: {}",
+            parent.display()
+        )));
+    }
+    let dir = parent.join(&folder);
+    blocking(move || {
+        if dir.exists() {
+            if !dir.is_dir() {
+                return Err(AppError::Msg("a file with that name already exists".into()));
+            }
+        } else {
+            std::fs::create_dir(&dir)?;
+        }
+        Ok(dir.to_string_lossy().to_string())
+    })
+    .await
+}
+
 /// Open (or switch to) a notebook folder: scan all Markdown files into the in-memory
 /// index, start the file watcher, and return the note list.
 #[tauri::command]
@@ -349,4 +392,22 @@ pub async fn backlinks(id: String, state: State<'_, AppState>) -> Result<Vec<Bac
         g.records.clone()
     };
     blocking(move || Ok(links::backlinks(records.as_slice(), &id))).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_folder;
+
+    #[test]
+    fn sanitize_folder_strips_reserved_chars_and_edge_dots() {
+        assert_eq!(sanitize_folder("My Ideas").as_deref(), Some("My Ideas"));
+        assert_eq!(
+            sanitize_folder("  work/notes:2  ").as_deref(),
+            Some("worknotes2")
+        );
+        assert_eq!(sanitize_folder("..hidden.").as_deref(), Some("hidden"));
+        assert_eq!(sanitize_folder("   "), None);
+        assert_eq!(sanitize_folder("///"), None);
+        assert_eq!(sanitize_folder("..."), None);
+    }
 }
