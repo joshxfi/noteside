@@ -29,6 +29,26 @@ test.describe("notebook switcher", () => {
     );
   });
 
+  test("New notebook… creates and opens an empty notebook", async ({ page }) => {
+    await boot(page);
+    await page.locator('button[aria-label="switch notebook"]').click();
+    await page.locator(".nb-list .fnd-row").filter({ hasText: "New notebook" }).click();
+
+    // create mode: name field + a location line
+    await expect(page.locator(".nb-create")).toBeVisible();
+    await page.locator(".fnd-input").fill("My Fresh Notebook");
+    await page.keyboard.press("Enter");
+
+    await expect(page.locator(".nb-panel")).toHaveCount(0);
+    await expect(page.locator(".av-item")).toHaveCount(0); // brand-new notebook is empty
+
+    // reopening the switcher shows it as the current notebook
+    await page.locator('button[aria-label="switch notebook"]').click();
+    await expect(page.locator(".fnd-row").filter({ hasText: "My Fresh Notebook" })).toContainText(
+      "current",
+    );
+  });
+
   test("Mod-o opens the switcher; Esc closes it without switching", async ({ page }) => {
     await boot(page);
     await page.locator(".cm-content").click(); // focus the editor so the chord routes through it

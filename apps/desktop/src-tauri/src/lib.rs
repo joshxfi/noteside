@@ -41,6 +41,7 @@ pub fn run() {
         .manage(state::AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::open_notebook,
+            commands::create_notebook,
             commands::current_notebook,
             commands::list_notes,
             commands::read_note,
