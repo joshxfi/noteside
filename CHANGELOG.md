@@ -1,3 +1,34 @@
+## [1.4.0](https://github.com/joshxfi/noteside/compare/v1.3.1...v1.4.0) (2026-07-09)
+
+### Features
+
+* **desktop:** create new notebooks from the switcher ([f9d5b11](https://github.com/joshxfi/noteside/commit/f9d5b1168be25e134bd9a4a4d5778e90ce86dda8))
+* **desktop:** right-click note context menu, with lucide-react icons ([7e18ea0](https://github.com/joshxfi/noteside/commit/7e18ea0a96c6d6dcb4df7125cb92f7d05b88cccf))
+* **desktop:** switch between notebooks ([96c3d33](https://github.com/joshxfi/noteside/commit/96c3d334c1858f784305ea66bff787a600981e41))
+
+### Bug Fixes
+
+* **desktop:** clear the previous flash-toast timer instead of dismissing on identity ([2ebf73e](https://github.com/joshxfi/noteside/commit/2ebf73ec21342a934c304a73ea764f14e49bb31a))
+* **desktop:** full-rescan the notebook when the watcher reports an error ([aa922c5](https://github.com/joshxfi/noteside/commit/aa922c55048975ed923336478eb0f82d78b2b342))
+* **desktop:** highlight whole source char for multi-codepoint folds in content search ([d4b2aa1](https://github.com/joshxfi/noteside/commit/d4b2aa1b0b88c80dd863dd52c81f4be7821ac886))
+* **desktop:** ignore a stale reconcile read superseded by a newer one ([1a1ad5a](https://github.com/joshxfi/noteside/commit/1a1ad5a5df474a58ff3978a66b3694000a8ee47c))
+* **desktop:** index content-search highlight ranges into the original line ([08bdcde](https://github.com/joshxfi/noteside/commit/08bdcde44e19caeaa616565278efc9e1806366e1))
+* **desktop:** notebook-switch race could write an edit into the wrong notebook ([0baeb1b](https://github.com/joshxfi/noteside/commit/0baeb1b01fbcd7ce46acf15cc419a3329421b024))
+* **desktop:** re-check noteDirty after reconcile's readNote resolves ([1d5e414](https://github.com/joshxfi/noteside/commit/1d5e4142471cfc52def2125c4ebb74a08fadb454))
+* **desktop:** write frecency.json atomically and clamp negative scores ([6529a17](https://github.com/joshxfi/noteside/commit/6529a176299095aa8d726322f58e43fc3985fd6d))
+
+### Performance
+
+* **desktop:** only recompute theme vars when the theme changes ([aee18f2](https://github.com/joshxfi/noteside/commit/aee18f215ab2e64d22cba71690e167fc768fdb98))
+
+### Documentation
+
+* add a GitHub downloads badge to the README ([3b435d3](https://github.com/joshxfi/noteside/commit/3b435d32dcb11cbf3a749d0208c32b8c8f251181))
+* cleanup and update content ([729a51b](https://github.com/joshxfi/noteside/commit/729a51bff75e8a1d083ed37eb2b75f1d827b96d2))
+* cover notebook switching and right-click note deletion ([3240867](https://github.com/joshxfi/noteside/commit/32408670fa6483c6b55a8a2b1f72bb8b1ba29a2a))
+* declutter the README and consolidate dev setup into CONTRIBUTING ([d715f86](https://github.com/joshxfi/noteside/commit/d715f8664a0282fd7366d29c069cd2f1d5249b5d))
+* refresh the app screenshots for the updated toolbar ([7739431](https://github.com/joshxfi/noteside/commit/7739431cf995a2e5842be763fe32a2f9c7ff1449))
+
 ## [1.3.1](https://github.com/joshxfi/noteside/compare/v1.3.0...v1.3.1) (2026-07-05)
 
 ### Bug Fixes
