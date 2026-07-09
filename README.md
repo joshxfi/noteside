@@ -12,6 +12,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/joshxfi/noteside/releases"><img alt="GitHub downloads" src="https://img.shields.io/github/downloads/joshxfi/noteside/total?logo=github&logoColor=white&label=downloads&color=a05e7e"></a>
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-a05e7e"></a>
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white">
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white">
