@@ -31,7 +31,10 @@ impl FrecencyEntry {
     /// running backwards — skew must decay-to-nothing, never inflate.
     pub fn effective(&self, now_ms: u64) -> f64 {
         let elapsed = now_ms.saturating_sub(self.last_ms) as f64;
-        self.score * 0.5f64.powf(elapsed / HALF_LIFE_MS as f64)
+        // Clamp to >= 0: the empty-query finder sorts on `to_bits()`, where a
+        // negative f64 (only reachable via a corrupt/hand-edited frecency.json)
+        // would sort as the largest u64 and wrongly rank first.
+        (self.score * 0.5f64.powf(elapsed / HALF_LIFE_MS as f64)).max(0.0)
     }
 
     /// Record an open: decay the running score to `now_ms`, then add 1.
@@ -65,11 +68,10 @@ pub fn load(file: &Path, root: &str) -> HashMap<String, FrecencyEntry> {
 pub fn save(file: &Path, root: &str, map: &HashMap<String, FrecencyEntry>, now_ms: u64) {
     let mut store = read_store(file);
     store.insert(root.to_string(), prune(map, now_ms));
-    if let Some(dir) = file.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
     if let Ok(json) = serde_json::to_string(&store) {
-        let _ = fs::write(file, json);
+        // Crash-safe (temp + rename), so a mid-write crash never leaves the
+        // shared multi-notebook file torn. Best-effort: errors are ignored.
+        let _ = crate::notebook::atomic_write(file, &json);
     }
 }
 
@@ -154,6 +156,46 @@ mod tests {
 
         fs::write(&file, "not json").unwrap();
         assert!(load(&file, "/nb1").is_empty()); // corrupt file → empty map
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn effective_clamps_a_corrupt_negative_score_to_zero() {
+        // Only reachable from a hand-edited/corrupt frecency.json; must not sort
+        // ahead of real entries via to_bits().
+        let e = FrecencyEntry {
+            score: -5.0,
+            last_ms: 0,
+        };
+        assert_eq!(e.effective(0), 0.0);
+        assert_eq!(e.effective(HALF_LIFE_MS), 0.0);
+    }
+
+    #[test]
+    fn save_writes_atomically_leaving_no_temp_file() {
+        let dir =
+            std::env::temp_dir().join(format!("noteside-frecency-atomic-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let file = dir.join("frecency.json");
+
+        let mut map = HashMap::new();
+        map.insert(
+            "a.md".to_string(),
+            FrecencyEntry {
+                score: 1.0,
+                last_ms: 0,
+            },
+        );
+        save(&file, "/nb", &map, 0);
+        assert_eq!(load(&file, "/nb"), map); // content round-trips
+
+        // The temp+rename must not leave a sibling temp file behind.
+        let leftover = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .any(|e| e.file_name().to_string_lossy().contains(".tmp"));
+        assert!(!leftover, "atomic write left a temp file behind");
 
         let _ = fs::remove_dir_all(&dir);
     }
