@@ -16,10 +16,16 @@ fn parse_targets(line: &str) -> Vec<&str> {
         match line[start..].find("]]") {
             Some(close) => {
                 let inner = &line[start..start + close];
-                // brackets/pipes/newlines aren't allowed in a target (mirror the TS regex)
-                if !inner.is_empty() && !inner.contains('[') {
-                    let target = inner.split('|').next().unwrap_or("").trim();
-                    if !target.is_empty() {
+                // Mirror the TS WIKILINK regex: target/display may not contain
+                // '[' ']' '|'; at most one '|' (target|display), and a present
+                // display must be non-empty.
+                if !inner.is_empty() && !inner.contains('[') && !inner.contains(']') {
+                    let mut parts = inner.split('|');
+                    let target = parts.next().unwrap_or("").trim();
+                    let display = parts.next();
+                    let extra_pipe = parts.next().is_some();
+                    let display_ok = display.map_or(true, |d| !d.is_empty());
+                    if !target.is_empty() && !extra_pipe && display_ok {
                         out.push(target);
                     }
                 }
@@ -193,6 +199,26 @@ mod tests {
             vec!["A", "b c"]
         );
         assert!(parse_targets("[[]] and [[unterminated").is_empty());
+    }
+
+    #[test]
+    fn wikilink_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["wikilinkTargets"].as_array().unwrap() {
+            let line = case["line"].as_str().unwrap();
+            let expected: Vec<&str> = case["out"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap())
+                .collect();
+            assert_eq!(
+                parse_targets(line),
+                expected,
+                "wikilink parity for {line:?}"
+            );
+        }
     }
 
     #[test]
