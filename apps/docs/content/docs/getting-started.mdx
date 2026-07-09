@@ -57,11 +57,23 @@ To build your own installer: `pnpm tauri build`.
 
 A **notebook** is just a folder of Markdown files that you choose — there's no
 import step and no database. The first time you launch, Noteside asks you to **Open a
-notebook**; pick any folder. After that it reopens your last notebook automatically.
+notebook**; pick any folder.
 
 - Every `.md` file in the folder (and its subfolders) becomes a note.
 - `.git/` and `.noteside/` are ignored, so a notebook can live inside a repo.
 - Edits from outside Noteside (another editor, git, a sync client) reload live.
+
+### Switching notebooks
+
+Keep as many notebooks as you like and switch between them. Press `⌘O` — or the folder
+button in the toolbar, or `:notebook` — to open the **notebook switcher**, a list of the
+ones you've opened recently (most recent first). From there:
+
+- **Enter** switches to the highlighted notebook.
+- **New notebook…** creates a fresh folder — type a name and pick where it lives.
+- **Open folder…** opens any existing folder as a notebook.
+
+Noteside reopens whichever notebook you had open last the next time you launch.
 
 ## Your first note
 
@@ -86,8 +98,9 @@ Noteside **autosaves** about a second after you stop typing — your words are a
 on disk. You can still save explicitly with `:w` or `⌘S` (handy before quitting), and:
 
 - `:q` — close the note (back to the notebook)
-- `:rm` — delete the current note. Deleting from the `<Space> d` leader or the command
-  palette asks for confirmation first; `:rm` deletes right away.
+- `:rm` — delete the current note. Deleting from the `<Space> d` leader, the command
+  palette, or a **right-click on a note in the sidebar** asks for confirmation first;
+  `:rm` deletes right away.
 
 Next: learn the [keybindings](/keybindings), wire up
 [wikilinks](/wikilinks), or theme your [`~/.notesiderc`](/configuration).
