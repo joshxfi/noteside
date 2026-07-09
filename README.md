@@ -6,9 +6,7 @@
 
 <p align="center">
   <strong>Notes for keyboard people.</strong><br/>
-  An offline, local-first notebook you drive entirely from the keyboard — full vim, or
-  the conventional shortcuts you already know. Your notes stay as plain Markdown files
-  on your disk.
+  An offline notebook you drive entirely from the keyboard — vim keybindings, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
 </p>
 
 <p align="center">
@@ -35,15 +33,13 @@ or grab a build directly from
 [GitHub Releases](https://github.com/joshxfi/noteside/releases/latest).
 
 Builds aren't code-signed yet, so the OS shows a one-time warning on first launch —
-the app isn't broken, your system just can't verify an unsigned download (signing is
-on the roadmap):
+the app isn't broken, your system just can't verify an unsigned download:
 
 - **macOS** reports the app as _"damaged."_ Drag **Noteside** into `/Applications`,
   then clear the quarantine flag once:
   ```bash
   xattr -dr com.apple.quarantine /Applications/Noteside.app
   ```
-  (Right-click → **Open** does _not_ clear it — only removing the quarantine flag does.)
 - **Windows** — click **More info → Run anyway** on the SmartScreen prompt.
 
 Full walkthrough: **[Getting started](https://docs.noteside.app/getting-started)**.
@@ -59,14 +55,6 @@ Everything lives at **[docs.noteside.app](https://docs.noteside.app)**:
 - [Live preview](https://docs.noteside.app/live-preview) — inline Markdown that hides markup off the cursor line
 - [Configuration](https://docs.noteside.app/configuration) — `~/.notesiderc`, themes, and settings
 - [Performance](https://docs.noteside.app/performance) — how it stays fast at scale
-
-## Tech stack
-
-- **App:** [Tauri 2](https://v2.tauri.app) · React 19 · Vite · TypeScript
-- **Editor:** CodeMirror 6 · [`@replit/codemirror-vim`](https://github.com/replit/codemirror-vim)
-- **Core (Rust):** files-as-truth storage, atomic writes, a `notify` file watcher, and
-  [`nucleo`](https://github.com/helix-editor/nucleo) fuzzy matching — no database
-- **Tooling:** Turborepo · pnpm · [oxlint + oxfmt](https://oxc.rs) · Vitest + `cargo test`
 
 ## Contributing
 
