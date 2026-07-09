@@ -27,11 +27,6 @@
 
 ---
 
-Noteside is a desktop notebook for people who'd rather keep their hands on home
-row — full vim if you want it, conventional `⌘`-shortcuts if you don't. The page is
-the interface, and every note is a plain `.md` file in a folder you choose — grep it,
-back it up, sync it, or walk away with it. Nothing leaves your machine.
-
 ## Install
 
 Download for **macOS, Windows, or Linux** from **[noteside.app](https://noteside.app)** —
@@ -79,4 +74,4 @@ the dev/build commands, the project layout, and the conventions.
 
 ## License
 
-[MIT](LICENSE) © Noteside — built by [Josh Daniel](https://github.com/joshxfi)
+[MIT](LICENSE) © Noteside — built by Josh Daniel
