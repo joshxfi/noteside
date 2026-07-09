@@ -10,6 +10,7 @@ import { registerVimApplier } from "./vim-config";
 export type AppCommand =
   | "find"
   | "grep"
+  | "notebooks"
   | "nav"
   | "settings"
   | "theme"

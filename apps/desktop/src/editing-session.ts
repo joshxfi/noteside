@@ -79,8 +79,9 @@ export interface EditingSession {
   reopenLast(): void;
   /** Drop the active buffer and go empty (after a delete, no flush). */
   close(): void;
-  /** Force-land any queued autosave. */
-  flush(): void;
+  /** Force-land any queued autosave; await it before reads that depend on it
+   *  landing (e.g. a notebook switch must persist into the OLD notebook first). */
+  flush(): Promise<void>;
   /** Drop any queued autosave without running it (before deleteNote, so it can't resurrect). */
   cancelAutosave(): void;
 }
@@ -385,7 +386,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     reconcile,
     reopenLast,
     close,
-    flush: () => void autosaver.flush(),
+    flush: () => autosaver.flush(),
     cancelAutosave: () => autosaver.cancel(),
   };
 }

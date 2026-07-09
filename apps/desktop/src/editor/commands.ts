@@ -128,6 +128,16 @@ export const COMMANDS: Command[] = [
     needsNote: true,
     paletteHint: "links here",
   },
+  {
+    id: "notebooks",
+    title: "Switch notebook",
+    group: "Find",
+    chord: "Mod-o",
+    ex: ["notebook", "notebooks", "nb"],
+    leader: "o",
+    command: "notebooks",
+    paletteHint: "folders",
+  },
   // ── Note ──────────────────────────────────────────────────────────
   {
     id: "new",

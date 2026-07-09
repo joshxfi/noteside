@@ -1456,6 +1456,29 @@ mark.fnd-hl {
   font-weight: 600;
 }
 
+/* ── notebook switcher — compact single column (reuses fnd- head/rows/foot) ── */
+.nb-panel {
+  width: min(520px, 100%);
+  height: auto;
+  max-height: min(70vh, 520px);
+}
+.nb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+.nb-open .fnd-name {
+  color: var(--ink-soft);
+}
+.nb-openicon {
+  flex: none;
+  color: var(--ink-faint);
+}
+.nb-open.is-sel .nb-openicon {
+  color: var(--accent);
+}
+
 /* ── embedded (?embed) — fill the frame edge-to-edge, no desktop backdrop ── */
 html.embed,
 html.embed body {

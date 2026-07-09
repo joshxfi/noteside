@@ -18,6 +18,13 @@ export interface NoteDoc extends NoteMeta {
   body: string; // full raw file text (frontmatter included)
 }
 
+/** A notebook (folder) the user has opened — the switcher's recents are these. */
+export interface NotebookRef {
+  path: string;
+  name: string; // display name (the folder's basename)
+  lastOpened: number; // unix ms; 0 when unknown (e.g. migrated from lastNotebook)
+}
+
 export interface FileHit {
   id: string;
   path: string;
@@ -52,6 +59,12 @@ export interface Backend {
   pickNotebook(): Promise<string | null>;
   openNotebook(path: string): Promise<NoteMeta[]>;
   currentNotebook(): Promise<string | null>;
+  /** Recently-opened notebooks, most-recent first — drives the switcher. */
+  listNotebooks(): Promise<NotebookRef[]>;
+  /** Record that `path` was opened: move it to the front of the recents list. */
+  rememberNotebook(path: string): Promise<void>;
+  /** Drop a notebook from the recents list (e.g. its folder no longer exists). */
+  removeRecentNotebook(path: string): Promise<void>;
   listNotes(): Promise<NoteMeta[]>;
   readNote(path: string): Promise<NoteDoc>;
   /** Preview text from the in-memory notebook index; opening still uses readNote. */
