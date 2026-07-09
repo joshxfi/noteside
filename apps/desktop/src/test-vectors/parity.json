@@ -1,0 +1,24 @@
+{
+  "_comment": "Shared JS<->Rust golden vectors. Consumed by src/parity.test.ts (Vitest) and by #[cfg(test)] modules in src-tauri/src/notebook.rs and links.rs. Keep the two languages in sync: any change here must keep BOTH test suites green.",
+  "slug": [
+    { "in": "Hello World", "out": "hello-world" },
+    { "in": "  Spaces  & punctuation!! ", "out": "spaces-punctuation" },
+    { "in": "", "out": "untitled" },
+    { "in": "---", "out": "untitled" },
+    { "in": "already-slugged", "out": "already-slugged" },
+    { "in": "UPPER Case", "out": "upper-case" },
+    { "in": "Café Notes", "out": "caf-notes" },
+    { "in": "naïve—dash", "out": "na-ve-dash" },
+    { "in": "日本語", "out": "untitled" }
+  ],
+  "wikilinkTargets": [
+    { "line": "see [[Alpha]] here", "out": ["Alpha"] },
+    { "line": "[[Beta|B]] and [[Gamma]]", "out": ["Beta", "Gamma"] },
+    { "line": "[[  Spaced Out  ]]", "out": ["Spaced Out"] },
+    { "line": "no links here", "out": [] },
+    { "line": "[[One]] [[Two]]", "out": ["One", "Two"] },
+    { "line": "[[a]b]]", "out": [] },
+    { "line": "[[a|b|c]]", "out": [] },
+    { "line": "[[a|]]", "out": [] }
+  ]
+}

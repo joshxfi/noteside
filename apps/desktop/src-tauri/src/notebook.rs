@@ -241,17 +241,20 @@ pub fn atomic_write(abs: &Path, text: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Build a filesystem-safe slug from a title.
+/// Build a filesystem-safe slug from a title. ASCII-only: mirrors `links::slug`
+/// and the JS `slugifyTitle` byte-for-byte (so the rename pre-check and wikilink
+/// resolution agree — see src/test-vectors/parity.json). Non-ASCII and
+/// punctuation collapse to a single '-'; falls back to "untitled".
 pub fn slugify(title: &str) -> String {
     let mut out = String::new();
-    let mut prev_dash = false;
-    for ch in title.trim().chars() {
-        if ch.is_alphanumeric() {
-            out.extend(ch.to_lowercase());
-            prev_dash = false;
-        } else if !prev_dash && !out.is_empty() {
+    let mut in_dash = false;
+    for ch in title.trim().to_lowercase().chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch);
+            in_dash = false;
+        } else if !in_dash {
             out.push('-');
-            prev_dash = true;
+            in_dash = true;
         }
     }
     let slug = out.trim_matches('-').to_string();
@@ -322,6 +325,17 @@ mod tests {
         assert_eq!(slugify("  Spaces  & punctuation!! "), "spaces-punctuation");
         assert_eq!(slugify(""), "untitled");
         assert_eq!(slugify("---"), "untitled");
+    }
+
+    #[test]
+    fn slug_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["slug"].as_array().unwrap() {
+            let input = case["in"].as_str().unwrap();
+            let expected = case["out"].as_str().unwrap();
+            assert_eq!(slugify(input), expected, "slug parity for {input:?}");
+        }
     }
 
     #[test]
