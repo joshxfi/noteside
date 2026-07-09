@@ -367,8 +367,44 @@ fn plain_ranges(line: &str, needle: &str, needle_lc: &str, smart_case: bool) -> 
     if line.is_ascii() && needle_lc.is_ascii() {
         return ascii_case_insensitive_ranges(line, needle_lc);
     }
-    let hay = line.to_lowercase();
-    exact_ranges(&hay, needle_lc)
+    ci_ranges(line, needle_lc)
+}
+
+/// Case-insensitive plain-substring ranges whose byte offsets index the
+/// ORIGINAL `line` (never a lowercased copy, which can shift byte lengths for
+/// chars like 'İ'/'ẞ'). Builds the lowercased haystack alongside a byte→origin
+/// map, finds `needle_lc` in it, and translates each match back to `line`.
+fn ci_ranges(line: &str, needle_lc: &str) -> Vec<[u32; 2]> {
+    if needle_lc.is_empty() {
+        return Vec::new();
+    }
+    let mut low = String::with_capacity(line.len());
+    // For each byte of `low`, the byte offset in `line` of the source char that
+    // produced it; a trailing sentinel maps `low.len()` to `line.len()`.
+    let mut origin: Vec<usize> = Vec::with_capacity(line.len() + 1);
+    for (obi, ch) in line.char_indices() {
+        for lc in ch.to_lowercase() {
+            let mut buf = [0u8; 4];
+            let s = lc.encode_utf8(&mut buf);
+            for _ in 0..s.len() {
+                origin.push(obi);
+            }
+            low.push_str(s);
+        }
+    }
+    origin.push(line.len());
+
+    let mut ranges = Vec::new();
+    let mut from = 0;
+    while let Some(off) = low[from..].find(needle_lc) {
+        let ls = from + off;
+        let le = ls + needle_lc.len();
+        // ls/le are char boundaries of `low` (both strings are valid UTF-8), so
+        // `origin[ls]`/`origin[le]` are defined (sentinel covers le == low.len()).
+        ranges.push([origin[ls] as u32, origin[le] as u32]);
+        from = le;
+    }
+    ranges
 }
 
 fn exact_ranges(line: &str, needle: &str) -> Vec<[u32; 2]> {
@@ -536,6 +572,25 @@ mod tests {
         assert_eq!(hits[0].line_number, 1);
         let [s, e] = hits[0].ranges[0];
         assert_eq!(&hits[0].line[s as usize..e as usize], "Kettle");
+    }
+
+    #[test]
+    fn content_plain_nonascii_ranges_stay_valid_on_the_original_line() {
+        // 'ẞ' (U+1E9E, 3 bytes) lowercases to 'ß' (2 bytes): searching a shorter
+        // lowercased copy shifted offsets so they could land mid-char in `line`.
+        let recs = vec![rec("a.md", "xẞy", false, 0)];
+        let hits = content_search(&recs, "ß", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        for [s, e] in hits[0].ranges.iter().copied() {
+            // Offsets must be valid char-boundary slices of the SHIPPED line.
+            assert!(
+                hits[0].line.get(s as usize..e as usize).is_some(),
+                "range [{s},{e}] is not a valid slice of {:?}",
+                hits[0].line
+            );
+        }
+        let [s, e] = hits[0].ranges[0];
+        assert_eq!(&hits[0].line[s as usize..e as usize], "ẞ"); // covers the source char
     }
 
     #[test]
