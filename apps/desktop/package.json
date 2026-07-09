@@ -38,6 +38,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-store": "^2.4.3",
+    "lucide-react": "^1.18.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

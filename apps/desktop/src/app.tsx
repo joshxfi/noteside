@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { FileText, PanelLeft, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/ex-commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
@@ -21,6 +22,7 @@ import { CommandPalette } from "./components/command-palette";
 import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
+import { type NoteMenuItem, NoteContextMenu } from "./components/note-context-menu";
 import { Onboarding } from "./components/onboarding";
 import {
   cheatsheetCommands,
@@ -143,6 +145,7 @@ const NoteRow = memo(function NoteRow({
   note,
   active,
   onPick,
+  onContext,
   now,
   top,
   index,
@@ -151,6 +154,7 @@ const NoteRow = memo(function NoteRow({
   note: NoteMeta;
   active: boolean;
   onPick: (id: string) => void;
+  onContext: (id: string, title: string, x: number, y: number) => void;
   now: number;
   top?: number;
   index?: number;
@@ -163,6 +167,10 @@ const NoteRow = memo(function NoteRow({
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
+      onContextMenu={(e) => {
+        e.preventDefault(); // suppress the WebView's native menu
+        onContext(note.id, note.title, e.clientX, e.clientY);
+      }}
       style={
         top === undefined
           ? undefined
@@ -195,11 +203,13 @@ function VirtualNoteList({
   notes,
   activeId,
   onPick,
+  onContext,
   now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
+  onContext: (id: string, title: string, x: number, y: number) => void;
   now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -231,6 +241,7 @@ function VirtualNoteList({
               measureRef={virt.measureElement}
               active={n.id === activeId}
               onPick={onPick}
+              onContext={onContext}
               now={now}
               top={item.start}
             />
@@ -246,6 +257,7 @@ const Sidebar = memo(function Sidebar({
   notes,
   activeId,
   onPick,
+  onContext,
   onNew,
   onSettings,
 }: {
@@ -253,6 +265,7 @@ const Sidebar = memo(function Sidebar({
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
+  onContext: (id: string, title: string, x: number, y: number) => void;
   onNew: () => void;
   onSettings: () => void;
 }) {
@@ -276,63 +289,32 @@ const Sidebar = memo(function Sidebar({
         {notes.length <= VIRTUAL_THRESHOLD ? (
           <nav className="av-list" aria-label="Notes">
             {notes.map((n) => (
-              <NoteRow key={n.id} note={n} active={n.id === activeId} onPick={onPick} now={now} />
+              <NoteRow
+                key={n.id}
+                note={n}
+                active={n.id === activeId}
+                onPick={onPick}
+                onContext={onContext}
+                now={now}
+              />
             ))}
           </nav>
         ) : (
-          <VirtualNoteList notes={notes} activeId={activeId} onPick={onPick} now={now} />
+          <VirtualNoteList
+            notes={notes}
+            activeId={activeId}
+            onPick={onPick}
+            onContext={onContext}
+            now={now}
+          />
         )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
-            <svg
-              className="av-cfg-glyph"
-              width="15"
-              height="15"
-              viewBox="0 0 15 15"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M7.5 3v9M3 7.5h9"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
+            <Plus className="av-cfg-glyph" size={15} aria-hidden="true" />
             New note
           </button>
           <button className="av-config" onClick={onSettings}>
-            <svg
-              className="av-cfg-glyph"
-              width="15"
-              height="15"
-              viewBox="0 0 15 15"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M2.5 5h10M2.5 10h10"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-              <circle
-                cx="5.5"
-                cy="5"
-                r="1.7"
-                fill="var(--paper-2)"
-                stroke="currentColor"
-                strokeWidth="1.3"
-              />
-              <circle
-                cx="9.5"
-                cy="10"
-                r="1.7"
-                fill="var(--paper-2)"
-                stroke="currentColor"
-                strokeWidth="1.3"
-              />
-            </svg>
+            <SlidersHorizontal className="av-cfg-glyph" size={15} aria-hidden="true" />
             Settings
           </button>
         </div>
@@ -433,6 +415,10 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
+  // right-click note menu; null when closed. x/y are viewport coords (position:fixed).
+  const [menu, setMenu] = useState<{ id: string; title: string; x: number; y: number } | null>(
+    null,
+  );
   // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
   const [onboarding, setOnboarding] = useState(false);
 
@@ -717,21 +703,31 @@ export function App() {
     }
   }, [session, flash]);
 
-  const deleteActive = async () => {
-    if (s.status !== "note" || !s.activeId) return;
-    const path = s.activeId;
-    session.cancelAutosave(); // drop any queued save so it can't resurrect the file
+  // Delete any note by id — the active buffer (via :rm / <Space>d) or a
+  // right-clicked sidebar row. Deleting the active note drops its queued save (so
+  // it can't resurrect the file) and opens the next note; deleting an inactive
+  // note leaves the current buffer untouched.
+  const deleteNoteById = async (id: string) => {
+    const wasActive = s.status === "note" && s.activeId === id;
+    if (wasActive) session.cancelAutosave();
     try {
-      await backend.deleteNote(path);
+      await backend.deleteNote(id);
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
-      setNotes((ns) => ns.filter((n) => n.id !== path).sort(metaOrder));
-      const next = notes.filter((n) => n.id !== path).sort(metaOrder)[0]?.id ?? null;
-      if (next) await session.open(next);
-      else session.close();
+      const remaining = notes.filter((n) => n.id !== id).sort(metaOrder);
+      setNotes(remaining);
+      if (wasActive) {
+        const next = remaining[0]?.id ?? null;
+        if (next) await session.open(next);
+        else session.close();
+      }
       flash("note deleted");
     } catch (e) {
       flash(`delete failed: ${e}`);
     }
+  };
+
+  const deleteActive = () => {
+    if (s.status === "note" && s.activeId) void deleteNoteById(s.activeId);
   };
 
   const closePalette = () => {
@@ -788,7 +784,7 @@ export function App() {
     else if (c === "commands") setCmdSearchOpen(true);
     else if (c === "cheatsheet") setCheatsheetOpen(true);
     else if (c === "new") void createNote();
-    else if (c === "delete") void deleteActive();
+    else if (c === "delete") deleteActive();
     else if (c === "togglePreview") togglePreview();
     else if (c === "backlinks") void openBacklinks();
     else if (c === "reopen") session.reopenLast();
@@ -820,7 +816,8 @@ export function App() {
       cheatsheetOpen ||
       settingsOpen ||
       themePickerOpen ||
-      backlinks
+      backlinks ||
+      menu
     ),
     overrides: cfg.chords,
     run: onCommand,
@@ -830,6 +827,14 @@ export function App() {
   // not the whole tree).
   const openNote = useCallback((id: string) => void session.open(id), [session]);
   const onNewNote = useCallback(() => void createNote(), [createNote]);
+  const openNoteMenu = useCallback(
+    (id: string, title: string, x: number, y: number) => setMenu({ id, title, x, y }),
+    [],
+  );
+  const closeNoteMenu = useCallback(() => {
+    setMenu(null);
+    setRefocus((r) => r + 1);
+  }, []);
 
   // Rebuilt only when the notebook list changes — read lazily by the wikilink
   // autocomplete via the editor's props ref.
@@ -860,19 +865,7 @@ export function App() {
             title={`toggle sidebar (${chordLabel("Mod-b")})`}
             aria-label="toggle sidebar"
           >
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <rect
-                x="1"
-                y="2.5"
-                width="13"
-                height="10"
-                rx="2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.3"
-              />
-              <line x1="5.6" y1="2.5" x2="5.6" y2="12.5" stroke="currentColor" strokeWidth="1.3" />
-            </svg>
+            <PanelLeft size={15} aria-hidden="true" />
           </button>
           <button
             className="av-iconbtn"
@@ -880,25 +873,7 @@ export function App() {
             title={`search (${chordLabel("Mod-p")})`}
             aria-label="search"
           >
-            <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
-              <circle
-                cx="6.4"
-                cy="6.4"
-                r="4.2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.3"
-              />
-              <line
-                x1="9.5"
-                y1="9.5"
-                x2="13"
-                y2="13"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
+            <Search size={15} aria-hidden="true" />
           </button>
           {!isTauri() && (
             <div className="av-title" data-tauri-drag-region>
@@ -921,6 +896,7 @@ export function App() {
               notes={notes}
               activeId={s.activeId}
               onPick={openNote}
+              onContext={openNoteMenu}
               onNew={onNewNote}
               onSettings={openSettings}
             />
@@ -1035,6 +1011,32 @@ export function App() {
               void session.open(id, line);
             }}
             onClose={closeBacklinks}
+          />
+        )}
+        {menu && (
+          <NoteContextMenu
+            x={menu.x}
+            y={menu.y}
+            title={menu.title}
+            items={
+              [
+                {
+                  id: "open",
+                  label: "Open",
+                  icon: <FileText size={15} aria-hidden="true" />,
+                  run: () => openNote(menu.id),
+                },
+                {
+                  id: "delete",
+                  label: "Delete",
+                  icon: <Trash2 size={15} aria-hidden="true" />,
+                  danger: true,
+                  confirm: { prompt: `Delete “${menu.title}”?`, label: "Delete" },
+                  run: () => void deleteNoteById(menu.id),
+                },
+              ] satisfies NoteMenuItem[]
+            }
+            onClose={closeNoteMenu}
           />
         )}
       </div>
