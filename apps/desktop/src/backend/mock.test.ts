@@ -140,4 +140,18 @@ describe("mock backend — notebooks", () => {
     expect((await mockBackend.listNotebooks())[0]?.path).toBe("/My Fresh Notebook");
     await mockBackend.openNotebook("/demo-notebook"); // restore current
   });
+
+  it("removeRecentNotebook drops a recent but never the current one", async () => {
+    await mockBackend.openNotebook("/demo-scratch"); // add a throwaway recent
+    await mockBackend.openNotebook("/demo-notebook"); // back to current
+    expect((await mockBackend.listNotebooks()).some((n) => n.path === "/demo-scratch")).toBe(true);
+
+    await mockBackend.removeRecentNotebook("/demo-scratch");
+    expect((await mockBackend.listNotebooks()).some((n) => n.path === "/demo-scratch")).toBe(false);
+
+    // the currently-open notebook is guarded (a failed switch prunes the target,
+    // never the one you're still in)
+    await mockBackend.removeRecentNotebook("/demo-notebook");
+    expect((await mockBackend.listNotebooks()).some((n) => n.path === "/demo-notebook")).toBe(true);
+  });
 });

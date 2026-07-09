@@ -300,10 +300,11 @@ export const mockBackend: Backend = {
     if (i >= 0) mru.splice(i, 1);
   },
   async createNotebook(parent, name) {
-    // Mirror the Rust sanitizer: one path segment, no separators/reserved chars.
-    // eslint-disable-next-line no-control-regex
+    // Mirror the Rust sanitizer's shape (one path segment, no separators/reserved
+    // chars, no edge dots). Control chars are irrelevant for demo names, so unlike
+    // Rust we don't strip them — keeps this free of a control-char regex.
     const folder = name
-      .replace(/[\x00-\x1f/\\:*?"<>|]/g, "")
+      .replace(/[/\\:*?"<>|]/g, "")
       .replace(/^\.+|\.+$/g, "")
       .trim();
     const seg = folder || "untitled";
