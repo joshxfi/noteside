@@ -458,23 +458,15 @@ export function App() {
     onNotesChanged: (list) => setNotes((prev) => (sameMetaList(prev, list) ? prev : list)),
   });
 
-  // apply config -> design tokens. Keyed on the visual fields only, so editing
-  // e.g. the esc-map text field doesn't rewrite every CSS var per keystroke.
+  // Apply the theme: data-theme + inline palette vars + the boot-theme mirror.
+  // Keyed on cfg.theme ONLY, so font/scale key-repeat doesn't recompute the
+  // palette or re-write localStorage (see the debounced persist below).
   useEffect(() => {
     const r = document.documentElement;
     const theme = themeById(cfg.theme);
     if (r.getAttribute("data-theme") !== theme.mode) r.setAttribute("data-theme", theme.mode);
-    // Writes the theme's primitives inline (base16), or clears them so the
-    // [data-theme] block renders verbatim (builtin Noteside light/dark).
     applyThemeVars(r, theme);
-    r.style.setProperty("--editor-font", fontStack(cfg.editorFont, "editor"));
-    r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
-    r.style.setProperty("--editor-size", cfg.fontSize + "px");
-    r.style.setProperty("--editor-lh", String(cfg.lineHeight));
-    r.style.setProperty("--ui-scale", String(cfg.uiScale));
     try {
-      // Mirror for the index.html boot script + bootConfig(): the next launch
-      // paints this theme before the config store loads.
       localStorage.setItem(
         BOOT_THEME_KEY,
         JSON.stringify({ id: theme.id, mode: theme.mode, vars: resolveThemeVars(theme) }),
@@ -482,7 +474,18 @@ export function App() {
     } catch {
       /* private mode / quota — cosmetic only */
     }
-  }, [cfg.theme, cfg.editorFont, cfg.uiFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
+  }, [cfg.theme]);
+
+  // Apply font/size/scale CSS vars. These change on every zoom key-repeat, so
+  // they must NOT drag the palette recompute or the localStorage write along.
+  useEffect(() => {
+    const r = document.documentElement;
+    r.style.setProperty("--editor-font", fontStack(cfg.editorFont, "editor"));
+    r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
+    r.style.setProperty("--editor-size", cfg.fontSize + "px");
+    r.style.setProperty("--editor-lh", String(cfg.lineHeight));
+    r.style.setProperty("--ui-scale", String(cfg.uiScale));
+  }, [cfg.editorFont, cfg.uiFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
 
   // persist config, debounced: held settings steppers fire per key-repeat, and
   // each store.set is an IPC (a sync localStorage write in the demo). The tail
