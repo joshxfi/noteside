@@ -339,7 +339,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       // Bail if the user navigated (token) OR the active buffer changed (id) during
       // the read — otherwise a late resolve would seed the wrong buffer with this
       // note's body, and the next keystroke would autosave it into the wrong file.
-      if (token !== loadToken || activeId !== id) return;
+      if (token !== loadToken || activeId !== id || noteDirty) return;
       if (doc.body !== noteSaved) {
         noteInitial = doc.body;
         noteSaved = doc.body;

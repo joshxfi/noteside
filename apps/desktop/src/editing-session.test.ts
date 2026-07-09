@@ -289,6 +289,27 @@ describe("editingSession", () => {
     expect(notices).not.toContain("reloaded from disk");
   });
 
+  it("reconcile() does not reseed a buffer dirtied WHILE its read is in flight", async () => {
+    const delays: Record<string, number> = { "a.md": 50 }; // a.md reads slowly
+    const { session, bodies, notices } = makeSession({ "a.md": "disk v1" }, {}, delays);
+    const openA = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await openA; // on A, clean
+
+    bodies.set("a.md", "disk v2"); // external change → reconcile WOULD reload a clean buffer
+    const rp = session.reconcile(); // listNotes resolves, then parks on readNote("a.md") (50ms)
+    await vi.advanceTimersByTimeAsync(0); // let reconcile pass its pre-read guards and issue the read
+    session.change("my local edit"); // user types DURING the read → dirty
+    await vi.advanceTimersByTimeAsync(60); // the read resolves
+    await rp;
+
+    const s = session.getSnapshot();
+    expect(s.dirty).toBe(true); // still dirty — the buffer was NOT reseeded
+    expect(s.initialText).toBe("disk v1"); // mount seed NOT bumped to "disk v2"
+    expect(s.savedText).toBe("disk v1"); // saved baseline unchanged by the dropped reconcile
+    expect(notices).not.toContain("reloaded from disk");
+  });
+
   it("C5: reconcile() reloads a clean buffer when disk differs and bumps the key", async () => {
     const { session, bodies, notices } = makeSession({ "a.md": "disk v1" });
     await session.open("a.md");
