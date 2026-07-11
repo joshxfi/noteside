@@ -1,5 +1,6 @@
 :root {
   --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   --editor-font: var(--serif);
   --editor-size: 19px;
@@ -335,7 +336,7 @@ body {
   min-width: 0;
 }
 .av-item-title {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: calc(15px * var(--ui-scale));
   font-weight: 500;
   color: var(--ink);

@@ -1,17 +1,42 @@
 // Locally-bundled fonts (offline-first). Covers every family selectable in
 // Settings so font choices work with no network (no Google Fonts request on
-// launch); weights match the design's usage. Instead of @fontsource's per-weight
+// launch); weights match the design's usage (Geist gets 400/500/600, its role
+// as the interface sans + a selectable mono). Instead of @fontsource's per-weight
 // CSS side-effect imports (which ship every unicode subset in woff2 AND woff —
 // ~1.75 MB of assets, half of it dead weight), we import each subset's woff2
 // only and author the @font-face rules ourselves: WKWebView always picks woff2,
 // so the .woff copies were never used. Every subset a family ships (latin,
-// latin-ext, cyrillic, cyrillic-ext, greek, vietnamese — varies per family) is
+// latin-ext, cyrillic, cyrillic-ext, greek, vietnamese, Geist Mono's symbols2 —
+// varies per family; Geist Sans ships one unrestricted subset) is
 // kept so non-latin notes still render in the bundled fonts. Family names,
 // weights/styles, font-display, and unicode-ranges are copied verbatim from
 // @fontsource so typography (and the CSS var font stacks) render identically.
 // Imported for side effects: the rules are injected into <head> synchronously
 // at module eval, before first render.
 
+import geistMonoCyrillic400 from "@fontsource/geist-mono/files/geist-mono-cyrillic-400-normal.woff2";
+import geistMonoCyrillic500 from "@fontsource/geist-mono/files/geist-mono-cyrillic-500-normal.woff2";
+import geistMonoCyrillic600 from "@fontsource/geist-mono/files/geist-mono-cyrillic-600-normal.woff2";
+import geistMonoCyrillicExt400 from "@fontsource/geist-mono/files/geist-mono-cyrillic-ext-400-normal.woff2";
+import geistMonoCyrillicExt500 from "@fontsource/geist-mono/files/geist-mono-cyrillic-ext-500-normal.woff2";
+import geistMonoCyrillicExt600 from "@fontsource/geist-mono/files/geist-mono-cyrillic-ext-600-normal.woff2";
+import geistMonoLatin400 from "@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2";
+import geistMonoLatin500 from "@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2";
+import geistMonoLatin600 from "@fontsource/geist-mono/files/geist-mono-latin-600-normal.woff2";
+import geistMonoLatinExt400 from "@fontsource/geist-mono/files/geist-mono-latin-ext-400-normal.woff2";
+import geistMonoLatinExt500 from "@fontsource/geist-mono/files/geist-mono-latin-ext-500-normal.woff2";
+import geistMonoLatinExt600 from "@fontsource/geist-mono/files/geist-mono-latin-ext-600-normal.woff2";
+import geistMonoSymbols400 from "@fontsource/geist-mono/files/geist-mono-symbols2-400-normal.woff2";
+import geistMonoSymbols500 from "@fontsource/geist-mono/files/geist-mono-symbols2-500-normal.woff2";
+import geistMonoSymbols600 from "@fontsource/geist-mono/files/geist-mono-symbols2-600-normal.woff2";
+import geistMonoVietnamese400 from "@fontsource/geist-mono/files/geist-mono-vietnamese-400-normal.woff2";
+import geistMonoVietnamese500 from "@fontsource/geist-mono/files/geist-mono-vietnamese-500-normal.woff2";
+import geistMonoVietnamese600 from "@fontsource/geist-mono/files/geist-mono-vietnamese-600-normal.woff2";
+// Geist Sans ships a single unrestricted subset ("latin" = the whole font, no
+// unicode-range) — it's the interface sans (--sans; sidebar note titles).
+import geistSansLatin400 from "@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2";
+import geistSansLatin500 from "@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2";
+import geistSansLatin600 from "@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2";
 import ibmPlexMonoCyrillic400 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-400-normal.woff2";
 import ibmPlexMonoCyrillic500 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-500-normal.woff2";
 import ibmPlexMonoCyrillic600 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-600-normal.woff2";
@@ -98,21 +123,25 @@ const CYRILLIC_EXT = "U+0460-052F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+F
 const GREEK = "U+0370-0377,U+037A-037F,U+0384-038A,U+038C,U+038E-03A1,U+03A3-03FF";
 const VIETNAMESE =
   "U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB";
+// Geist Mono's box-drawing / punctuation-space subset (no other family ships it).
+const SYMBOLS2 = "U+2000-2001,U+2004-2008,U+200A,U+23B8-23BD,U+2500-259F";
 
+// `range` is null for a family that ships one unrestricted subset (Geist Sans):
+// omitting unicode-range lets that face cover every glyph the font has.
 function face(
   family: string,
   style: "normal" | "italic",
   weight: number,
-  range: string,
+  range: string | null,
   url: string,
 ): string {
+  const rangeLine = range ? `\n  unicode-range: ${range};` : "";
   return `@font-face {
   font-family: "${family}";
   font-style: ${style};
   font-display: swap;
   font-weight: ${weight};
-  src: url(${url}) format("woff2");
-  unicode-range: ${range};
+  src: url(${url}) format("woff2");${rangeLine}
 }`;
 }
 
@@ -120,6 +149,29 @@ function face(
 // greek, vietnamese, latin-ext, latin. Subsets vary per family — Newsreader
 // and Space Mono ship no cyrillic/greek; only JetBrains Mono ships greek.
 const css = [
+  // Geist Sans — the interface sans (one unrestricted subset, so no range).
+  face("Geist Sans", "normal", 400, null, geistSansLatin400),
+  face("Geist Sans", "normal", 500, null, geistSansLatin500),
+  face("Geist Sans", "normal", 600, null, geistSansLatin600),
+  // Geist Mono — selectable editor/interface mono (subset order per @fontsource).
+  face("Geist Mono", "normal", 400, CYRILLIC_EXT, geistMonoCyrillicExt400),
+  face("Geist Mono", "normal", 400, CYRILLIC, geistMonoCyrillic400),
+  face("Geist Mono", "normal", 400, SYMBOLS2, geistMonoSymbols400),
+  face("Geist Mono", "normal", 400, VIETNAMESE, geistMonoVietnamese400),
+  face("Geist Mono", "normal", 400, LATIN_EXT, geistMonoLatinExt400),
+  face("Geist Mono", "normal", 400, LATIN, geistMonoLatin400),
+  face("Geist Mono", "normal", 500, CYRILLIC_EXT, geistMonoCyrillicExt500),
+  face("Geist Mono", "normal", 500, CYRILLIC, geistMonoCyrillic500),
+  face("Geist Mono", "normal", 500, SYMBOLS2, geistMonoSymbols500),
+  face("Geist Mono", "normal", 500, VIETNAMESE, geistMonoVietnamese500),
+  face("Geist Mono", "normal", 500, LATIN_EXT, geistMonoLatinExt500),
+  face("Geist Mono", "normal", 500, LATIN, geistMonoLatin500),
+  face("Geist Mono", "normal", 600, CYRILLIC_EXT, geistMonoCyrillicExt600),
+  face("Geist Mono", "normal", 600, CYRILLIC, geistMonoCyrillic600),
+  face("Geist Mono", "normal", 600, SYMBOLS2, geistMonoSymbols600),
+  face("Geist Mono", "normal", 600, VIETNAMESE, geistMonoVietnamese600),
+  face("Geist Mono", "normal", 600, LATIN_EXT, geistMonoLatinExt600),
+  face("Geist Mono", "normal", 600, LATIN, geistMonoLatin600),
   face("Newsreader", "normal", 400, VIETNAMESE, newsreaderVietnamese400),
   face("Newsreader", "normal", 400, LATIN_EXT, newsreaderLatinExt400),
   face("Newsreader", "normal", 400, LATIN, newsreaderLatin400),

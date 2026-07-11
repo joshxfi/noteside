@@ -50,12 +50,19 @@ export const EDITOR_FONTS: FontOption[] = [
     stack: '"JetBrains Mono", ui-monospace, monospace',
     kind: "mono",
   },
+  {
+    id: "geist-mono",
+    label: "Geist Mono",
+    stack: '"Geist Mono", ui-monospace, monospace',
+    kind: "mono",
+  },
 ];
 
 export const UI_FONTS: FontOption[] = [
   { id: "plex-mono", label: "IBM Plex Mono", stack: '"IBM Plex Mono", ui-monospace, monospace' },
   { id: "jetbrains", label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace' },
   { id: "space-mono", label: "Space Mono", stack: '"Space Mono", ui-monospace, monospace' },
+  { id: "geist-mono", label: "Geist Mono", stack: '"Geist Mono", ui-monospace, monospace' },
 ];
 
 export const ESC_PRESETS = [{ label: "Esc", value: "" }];
