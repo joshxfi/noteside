@@ -74,6 +74,108 @@ export const nsTheme = EditorView.theme({
     cursor: "pointer",
     textDecorationColor: "var(--accent)",
   },
+  // ── markdown live-preview rendering ──────────────────────────────────
+  // rendered pipe tables (block-preview.ts widget)
+  ".cm-mdtable-wrap": {
+    overflowX: "auto",
+    padding: "4px 0",
+  },
+  ".cm-mdtable": {
+    borderCollapse: "collapse",
+    fontSize: "0.9em",
+    lineHeight: "1.55",
+  },
+  ".cm-mdtable th, .cm-mdtable td": {
+    border: "1px solid var(--rule)",
+    padding: "4px 12px",
+    textAlign: "left",
+    verticalAlign: "top",
+  },
+  ".cm-mdtable th": {
+    backgroundColor: "var(--paper-2)",
+    fontWeight: "600",
+  },
+  ".cm-mdtable-code": {
+    fontFamily: "var(--mono)",
+    fontSize: "0.88em",
+    color: "var(--ink-soft)",
+    backgroundColor: "color-mix(in oklab, var(--ink) 7%, transparent)",
+    borderRadius: "4px",
+    padding: "1px 5px",
+  },
+  ".cm-mdtable-more": {
+    fontFamily: "var(--mono)",
+    fontSize: "0.75em",
+    color: "var(--ink-faint)",
+    padding: "2px 4px",
+  },
+  // list bullets + task checkboxes (live-preview.ts widgets)
+  ".cm-list-bullet": { color: "var(--ink-faint)" },
+  ".cm-task-box": {
+    accentColor: "var(--accent)",
+    width: "0.85em",
+    height: "0.85em",
+    margin: "0",
+    verticalAlign: "baseline",
+    cursor: "pointer",
+  },
+  ".cm-task-done": {
+    color: "var(--ink-faint)",
+    textDecoration: "line-through",
+    textDecorationColor: "color-mix(in oklab, var(--ink-faint), transparent 40%)",
+  },
+  // inline code chips
+  ".cm-inline-code": {
+    backgroundColor: "color-mix(in oklab, var(--ink) 7%, transparent)",
+    borderRadius: "4px",
+    padding: "1px 4px",
+  },
+  // fenced code blocks: whole-line styling from block-preview.ts. Vertical
+  // padding is deliberately absent (line decorations must not change height);
+  // the fence lines themselves act as the block's slim top/bottom caps.
+  ".cm-codeblock": {
+    fontFamily: "var(--mono)",
+    fontSize: "calc(var(--editor-size) * 0.82)",
+    backgroundColor: "color-mix(in oklab, var(--ink) 5%, transparent)",
+    padding: "0 14px",
+  },
+  ".cm-codeblock-first": { borderRadius: "8px 8px 0 0", position: "relative" },
+  ".cm-codeblock-last": { borderRadius: "0 0 8px 8px" },
+  ".cm-code-lang": {
+    color: "var(--ink-faint)",
+    fontSize: "0.85em",
+    letterSpacing: "0.06em",
+  },
+  ".cm-code-copy": {
+    position: "absolute",
+    right: "8px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    fontFamily: "var(--mono)",
+    fontSize: "10px",
+    color: "var(--ink-faint)",
+    backgroundColor: "transparent",
+    border: "1px solid var(--rule)",
+    borderRadius: "5px",
+    padding: "1px 7px",
+    cursor: "pointer",
+    opacity: "0.65",
+  },
+  ".cm-code-copy:hover": { opacity: "1", color: "var(--ink)" },
+  ".cm-code-copy.is-copied": { color: "var(--accent)", borderColor: "var(--accent)", opacity: "1" },
+  // blockquotes: the `>` marks hide in preview; the bar carries the meaning
+  ".cm-blockquote": {
+    borderLeft: "2px solid color-mix(in oklab, var(--accent), transparent 45%)",
+    paddingLeft: "12px",
+  },
+  // horizontal rules: the widget spans the content width inside a normal line
+  ".cm-hr": {
+    display: "inline-block",
+    width: "100%",
+    height: "2px",
+    verticalAlign: "middle",
+    borderTop: "1px solid var(--rule)",
+  },
   // vim command line (the transient `:` / `/` panel)
   ".cm-panels": {
     backgroundColor: "var(--paper-2)",
@@ -170,4 +272,21 @@ export const noteHighlight = HighlightStyle.define([
   { tag: t.quote, color: "var(--ink-soft)", fontStyle: "italic" },
   { tag: t.list, color: "var(--ink-soft)" },
   { tag: [t.processingInstruction, t.contentSeparator], color: "var(--ink-faint)" },
+  // Fenced-code token colors (codeLanguages). Deliberately restrained — themes
+  // only own the base tokens (base16 syntax slots are a v2), so code reads as
+  // a quiet two-tone: accent keywords, soft strings, faint comments.
+  { tag: t.comment, color: "var(--ink-faint)", fontStyle: "italic" },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "var(--ink-soft)" },
+  {
+    tag: [t.keyword, t.operatorKeyword, t.definitionKeyword, t.moduleKeyword],
+    color: "var(--accent)",
+  },
+  {
+    tag: [t.number, t.bool, t.atom, t.null],
+    color: "color-mix(in oklab, var(--accent), var(--ink) 45%)",
+  },
+  {
+    tag: [t.typeName, t.className, t.function(t.variableName), t.function(t.propertyName)],
+    fontWeight: "600",
+  },
 ]);

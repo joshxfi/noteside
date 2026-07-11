@@ -21,6 +21,23 @@ export default defineConfig({
         // Split the heavy editor + react vendors so they cache independently
         // (mainly helps the landing demo, which loads over the network).
         manualChunks(id) {
+          // Vite's preload helper is imported by every chunk that has a
+          // dynamic import(). Left to rollup it can get hoisted INTO the lazy
+          // editor chunk, which the entry then imports statically — silently
+          // re-eagering ~1.7MB at first paint (the exact invariant this config
+          // protects). Pin it to its own tiny chunk.
+          if (id.includes("vite/preload-helper")) return "preload";
+          // Per-language syntax modules are loaded on demand by
+          // @codemirror/language-data when a fenced block names them — each
+          // must stay its own lazy chunk, NOT join the editor chunk. Modules
+          // the editor statically reaches (lang-markdown → lang-html →
+          // lang-css/lang-javascript and their @lezer parsers) stay in it.
+          if (/@codemirror\/(lang-(?!markdown|html|css|javascript)|legacy-modes)/.test(id)) {
+            return undefined;
+          }
+          if (/@lezer\/(?!common|highlight|lr|markdown|javascript|css|html)/.test(id)) {
+            return undefined;
+          }
           if (
             id.includes("@codemirror") ||
             id.includes("@replit/codemirror-vim") ||

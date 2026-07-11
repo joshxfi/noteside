@@ -17,16 +17,19 @@ import {
   search,
   searchPanelOpen,
 } from "@codemirror/search";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import { type AppCommand, defineExCommands, setActiveHandlers } from "./ex-commands";
 import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
 import { activeLineHighlight } from "./active-line";
 import { livePreview } from "./live-preview";
+import { blockPreview, linkHandlers } from "./block-preview";
 import { wikilinkComplete, wikilinks } from "./wikilinks";
 import { urlAt, wikilinkAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
+import { isModKey, modActive } from "./platform";
 
 const MODE_LABEL: Record<string, string> = {
   normal: "NORMAL",
@@ -37,13 +40,6 @@ const MODE_LABEL: Record<string, string> = {
 
 const WORD_COUNT_DELAY_MS = 180;
 const DIRTY_CHECK_DELAY_MS = 220;
-
-// The "open link" click modifier: Cmd on macOS, Ctrl elsewhere — matching how CM
-// resolves `Mod-` chords, so mac Ctrl-click stays a context-menu gesture.
-const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform);
-const modActive = (e: { metaKey: boolean; ctrlKey: boolean }): boolean =>
-  IS_MAC ? e.metaKey : e.ctrlKey;
-const isModKey = (key: string): boolean => key === (IS_MAC ? "Meta" : "Control");
 
 // The always-on chord keymap lives in a Compartment so a rebind (cfg.chords)
 // can be re-applied to the LIVE editor without a remount (CM wires keymaps at
@@ -60,10 +56,11 @@ const selectionComp = new Compartment();
 const previewComp = new Compartment();
 const lineNumbersComp = new Compartment();
 
-// Both livePreview and wikilinks close over the preview flag at construction,
-// so a reconfigure must build fresh instances.
+// wikilinks closes over the preview flag at construction, so a reconfigure must
+// build a fresh instance; livePreview/blockPreview are singletons the
+// compartment just adds or removes.
 const previewExts = (preview: boolean): Extension => [
-  ...(preview ? [livePreview] : []),
+  ...(preview ? [livePreview, blockPreview] : []),
   wikilinks(preview),
 ];
 const lineNumbersExt = (relative: boolean): Extension =>
@@ -89,7 +86,14 @@ const searchPanelToggle = keymap.of([
     },
   },
 ]);
-const markdownExt = markdown({ addKeymap: false });
+// GFM base (the default is plain commonmark — without it tables, task lists,
+// strikethrough and autolinks never parse); codeLanguages lazy-loads syntax
+// highlighting for fenced blocks per language (separate chunks, offline-safe).
+const markdownExt = markdown({
+  addKeymap: false,
+  base: markdownLanguage,
+  codeLanguages: languages,
+});
 const noteSyntax = syntaxHighlighting(noteHighlight);
 // high precedence so the completion popup wins Enter/Tab/Esc over vim
 const completionKeys = Prec.high(keymap.of(completionKeymap));
@@ -295,6 +299,12 @@ export function Editor(props: EditorProps) {
       markdownExt,
       noteSyntax,
       previewComp.of(previewExts(preview)),
+      // rendered-table cells route their Mod-clicked links through the same
+      // app handlers as gf / Mod-click on raw text
+      linkHandlers.of({
+        follow: (t) => propsRef.current.onFollowLink(t),
+        openUrl: (u) => propsRef.current.onOpenUrl(u),
+      }),
       wikilinkComplete(() => propsRef.current.linkTargets),
       completionKeys,
       EditorView.lineWrapping,
