@@ -17,7 +17,6 @@ set theme        = noteside-light
 
 " typography
 set editor-font  = Newsreader
-set ui-font      = IBM Plex Mono
 set font-size    = 19
 set line-height  = 1.75
 set ui-scale     = 100%
@@ -30,6 +29,9 @@ set cursor-blink = on
 set live-preview = on
 set relative-numbers = off
 
+" updates
+set auto-update  = on
+
 " keys
 set vim          = on
 imap jj <Esc>
@@ -38,19 +40,19 @@ bind Ctrl-j find
 
 ## Settings
 
-| Setting            | Values                                                           |
-| ------------------ | ---------------------------------------------------------------- |
-| `theme`            | a theme id (33 bundled — see below); `light` · `dark` still work |
-| `editor-font`      | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono`   |
-| `ui-font`          | `IBM Plex Mono` · `JetBrains Mono` · `Space Mono`                |
-| `font-size`        | `16`–`28`                                                        |
-| `line-height`      | `1.4`–`2.1`                                                      |
-| `ui-scale`         | `90%`–`130%`                                                     |
-| `cursor`           | `block` · `bar` · `underline`                                    |
-| `cursor-blink`     | `on` · `off`                                                     |
-| `live-preview`     | `on` · `off`                                                     |
-| `relative-numbers` | `on` · `off`                                                     |
-| `vim`              | `on` · `off`                                                     |
+| Setting            | Values                                                                        |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `theme`            | a theme id (33 bundled — see below); `light` · `dark` still work              |
+| `editor-font`      | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono` · `Geist Mono` |
+| `font-size`        | `16`–`28`                                                                     |
+| `line-height`      | `1.4`–`2.1`                                                                   |
+| `ui-scale`         | `90%`–`130%`                                                                  |
+| `cursor`           | `block` · `bar` · `underline`                                                 |
+| `cursor-blink`     | `on` · `off`                                                                  |
+| `live-preview`     | `on` · `off`                                                                  |
+| `relative-numbers` | `on` · `off`                                                                  |
+| `auto-update`      | `on` · `off`                                                                  |
+| `vim`              | `on` · `off`                                                                  |
 
 ## Appearance
 
@@ -63,13 +65,18 @@ bind Ctrl-j find
   `Esc`. In the file, `theme` takes a theme id (`catppuccin-mocha`, `gruvbox-dark`, …)
   or a label; the old `light` / `dark` values still work as aliases for the Noteside
   themes.
-- **Typography** — `editor-font` sets the writing surface (serif `Newsreader` or
-  `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono`); `ui-font` sets the surrounding UI.
-  `font-size` (16–28) and `line-height` (1.4–2.1) tune the reading rhythm.
+- **Typography** — `editor-font` sets the writing surface: serif `Newsreader` or
+  `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono` / `Geist Mono`. `font-size`
+  (16–28) and `line-height` (1.4–2.1) tune the reading rhythm. The surrounding
+  interface is always **Geist Mono** — there's no separate interface-font setting.
 - **Interface size** — `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
   independently of the editor `font-size`.
 - **Line numbers** — `relative-numbers` shows a vim-style relative gutter; off (the
   default) shows absolute numbers.
+- **Updates** — `auto-update` (on by default) checks GitHub for a newer release on
+  launch, throttled to once a day. It never installs anything — a found update just
+  shows a dot on the **Settings** button and a download link in **Settings → About**.
+  Turn it off to keep the app fully offline.
 
 ## Key mappings
 
@@ -79,7 +86,7 @@ bind Ctrl-j find
   (`⌘/`) — see [Keybindings](/keybindings); it writes the same `bind` lines.
 
 The command ids are: `find`, `grep`, `search`, `searchNext`, `searchPrev`, `commands`,
-`palette`, `new`, `save`, `saveQuit`, `quit`, `reopen`, `delete`, `follow`,
-`nextNote`, `prevNote`, `nav`, `togglePreview`, `theme`, `fontUp`, `fontDown`,
-`fontReset`, `uiUp`, `uiDown`, `uiReset`, `settings`, `config`, `cheatsheet`. For
-example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.
+`palette`, `notebooks`, `new`, `duplicate`, `rename`, `reveal`, `save`, `saveQuit`,
+`quit`, `reopen`, `delete`, `follow`, `nextNote`, `prevNote`, `nav`, `togglePreview`,
+`theme`, `fontUp`, `fontDown`, `fontReset`, `uiUp`, `uiDown`, `uiReset`, `settings`,
+`config`, `cheatsheet`. For example, `bind Ctrl-j find` puts the finder on `Ctrl-J`.

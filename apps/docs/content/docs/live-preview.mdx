@@ -3,18 +3,38 @@ title: Live preview
 description: Render Markdown inline without ever rewriting your text.
 ---
 
-Live preview renders Markdown **in place**, Obsidian-style. Headings, bold, and inline
-code display as formatted text — but the raw markup reappears on the line your cursor
-is on, so you always edit the real characters.
+Live preview renders Markdown **in place**, Obsidian-style. Formatting displays as
+formatted text — but the raw markup reappears on the line your cursor is on, so you
+always edit the real characters.
 
 ## How it works
 
-- Markup (`#`, `**`, `` ` ``) is hidden on every line _except_ the one
+- Markup (`#`, `**`, `` ` ``, `>`, fences) is hidden on every line _except_ the one
   you're editing.
 - The document is **never rewritten** — the styling is purely a display layer over
   your literal Markdown. What you save is exactly what you typed.
 - Because the text underneath is unchanged, vim motions, counts, and visual selections
   all operate on the real characters, not on rendered output.
+
+## What it renders
+
+Inline, on the fly:
+
+- **Headings**, **bold**, _italic_, ~~strikethrough~~, and inline `code` chips.
+- **Bullet lists** as `•`, and **task lists** as real checkboxes — click one to tick it
+  (`[ ]` ⇄ `[x]`); the text of a done task dims and strikes through.
+- **Blockquotes** as an accent bar, and **horizontal rules** as a line.
+
+Block elements get richer treatment:
+
+- **Tables** (GFM pipe syntax) render as real tables, with column alignment. Move your
+  cursor into one — or click a cell — and it snaps back to the raw pipe source at exactly
+  that cell, so editing is always on the literal text; move away and it re-renders.
+- **Fenced code blocks** get a shaded block with the language labelled, syntax
+  highlighting (loaded on demand per language, offline-safe), and a **copy** button.
+
+Everything follows the same cursor-line rule: the line you're on always shows raw
+Markdown, so there's never any guessing about where the real text is.
 
 ## Toggling it
 

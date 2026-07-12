@@ -84,12 +84,13 @@ Press `⌘N` (or `:new`, or `<Space> n`) to create a note. New notes start as
 2. otherwise the first heading or non-blank line,
 3. otherwise the prettified filename.
 
-So just typing `# My ideas` at the top names the note "My ideas" in the sidebar. To
-**rename** a note, change that title — there's no separate rename command. On an
-explicit save (`:w` / `⌘S`, never autosave) the file on disk is renamed to match the
-title too (`untitled.md` → `my-ideas.md`, staying in its folder), so filenames keep up
-with your notes. (A `title:` in YAML frontmatter wins over the heading if you'd rather
-set it explicitly.)
+So just typing `# My ideas` at the top names the note "My ideas" in the sidebar. You can
+also **rename** a note directly — `:rename`, or right-click it in the sidebar →
+**Rename…** — and Noteside updates the title for you. Either way, on an explicit save
+(`:w` / `⌘S`, never autosave) the file on disk is renamed to match the title too
+(`untitled.md` → `my-ideas.md`, staying in its folder), so filenames keep up with your
+notes. (A `title:` in YAML frontmatter wins over the heading if you'd rather set it
+explicitly.)
 
 ## Saving
 
@@ -97,9 +98,10 @@ Noteside **autosaves** about a second after you stop typing — your words are a
 on disk. You can still save explicitly with `:w` or `⌘S` (handy before quitting), and:
 
 - `:q` — close the note (back to the notebook)
-- `:rm` — delete the current note. Deleting from the `<Space> d` leader, the command
-  palette, or a **right-click on a note in the sidebar** asks for confirmation first;
-  `:rm` deletes right away.
+- `:rm` — delete the current note. Every delete — `:rm`, the `<Space> d` leader, the
+  command palette, or a **right-click on a note → Delete** — asks you to confirm first,
+  since deletes are permanent (no trash). That right-click menu also has **Duplicate**
+  and **Reveal in Finder/Explorer**.
 
 Next: learn the [keybindings](/keybindings), try [live preview](/live-preview), or
 theme your [`~/.notesiderc`](/configuration).

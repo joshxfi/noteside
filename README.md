@@ -5,7 +5,6 @@
 <h1 align="center">Noteside</h1>
 
 <p align="center">
-  <strong>Notes for keyboard people.</strong><br/>
   An offline notebook you drive entirely from the keyboard — vim keybindings, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
 </p>
 
@@ -51,7 +50,7 @@ Everything lives at **[docs.noteside.app](https://docs.noteside.app)**:
 - [Getting started](https://docs.noteside.app/getting-started) — install, open a notebook, your first note
 - [Keybindings](https://docs.noteside.app/keybindings) — vim + conventional chords, and remapping them
 - [Search](https://docs.noteside.app/search) — fuzzy file finder and line-level content grep
-- [Live preview](https://docs.noteside.app/live-preview) — inline Markdown that hides markup off the cursor line
+- [Live preview](https://docs.noteside.app/live-preview) — inline Markdown: rendered tables, code blocks, and task lists, with markup hidden off the cursor line
 - [Configuration](https://docs.noteside.app/configuration) — `~/.notesiderc`, themes, and settings
 - [Performance](https://docs.noteside.app/performance) — how it stays fast at scale
 
