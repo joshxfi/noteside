@@ -56,6 +56,8 @@ import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
+import { useAppVersion } from "./use-app-version";
+import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-update";
 
 // The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
@@ -107,6 +109,36 @@ function bootConfig(): Config {
     /* corrupt mirror — defaults */
   }
   return CONFIG_DEFAULTS;
+}
+
+// The automatic update check throttles to once/24h by remembering the last check
+// in localStorage (client-only machine state — the boot-theme mirror precedent,
+// not the config file). `latest` is the last-fetched release tag (or the running
+// version when up-to-date), re-evaluated against the current version on restore
+// so the badge clears itself after the user updates.
+const UPDATE_CACHE_KEY = "noteside:update";
+interface UpdateCache {
+  ts: number;
+  latest: string;
+}
+function readUpdateCache(): UpdateCache | null {
+  try {
+    const raw = localStorage.getItem(UPDATE_CACHE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as Partial<UpdateCache>;
+    if (typeof c.ts === "number" && typeof c.latest === "string")
+      return { ts: c.ts, latest: c.latest };
+  } catch {
+    /* corrupt / unavailable — treat as never-checked */
+  }
+  return null;
+}
+function writeUpdateCache(c: UpdateCache): void {
+  try {
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify(c));
+  } catch {
+    /* private mode / quota — the check just re-runs next launch */
+  }
 }
 
 type Status = "boot" | "no-notebook" | "ready";
@@ -269,6 +301,7 @@ const Sidebar = memo(function Sidebar({
   onContext,
   onNew,
   onSettings,
+  updateAvailable,
 }: {
   open: boolean;
   notes: NoteMeta[];
@@ -277,6 +310,8 @@ const Sidebar = memo(function Sidebar({
   onContext: (id: string, title: string, x: number, y: number) => void;
   onNew: () => void;
   onSettings: () => void;
+  /** Show the "update available" dot on the Settings button. */
+  updateAvailable: boolean;
 }) {
   // Minute tick so memoized rows still refresh their "5m ago" labels (they used
   // to piggyback on unrelated App re-renders).
@@ -325,6 +360,13 @@ const Sidebar = memo(function Sidebar({
           <button className="av-config" onClick={onSettings}>
             <SlidersHorizontal className="av-cfg-glyph" size={15} aria-hidden="true" />
             Settings
+            {updateAvailable && (
+              <span
+                className="av-update-dot"
+                title="Update available"
+                aria-label="Update available"
+              />
+            )}
           </button>
         </div>
       </div>
@@ -426,6 +468,18 @@ export function App() {
   const [refocus, setRefocus] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
+  // Update-check state lives here (not in SettingsPanel) so the boot check can run
+  // with Settings closed and drive the Settings-button badge; the panel reads it.
+  const version = useAppVersion();
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+  // On-demand re-check (the Settings About row's button); shares the App state so
+  // a manual check clears/sets the badge too.
+  const runUpdateCheck = useCallback(async (): Promise<UpdateCheck> => {
+    const r = await checkForUpdate(version);
+    setUpdate(r);
+    writeUpdateCache({ ts: Date.now(), latest: r.kind === "available" ? r.latest : version });
+    return r;
+  }, [version]);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
   // right-click note menu; null when closed. x/y are viewport coords (position:fixed).
   const [menu, setMenu] = useState<{ id: string; title: string; x: number; y: number } | null>(
@@ -624,6 +678,25 @@ export function App() {
         setCfg((c) => ({ ...c, ...stored, theme: theme ?? c.theme }));
       }
       configLoaded.current = true;
+      // Automatic update check — native only (the web/demo never phones home) and
+      // only when the setting is on (default). Fire-and-forget so it never blocks
+      // first paint; throttled to once/24h, restoring the cached result otherwise.
+      if (isTauri() && (stored?.autoUpdateCheck ?? CONFIG_DEFAULTS.autoUpdateCheck)) {
+        const cache = readUpdateCache();
+        if (cache && !dueForCheck(Date.now(), cache.ts)) {
+          if (cache.latest && isNewer(cache.latest, version)) {
+            setUpdate({ kind: "available", latest: cache.latest });
+          }
+        } else {
+          void checkForUpdate(version).then((r) => {
+            setUpdate(r);
+            writeUpdateCache({
+              ts: Date.now(),
+              latest: r.kind === "available" ? r.latest : version,
+            });
+          });
+        }
+      }
       // A brand-new user (no stored config, no notebook) gets the one-time
       // vim/plain-keyboard choice before anything else. Picking it persists the
       // config, so the gate never fires again.
@@ -960,6 +1033,7 @@ export function App() {
               onContext={openNoteMenu}
               onNew={onNewNote}
               onSettings={openSettings}
+              updateAvailable={update?.kind === "available"}
             />
           )}
           <main className="av-main">
@@ -1013,6 +1087,8 @@ export function App() {
           <SettingsPanel
             cfg={cfg}
             setCfg={setCfgPatch}
+            update={update}
+            onCheckUpdate={runUpdateCheck}
             onClose={closeSettings}
             onEditFile={openConfig}
             onShortcuts={() => {

@@ -399,6 +399,15 @@ body {
 .av-config.is-active .av-cfg-glyph {
   color: var(--accent);
 }
+/* "update available" dot on the Settings button — pushed to the row's end */
+.av-update-dot {
+  margin-left: auto;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .av-sidehints {
   padding: 0 8px;
   font-size: calc(10.5px * var(--ui-scale));

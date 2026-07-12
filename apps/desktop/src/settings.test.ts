@@ -24,6 +24,7 @@ describe("config serialize/parse round-trip", () => {
       cursor: "bar",
       cursorBlink: false,
       livePreview: false,
+      autoUpdateCheck: false,
       vimMode: false,
       escMap: "jj",
       keymaps: ["nmap <Space>w :w<CR>", "vmap > >gv"],
