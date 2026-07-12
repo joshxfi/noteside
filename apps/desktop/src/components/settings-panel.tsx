@@ -1,7 +1,7 @@
 // settings-panel.tsx — in-app Settings panel (writes to the live config).
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS, UI_FONTS } from "../settings";
+import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS } from "../settings";
 import { previewGradient, themeById } from "../themes";
 import { checkForUpdate, DOWNLOAD_PAGE, type UpdateCheck } from "../check-update";
 import { openExternal } from "../open-external";
@@ -147,11 +147,10 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..11) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => onPickTheme() }, // idx 0 — Theme: opens the live-preview picker
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
-    { cycle: (d) => cycleList(UI_FONTS, cfg.uiFont, "uiFont", d) },
     { cycle: (d) => setCfg({ fontSize: Math.max(16, Math.min(28, cfg.fontSize + d)) }) },
     {
       cycle: (d) =>
@@ -176,8 +175,8 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 11 — opens the keymap editor (cheatsheet)
-    { cycle: onAboutAction }, // idx 12 — About: check for updates / open releases
+    { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
+    { cycle: onAboutAction }, // idx 11 — About: check for updates / open releases
   ];
 
   const currentTheme = themeById(cfg.theme);
@@ -268,25 +267,7 @@ export function SettingsPanel({
               <span className="set-selectarrow">▾</span>
             </span>
           </Row>
-          <Row idx={2} focus={focus} setFocus={setFocus} label="Interface font">
-            <span className="set-selectwrap">
-              <select
-                className="set-select"
-                tabIndex={-1}
-                value={cfg.uiFont}
-                style={{ fontFamily: byId(UI_FONTS, cfg.uiFont).stack }}
-                onChange={(e) => setCfg({ uiFont: e.target.value })}
-              >
-                {UI_FONTS.map((f) => (
-                  <option key={f.id} value={f.id} style={{ fontFamily: f.stack }}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-              <span className="set-selectarrow">▾</span>
-            </span>
-          </Row>
-          <Row idx={3} focus={focus} setFocus={setFocus} label="Font size">
+          <Row idx={2} focus={focus} setFocus={setFocus} label="Font size">
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -304,7 +285,7 @@ export function SettingsPanel({
             </div>
           </Row>
           <Row
-            idx={4}
+            idx={3}
             focus={focus}
             setFocus={setFocus}
             label="Interface size"
@@ -340,7 +321,7 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={5} focus={focus} setFocus={setFocus} label="Line height">
+          <Row idx={4} focus={focus} setFocus={setFocus} label="Line height">
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -365,7 +346,7 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={6} focus={focus} setFocus={setFocus} label="Relative line numbers">
+          <Row idx={5} focus={focus} setFocus={setFocus} label="Relative line numbers">
             <button
               type="button"
               tabIndex={-1}
@@ -377,7 +358,7 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">Cursor</div>
-          <Row idx={7} focus={focus} setFocus={setFocus} label="Style">
+          <Row idx={6} focus={focus} setFocus={setFocus} label="Style">
             {(
               [
                 ["block", "Block"],
@@ -390,7 +371,7 @@ export function SettingsPanel({
               </Pill>
             ))}
           </Row>
-          <Row idx={8} focus={focus} setFocus={setFocus} label="Blink">
+          <Row idx={7} focus={focus} setFocus={setFocus} label="Blink">
             <button
               type="button"
               tabIndex={-1}
@@ -403,7 +384,7 @@ export function SettingsPanel({
 
           <div className="set-sec">Keys</div>
           <Row
-            idx={9}
+            idx={8}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -419,7 +400,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={10}
+            idx={9}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -454,7 +435,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={11}
+            idx={10}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"
@@ -466,7 +447,7 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">About</div>
-          <Row idx={12} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+          <Row idx={11} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
             {aboutControl()}
           </Row>
         </div>

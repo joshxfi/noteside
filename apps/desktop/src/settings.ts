@@ -15,7 +15,6 @@ export interface Config {
   /** A theme id from themes.ts (e.g. "noteside-dark", "catppuccin-mocha"). */
   theme: string;
   editorFont: string;
-  uiFont: string;
   fontSize: number;
   lineHeight: number;
   /** Interface-size multiplier — scales the UI chrome (not the editor). */
@@ -58,19 +57,14 @@ export const EDITOR_FONTS: FontOption[] = [
   },
 ];
 
-export const UI_FONTS: FontOption[] = [
-  { id: "plex-mono", label: "IBM Plex Mono", stack: '"IBM Plex Mono", ui-monospace, monospace' },
-  { id: "jetbrains", label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace' },
-  { id: "space-mono", label: "Space Mono", stack: '"Space Mono", ui-monospace, monospace' },
-  { id: "geist-mono", label: "Geist Mono", stack: '"Geist Mono", ui-monospace, monospace' },
-];
+// The interface font is fixed to Geist Mono (the `--mono` CSS var in styles.css);
+// only the editor font is user-selectable.
 
 export const ESC_PRESETS = [{ label: "Esc", value: "" }];
 
 export const CONFIG_DEFAULTS: Config = {
   theme: DEFAULT_THEME,
   editorFont: "newsreader",
-  uiFont: "plex-mono",
   fontSize: 19,
   lineHeight: 1.75,
   uiScale: 1,
@@ -87,13 +81,11 @@ export const CONFIG_DEFAULTS: Config = {
 const byId = <T extends { id: string }>(list: T[], id: string): T =>
   list.find((x) => x.id === id) || list[0];
 
-export const fontStack = (id: string, which: "editor" | "ui"): string =>
-  byId(which === "editor" ? EDITOR_FONTS : UI_FONTS, id).stack;
+export const fontStack = (id: string): string => byId(EDITOR_FONTS, id).stack;
 
 // ---- config file <-> object ----------------------------------------
 export function serializeConfig(c: Config): string {
   const eLabel = byId(EDITOR_FONTS, c.editorFont).label;
-  const uLabel = byId(UI_FONTS, c.uiFont).label;
   const L: string[] = [];
   L.push('" ~/.notesiderc — Noteside configuration');
   L.push('" Edit any line and :w to apply. The Settings panel writes here too.');
@@ -103,7 +95,6 @@ export function serializeConfig(c: Config): string {
   L.push("");
   L.push('" typography');
   L.push(`set editor-font  = ${eLabel}`);
-  L.push(`set ui-font      = ${uLabel}`);
   L.push(`set font-size    = ${c.fontSize}`);
   L.push(`set line-height  = ${c.lineHeight}`);
   L.push(`set ui-scale     = ${Math.round(c.uiScale * 100)}%`);
@@ -171,9 +162,6 @@ export function parseConfig(text: string, base: Config): Config {
       } else if (key === "editor-font") {
         const id = matchFont(EDITOR_FONTS, val);
         if (id) c.editorFont = id;
-      } else if (key === "ui-font") {
-        const id = matchFont(UI_FONTS, val);
-        if (id) c.uiFont = id;
       } else if (key === "font-size") {
         const v = parseInt(val, 10);
         if (!isNaN(v)) c.fontSize = Math.max(16, Math.min(28, v));
