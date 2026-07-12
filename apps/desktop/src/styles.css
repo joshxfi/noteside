@@ -337,7 +337,8 @@ body {
 .av-item-title {
   font-family: var(--mono);
   font-size: calc(15px * var(--ui-scale));
-  font-weight: 500;
+  font-weight: 400;
+  letter-spacing: -0.02em;
   color: var(--ink);
   display: flex;
   align-items: center;
