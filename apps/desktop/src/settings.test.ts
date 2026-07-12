@@ -17,7 +17,6 @@ describe("config serialize/parse round-trip", () => {
     const cfg: Config = {
       theme: "catppuccin-mocha",
       editorFont: "spectral",
-      uiFont: "jetbrains",
       fontSize: 22,
       lineHeight: 1.9,
       uiScale: 1.2,

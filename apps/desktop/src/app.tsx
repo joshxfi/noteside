@@ -490,12 +490,11 @@ export function App() {
   // they must NOT drag the palette recompute or the localStorage write along.
   useEffect(() => {
     const r = document.documentElement;
-    r.style.setProperty("--editor-font", fontStack(cfg.editorFont, "editor"));
-    r.style.setProperty("--mono", fontStack(cfg.uiFont, "ui"));
+    r.style.setProperty("--editor-font", fontStack(cfg.editorFont));
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
     r.style.setProperty("--ui-scale", String(cfg.uiScale));
-  }, [cfg.editorFont, cfg.uiFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
+  }, [cfg.editorFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
 
   // persist config, debounced: held settings steppers fire per key-repeat, and
   // each store.set is an IPC (a sync localStorage write in the demo). The tail

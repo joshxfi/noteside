@@ -1,13 +1,13 @@
 // Locally-bundled fonts (offline-first). Covers every family selectable in
 // Settings so font choices work with no network (no Google Fonts request on
-// launch); weights match the design's usage (Geist gets 400/500/600, its role
-// as the interface sans + a selectable mono). Instead of @fontsource's per-weight
+// launch); weights match the design's usage (Geist Mono gets 400/500/600 — it's
+// the interface font + a selectable editor mono). Instead of @fontsource's per-weight
 // CSS side-effect imports (which ship every unicode subset in woff2 AND woff —
 // ~1.75 MB of assets, half of it dead weight), we import each subset's woff2
 // only and author the @font-face rules ourselves: WKWebView always picks woff2,
 // so the .woff copies were never used. Every subset a family ships (latin,
 // latin-ext, cyrillic, cyrillic-ext, greek, vietnamese, Geist Mono's symbols2 —
-// varies per family; Geist Sans ships one unrestricted subset) is
+// varies per family) is
 // kept so non-latin notes still render in the bundled fonts. Family names,
 // weights/styles, font-display, and unicode-ranges are copied verbatim from
 // @fontsource so typography (and the CSS var font stacks) render identically.
@@ -32,11 +32,6 @@ import geistMonoSymbols600 from "@fontsource/geist-mono/files/geist-mono-symbols
 import geistMonoVietnamese400 from "@fontsource/geist-mono/files/geist-mono-vietnamese-400-normal.woff2";
 import geistMonoVietnamese500 from "@fontsource/geist-mono/files/geist-mono-vietnamese-500-normal.woff2";
 import geistMonoVietnamese600 from "@fontsource/geist-mono/files/geist-mono-vietnamese-600-normal.woff2";
-// Geist Sans ships a single unrestricted subset ("latin" = the whole font, no
-// unicode-range) — it's the interface sans (--sans; sidebar note titles).
-import geistSansLatin400 from "@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2";
-import geistSansLatin500 from "@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2";
-import geistSansLatin600 from "@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2";
 import ibmPlexMonoCyrillic400 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-400-normal.woff2";
 import ibmPlexMonoCyrillic500 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-500-normal.woff2";
 import ibmPlexMonoCyrillic600 from "@fontsource/ibm-plex-mono/files/ibm-plex-mono-cyrillic-600-normal.woff2";
@@ -85,12 +80,6 @@ import newsreaderLatinExt600 from "@fontsource/newsreader/files/newsreader-latin
 import newsreaderVietnamese400 from "@fontsource/newsreader/files/newsreader-vietnamese-400-normal.woff2";
 import newsreaderVietnamese500 from "@fontsource/newsreader/files/newsreader-vietnamese-500-normal.woff2";
 import newsreaderVietnamese600 from "@fontsource/newsreader/files/newsreader-vietnamese-600-normal.woff2";
-import spaceMonoLatin400 from "@fontsource/space-mono/files/space-mono-latin-400-normal.woff2";
-import spaceMonoLatin700 from "@fontsource/space-mono/files/space-mono-latin-700-normal.woff2";
-import spaceMonoLatinExt400 from "@fontsource/space-mono/files/space-mono-latin-ext-400-normal.woff2";
-import spaceMonoLatinExt700 from "@fontsource/space-mono/files/space-mono-latin-ext-700-normal.woff2";
-import spaceMonoVietnamese400 from "@fontsource/space-mono/files/space-mono-vietnamese-400-normal.woff2";
-import spaceMonoVietnamese700 from "@fontsource/space-mono/files/space-mono-vietnamese-700-normal.woff2";
 import spectralCyrillic400 from "@fontsource/spectral/files/spectral-cyrillic-400-normal.woff2";
 import spectralCyrillic500 from "@fontsource/spectral/files/spectral-cyrillic-500-normal.woff2";
 import spectralCyrillic600 from "@fontsource/spectral/files/spectral-cyrillic-600-normal.woff2";
@@ -126,34 +115,30 @@ const VIETNAMESE =
 // Geist Mono's box-drawing / punctuation-space subset (no other family ships it).
 const SYMBOLS2 = "U+2000-2001,U+2004-2008,U+200A,U+23B8-23BD,U+2500-259F";
 
-// `range` is null for a family that ships one unrestricted subset (Geist Sans):
-// omitting unicode-range lets that face cover every glyph the font has.
 function face(
   family: string,
   style: "normal" | "italic",
   weight: number,
-  range: string | null,
+  range: string,
   url: string,
 ): string {
-  const rangeLine = range ? `\n  unicode-range: ${range};` : "";
   return `@font-face {
   font-family: "${family}";
   font-style: ${style};
   font-display: swap;
   font-weight: ${weight};
-  src: url(${url}) format("woff2");${rangeLine}
+  src: url(${url}) format("woff2");
+  unicode-range: ${range};
 }`;
 }
 
 // Per face, rules follow the @fontsource CSS order: cyrillic-ext, cyrillic,
-// greek, vietnamese, latin-ext, latin. Subsets vary per family — Newsreader
-// and Space Mono ship no cyrillic/greek; only JetBrains Mono ships greek.
+// (symbols2,) greek, vietnamese, latin-ext, latin. Subsets vary per family —
+// Newsreader ships no cyrillic/greek; only JetBrains Mono ships greek; only
+// Geist Mono ships symbols2.
 const css = [
-  // Geist Sans — the interface sans (one unrestricted subset, so no range).
-  face("Geist Sans", "normal", 400, null, geistSansLatin400),
-  face("Geist Sans", "normal", 500, null, geistSansLatin500),
-  face("Geist Sans", "normal", 600, null, geistSansLatin600),
-  // Geist Mono — selectable editor/interface mono (subset order per @fontsource).
+  // Geist Mono — the interface font + a selectable editor mono (subset order
+  // per @fontsource).
   face("Geist Mono", "normal", 400, CYRILLIC_EXT, geistMonoCyrillicExt400),
   face("Geist Mono", "normal", 400, CYRILLIC, geistMonoCyrillic400),
   face("Geist Mono", "normal", 400, SYMBOLS2, geistMonoSymbols400),
@@ -240,12 +225,6 @@ const css = [
   face("JetBrains Mono", "normal", 600, VIETNAMESE, jetbrainsMonoVietnamese600),
   face("JetBrains Mono", "normal", 600, LATIN_EXT, jetbrainsMonoLatinExt600),
   face("JetBrains Mono", "normal", 600, LATIN, jetbrainsMonoLatin600),
-  face("Space Mono", "normal", 400, VIETNAMESE, spaceMonoVietnamese400),
-  face("Space Mono", "normal", 400, LATIN_EXT, spaceMonoLatinExt400),
-  face("Space Mono", "normal", 400, LATIN, spaceMonoLatin400),
-  face("Space Mono", "normal", 700, VIETNAMESE, spaceMonoVietnamese700),
-  face("Space Mono", "normal", 700, LATIN_EXT, spaceMonoLatinExt700),
-  face("Space Mono", "normal", 700, LATIN, spaceMonoLatin700),
 ].join("\n");
 
 const styleEl = document.createElement("style");
