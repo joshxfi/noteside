@@ -11,11 +11,22 @@ import { isTauri } from "./use-window-controls";
 
 export interface NoteMenuActions {
   onOpen: (id: string) => void;
+  onReveal: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onRename: (id: string, title: string) => void;
   onDelete: (id: string, title: string) => void;
 }
 
-/** Pop up the native "Open / Delete" menu for a note at the cursor. Resolves once
- *  shown; the item `action`s fire later when the user picks one. */
+// The OS-appropriate label for "reveal the file in the system file manager".
+function revealLabel(): string {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  if (/Mac|iPhone|iPad/i.test(ua)) return "Reveal in Finder";
+  if (/Win/i.test(ua)) return "Reveal in File Explorer";
+  return "Open Containing Folder";
+}
+
+/** Pop up the native note menu at the cursor. Resolves once shown; the item
+ *  `action`s fire later when the user picks one. */
 export async function showNoteContextMenu(
   id: string,
   title: string,
@@ -26,6 +37,9 @@ export async function showNoteContextMenu(
   const menu = await Menu.new({
     items: [
       { id: "note-open", text: "Open", action: () => actions.onOpen(id) },
+      { id: "note-reveal", text: revealLabel(), action: () => actions.onReveal(id) },
+      { id: "note-duplicate", text: "Duplicate", action: () => actions.onDuplicate(id) },
+      { id: "note-rename", text: "Rename…", action: () => actions.onRename(id, title) },
       { item: "Separator" },
       { id: "note-delete", text: "Delete", action: () => actions.onDelete(id, title) },
     ],

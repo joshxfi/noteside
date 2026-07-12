@@ -23,6 +23,7 @@ import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
 import { ConfirmDialog } from "./components/confirm-dialog";
+import { PromptDialog } from "./components/prompt-dialog";
 import { NotebookSwitcher } from "./components/notebook-switcher";
 import { Onboarding } from "./components/onboarding";
 import {
@@ -479,6 +480,8 @@ export function App() {
   // so a destructive action always confirms, and the modal is reachable (and
   // testable) without the native menu.
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
+  // Note being renamed (the rename input modal is open); null when closed.
+  const [pendingRename, setPendingRename] = useState<{ id: string; title: string } | null>(null);
   // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
   const [onboarding, setOnboarding] = useState(false);
 
@@ -850,6 +853,54 @@ export function App() {
     if (s.status === "note" && s.activeId) requestDelete(s.activeId, s.title ?? "this note");
   };
 
+  // Duplicate a note → a "<title> copy" sibling; open the copy so it's ready to edit.
+  const duplicateNote = async (id: string) => {
+    try {
+      const meta = await backend.duplicateNote(id);
+      setNotes((ns) => insertMeta(ns, meta));
+      await session.open(meta.id);
+      flash("note duplicated");
+    } catch (e) {
+      flash(`duplicate failed: ${e}`);
+    }
+  };
+
+  const revealNote = (id: string) => {
+    void backend.revealNote(id).catch((e) => flash(`couldn't reveal: ${e}`));
+  };
+
+  // Open the rename input modal for a note; the modal's confirm runs the rename.
+  const requestRename = useCallback(
+    (id: string, title: string) => setPendingRename({ id, title }),
+    [],
+  );
+
+  // Set a note's title (rewrites the body + renames the file). If it's the open
+  // buffer, flush pending edits first (the retitle rewrites the file), then reopen
+  // at the new id so the editor reflects the new title.
+  const renameNote = async (id: string, newTitle: string) => {
+    const wasActive = s.status === "note" && s.activeId === id;
+    try {
+      if (wasActive) await session.flush();
+      const meta = await backend.retitleNote(id, newTitle);
+      setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
+      if (wasActive) await session.open(meta.id);
+      flash("note renamed");
+    } catch (e) {
+      flash(`rename failed: ${e}`);
+    }
+  };
+
+  const renameActive = () => {
+    if (s.status === "note" && s.activeId) requestRename(s.activeId, s.title ?? "");
+  };
+  const duplicateActive = () => {
+    if (s.status === "note" && s.activeId) void duplicateNote(s.activeId);
+  };
+  const revealActive = () => {
+    if (s.status === "note" && s.activeId) revealNote(s.activeId);
+  };
+
   const closePalette = () => {
     setPaletteOpen(false);
     setRefocus((r) => r + 1);
@@ -910,6 +961,9 @@ export function App() {
     else if (c === "cheatsheet") setCheatsheetOpen(true);
     else if (c === "new") void createNote();
     else if (c === "delete") deleteActive();
+    else if (c === "duplicate") duplicateActive();
+    else if (c === "rename") renameActive();
+    else if (c === "reveal") revealActive();
     else if (c === "togglePreview") togglePreview();
     else if (c === "backlinks") void openBacklinks();
     else if (c === "reopen") session.reopenLast();
@@ -943,7 +997,8 @@ export function App() {
       themePickerOpen ||
       notebookSwitcherOpen ||
       backlinks ||
-      pendingDelete
+      pendingDelete ||
+      pendingRename
     ),
     overrides: cfg.chords,
     run: onCommand,
@@ -957,8 +1012,17 @@ export function App() {
   // the browser demo). "Delete" routes through the same confirm modal as :rm.
   const openNoteMenu = useCallback(
     (id: string, title: string) =>
-      void showNoteContextMenu(id, title, { onOpen: openNote, onDelete: requestDelete }),
-    [openNote, requestDelete],
+      void showNoteContextMenu(id, title, {
+        onOpen: openNote,
+        onReveal: revealNote,
+        onDuplicate: (nid) => void duplicateNote(nid),
+        onRename: requestRename,
+        onDelete: requestDelete,
+      }),
+    // duplicateNote/revealNote are stable closures recreated each render; the menu
+    // is rebuilt per right-click, so a fresh identity here is fine (not memo-critical).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [openNote, requestRename, requestDelete],
   );
 
   // Rebuilt only when the notebook list changes — read lazily by the wikilink
@@ -1171,6 +1235,23 @@ export function App() {
             }}
             onCancel={() => {
               setPendingDelete(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {pendingRename && (
+          <PromptDialog
+            title="Rename note"
+            initialValue={pendingRename.title}
+            placeholder="Note title"
+            confirmLabel="Rename"
+            onConfirm={(value) => {
+              const { id } = pendingRename;
+              setPendingRename(null);
+              void renameNote(id, value);
+            }}
+            onCancel={() => {
+              setPendingRename(null);
               setRefocus((r) => r + 1);
             }}
           />

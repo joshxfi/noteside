@@ -24,4 +24,9 @@ describe("tauri capabilities", () => {
   it("grants the menu permissions the native context menu needs", () => {
     expect(caps.permissions).toContain("core:menu:default");
   });
+
+  // The context menu's "Reveal in Finder/Explorer" → reveal_note → opener plugin.
+  it("grants reveal-item-in-dir (the Reveal in Finder/Explorer menu item)", () => {
+    expect(caps.permissions).toContain("opener:allow-reveal-item-in-dir");
+  });
 });
