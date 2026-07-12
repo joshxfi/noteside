@@ -421,7 +421,10 @@ function NotebookPicker({ onPick }: { onPick: () => void }) {
 function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: boolean }) {
   return (
     <div className="av-empty">
-      <div className="av-empty-glyph">▌</div>
+      <div className="av-mark" aria-label="Noteside">
+        <span className="n">N</span>
+        <span className="cur" />
+      </div>
       <div className="av-empty-title">No note open</div>
       <div className="av-empty-sub">
         {hasClosed ? "You closed the buffer with :q." : "Pick a note to begin."} Choose one from the
@@ -1104,7 +1107,10 @@ export function App() {
               <Onboarding onChoose={finishOnboarding} />
             ) : status === "boot" ? (
               <div className="av-empty">
-                <div className="av-empty-glyph">▌</div>
+                <div className="av-mark" aria-label="Noteside">
+                  <span className="n">N</span>
+                  <span className="cur" />
+                </div>
               </div>
             ) : status === "no-notebook" ? (
               <NotebookPicker onPick={() => void pickNotebook()} />

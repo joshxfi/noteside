@@ -680,13 +680,7 @@ body {
   padding: 40px;
   text-align: center;
 }
-.av-empty-glyph {
-  font-family: var(--mono);
-  font-size: 40px;
-  color: var(--accent);
-  animation: av-blink 1.15s steps(1) infinite;
-}
-/* brand mark (logo tile) on the notebook picker — serif N + blinking plum caret */
+/* brand mark (logo tile) on the empty states — serif N + blinking plum caret */
 .av-mark {
   display: inline-flex;
   align-items: center;
