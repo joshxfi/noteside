@@ -127,6 +127,23 @@ function titleFromBody(text: string): string | null {
   return null;
 }
 
+/** Rewrite the body so titleFromBody derives `newTitle` (mirrors Rust set_title,
+ *  minus frontmatter — the demo notes use `# heading`): replace a leading heading,
+ *  else prepend one. */
+function setTitle(body: string, newTitle: string): string {
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === "") continue;
+    const hashes = lines[i].match(/^\s*(#+)/);
+    if (hashes) {
+      lines[i] = `${hashes[1]} ${newTitle}`;
+      return lines.join("\n");
+    }
+    break; // first non-blank line isn't a heading → prepend
+  }
+  return `# ${newTitle}\n\n${body}`;
+}
+
 /** First free `<dir><slug>.md` / `<dir><slug>-N.md` key (mirrors unique_note_path). */
 function uniquePath(dir: string, slug: string): string {
   let path = `${dir}${slug}.md`;
@@ -383,6 +400,59 @@ export const mockBackend: Backend = {
     };
     recs.set(path, { meta, body });
     return meta;
+  },
+  async duplicateNote(path) {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    const newTitle = `${r.meta.title} copy`;
+    const body = setTitle(r.body, newTitle);
+    const dirEnd = path.lastIndexOf("/") + 1;
+    const newPath = uniquePath(path.slice(0, dirEnd), slugifyTitle(newTitle));
+    const meta: NoteMeta = {
+      id: newPath,
+      path: newPath,
+      title: newTitle,
+      tags: [...r.meta.tags],
+      created: null,
+      updated: Date.now(),
+      pinned: false,
+    };
+    recs.set(newPath, { meta, body });
+    return meta;
+  },
+  async retitleNote(path, title) {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    const newTitle = title.trim();
+    if (!newTitle) throw new Error("a note title can't be empty");
+    const body = setTitle(r.body, newTitle);
+    const slug = slugifyTitle(newTitle);
+    const dirEnd = path.lastIndexOf("/") + 1;
+    const stem = path.slice(dirEnd).replace(/\.md$/, "");
+    if (stemMatchesSlug(stem, slug)) {
+      const meta: NoteMeta = { ...r.meta, title: newTitle };
+      recs.set(path, { meta, body });
+      return meta;
+    }
+    const newPath = uniquePath(path.slice(0, dirEnd), slug);
+    const meta: NoteMeta = {
+      ...r.meta,
+      id: newPath,
+      path: newPath,
+      title: newTitle,
+      updated: Date.now(),
+    };
+    recs.delete(path);
+    recs.set(newPath, { meta, body });
+    const f = frecency.get(path);
+    if (f) {
+      frecency.delete(path);
+      frecency.set(newPath, f);
+    }
+    return meta;
+  },
+  async revealNote() {
+    // No OS file manager in the browser demo — a no-op (native only).
   },
   async deleteNote(path) {
     recs.delete(path);

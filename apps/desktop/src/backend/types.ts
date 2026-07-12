@@ -79,6 +79,14 @@ export interface Backend {
    *  meta) when the filename already represents the title. Title-based [[links]] survive. */
   renameNote(path: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
+  /** Copy a note to a "<title> copy" sibling (same directory, retitled so the two
+   *  don't share a title); returns the new note's meta. */
+  duplicateNote(path: string): Promise<NoteMeta>;
+  /** Rename a note by setting its title — rewrites the title in the body and
+   *  renames the file to the new slug. Title-based [[links]] follow. */
+  retitleNote(path: string, title: string): Promise<NoteMeta>;
+  /** Reveal a note's file in the OS file manager. Native only — a no-op in the mock. */
+  revealNote(path: string): Promise<void>;
   deleteNote(path: string): Promise<void>;
   /** A user opened this note (finder/sidebar/link/step — NOT watcher reloads).
    *  Feeds the frecency ranking in searchFiles; best-effort, fire-and-forget. */

@@ -320,6 +320,124 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
     Ok(())
 }
 
+/// Copy a note to a new "<title> copy" file in the SAME directory (nested notes
+/// stay nested), retitling the copy so the two don't share a title. Returns the
+/// new note's meta (the caller inserts it and opens it).
+#[tauri::command]
+pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
+    let (root, recorded) = {
+        let g = state.notebook.lock().unwrap();
+        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
+        (root, body)
+    };
+    let rel = path.clone();
+    let (meta, new_body) = blocking(move || {
+        let src_abs = notebook::safe_note_path(&root, &rel)
+            .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+        let body = match recorded {
+            Some(b) => b,
+            None => std::fs::read_to_string(&src_abs)
+                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
+        };
+        let src_title = notebook::parse_meta(rel.clone(), &body, 0).title;
+        let new_title = format!("{src_title} copy");
+        let new_body = notebook::set_title(&body, &new_title);
+        let dir = src_abs.parent().unwrap_or(&root);
+        let new_abs = notebook::unique_note_path(dir, &notebook::slugify(&new_title));
+        notebook::atomic_write(&new_abs, &new_body)?;
+        let new_rel = notebook::rel_path(&root, &new_abs);
+        let meta = notebook::parse_meta(new_rel, &new_body, notebook::mtime_millis(&new_abs));
+        Ok((meta, new_body))
+    })
+    .await?;
+    let mut g = state.notebook.lock().unwrap();
+    g.record_own_write(meta.clone(), new_body, Instant::now());
+    Ok(meta)
+}
+
+/// Set a note's title: rewrite the title in the body (frontmatter/heading) and
+/// rename the file to the new slug within its directory. Returns the new meta.
+/// Both edits are own-writes, so the watcher ignores the resulting events.
+#[tauri::command]
+pub async fn retitle_note(
+    path: String,
+    title: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NoteMeta> {
+    let (root, recorded) = {
+        let g = state.notebook.lock().unwrap();
+        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
+        (root, body)
+    };
+    let persist_root = root.clone();
+    let rel = path.clone();
+    let new_title = title.trim().to_string();
+    if new_title.is_empty() {
+        return Err(AppError::Msg("a note title can't be empty".into()));
+    }
+    let (renamed, meta, new_body) = blocking(move || {
+        let old_abs = notebook::safe_note_path(&root, &rel)
+            .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+        let body = match recorded {
+            Some(b) => b,
+            None => std::fs::read_to_string(&old_abs)
+                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
+        };
+        let new_body = notebook::set_title(&body, &new_title);
+        notebook::atomic_write(&old_abs, &new_body)?; // retitled content first
+        let slug = notebook::slugify(&new_title);
+        let stem = Path::new(&rel)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if notebook::stem_matches_slug(stem, &slug) {
+            let meta =
+                notebook::parse_meta(rel.clone(), &new_body, notebook::mtime_millis(&old_abs));
+            return Ok((false, meta, new_body));
+        }
+        let dir = old_abs.parent().unwrap_or(&root);
+        let new_abs = notebook::unique_note_path(dir, &slug);
+        std::fs::rename(&old_abs, &new_abs)
+            .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
+        let new_rel = notebook::rel_path(&root, &new_abs);
+        let meta = notebook::parse_meta(new_rel, &new_body, notebook::mtime_millis(&new_abs));
+        Ok((true, meta, new_body))
+    })
+    .await?;
+    let snapshot = {
+        let mut g = state.notebook.lock().unwrap();
+        if renamed {
+            g.record_own_rename(&path, meta.clone(), new_body, Instant::now());
+        } else {
+            g.record_own_write(meta.clone(), new_body, Instant::now());
+        }
+        g.frecency.clone()
+    };
+    if renamed {
+        persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
+    }
+    Ok(meta)
+}
+
+/// Reveal a note's file in the OS file manager (Finder / File Explorer / …).
+#[tauri::command]
+pub fn reveal_note(path: String, app: AppHandle, state: State<AppState>) -> Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let root = {
+        let g = state.notebook.lock().unwrap();
+        g.root.clone().ok_or(AppError::NoNotebook)?
+    };
+    let abs = notebook::safe_note_path(&root, &path)
+        .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+    app.opener()
+        .reveal_item_in_dir(&abs)
+        .map_err(|e| AppError::Msg(format!("reveal failed: {e}")))?;
+    Ok(())
+}
+
 /// Record a note open for frecency ranking (finder recents + a bounded search
 /// nudge), then persist the notebook's map — opens are human-paced, so an
 /// immediate write is cheap and durable. Never fails over bookkeeping.

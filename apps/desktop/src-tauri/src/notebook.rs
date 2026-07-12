@@ -164,6 +164,53 @@ pub fn parse_meta(rel: String, text: &str, updated: i64) -> NoteMeta {
     }
 }
 
+/// Rewrite `text` so `parse_meta` derives `new_title`, preserving all other
+/// content. Mirrors the title-precedence in `parse_meta` (frontmatter → heading /
+/// first line → filename): update a frontmatter `title:` if present, else replace
+/// a leading `# heading` line, else prepend one. Used by duplicate/retitle.
+pub fn set_title(text: &str, new_title: &str) -> String {
+    let (frontmatter, body_start) = split_frontmatter(text);
+    // 1) frontmatter: replace an existing `title:` line, or insert one.
+    if let Some(fm) = frontmatter {
+        let header = &text[..body_start];
+        let mut lines: Vec<String> = header.lines().map(str::to_string).collect();
+        // header is `---\n<fm>\n---\n`; find the title line inside the fm span.
+        if let Some(i) = lines
+            .iter()
+            .position(|l| l.trim_start().starts_with("title:"))
+        {
+            let indent = &lines[i][..lines[i].len() - lines[i].trim_start().len()];
+            lines[i] = format!("{indent}title: {new_title}");
+        } else {
+            // insert right after the opening `---`
+            lines.insert(1, format!("title: {new_title}"));
+        }
+        let _ = fm; // documented span; edits happen on the whole header
+        return format!("{}\n{}", lines.join("\n"), &text[body_start..]);
+    }
+    // 2) no frontmatter: if the first non-blank line is a heading, replace it.
+    let body = &text[body_start..];
+    for (i, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.trim_start().starts_with('#') {
+            let mut lines: Vec<String> = body.lines().map(str::to_string).collect();
+            let hashes: String = line
+                .trim_start()
+                .chars()
+                .take_while(|&c| c == '#')
+                .collect();
+            lines[i] = format!("{hashes} {new_title}");
+            let trailing = if body.ends_with('\n') { "\n" } else { "" };
+            return format!("{}{}", lines.join("\n"), trailing);
+        }
+        break; // first non-blank line isn't a heading — fall through to prepend
+    }
+    // 3) prepend a heading (a blank/plain-text note); keeps existing content below.
+    format!("# {new_title}\n\n{body}")
+}
+
 /// If the text opens with a `---` fenced YAML block, return its inner text and
 /// the byte offset where the body begins. Tolerant: malformed → no frontmatter.
 fn split_frontmatter(text: &str) -> (Option<&str>, usize) {
@@ -317,6 +364,50 @@ mod tests {
         assert!(safe_note_path(root, "notes/a.txt").is_none());
         assert!(safe_note_path(root, ".git/config").is_none());
         assert!(safe_note_path(root, "../a.md").is_none());
+    }
+
+    // set_title must make parse_meta derive the new title, whatever the source of
+    // the old one (frontmatter / heading / plain first line / empty).
+    fn titled(text: &str) -> String {
+        parse_meta("n.md".into(), text, 0).title
+    }
+
+    #[test]
+    fn set_title_replaces_a_leading_heading() {
+        let out = set_title("# Old Title\n\nbody text\n", "New Title");
+        assert_eq!(out, "# New Title\n\nbody text\n");
+        assert_eq!(titled(&out), "New Title");
+    }
+
+    #[test]
+    fn set_title_preserves_heading_level_and_trailing_newline() {
+        assert_eq!(set_title("## Old", "New"), "## New");
+        assert_eq!(set_title("## Old\n", "New"), "## New\n");
+    }
+
+    #[test]
+    fn set_title_updates_frontmatter_title() {
+        let out = set_title("---\ntitle: Old\ntags: [a]\n---\n# ignored\nbody", "New");
+        assert!(out.contains("title: New"));
+        assert!(out.contains("tags: [a]"));
+        assert_eq!(titled(&out), "New");
+    }
+
+    #[test]
+    fn set_title_inserts_frontmatter_title_when_absent() {
+        let out = set_title("---\ntags: [a]\n---\nbody", "New");
+        assert_eq!(titled(&out), "New");
+        assert!(out.contains("tags: [a]"));
+    }
+
+    #[test]
+    fn set_title_prepends_heading_for_plain_or_empty_notes() {
+        // plain first line isn't a heading → prepend, keeping the text
+        let out = set_title("just some text\nmore", "New");
+        assert_eq!(titled(&out), "New");
+        assert!(out.contains("just some text"));
+        // empty note
+        assert_eq!(titled(&set_title("", "New")), "New");
     }
 
     #[test]
