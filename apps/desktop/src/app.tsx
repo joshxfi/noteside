@@ -12,15 +12,7 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  FileText,
-  Library,
-  PanelLeft,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Library, PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/ex-commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
@@ -30,7 +22,7 @@ import { CommandPalette } from "./components/command-palette";
 import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
-import { type NoteMenuItem, NoteContextMenu } from "./components/note-context-menu";
+import { ConfirmDialog } from "./components/confirm-dialog";
 import { NotebookSwitcher } from "./components/notebook-switcher";
 import { Onboarding } from "./components/onboarding";
 import {
@@ -58,6 +50,7 @@ import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
 import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-update";
+import { showNoteContextMenu } from "./native-menu";
 
 // The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
@@ -195,7 +188,7 @@ const NoteRow = memo(function NoteRow({
   note: NoteMeta;
   active: boolean;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, x: number, y: number) => void;
+  onContext: (id: string, title: string) => void;
   now: number;
   top?: number;
   index?: number;
@@ -209,8 +202,8 @@ const NoteRow = memo(function NoteRow({
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
       onContextMenu={(e) => {
-        e.preventDefault(); // suppress the WebView's native menu
-        onContext(note.id, note.title, e.clientX, e.clientY);
+        e.preventDefault(); // suppress the WebView's native menu; ours pops instead
+        onContext(note.id, note.title);
       }}
       style={
         top === undefined
@@ -250,7 +243,7 @@ function VirtualNoteList({
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, x: number, y: number) => void;
+  onContext: (id: string, title: string) => void;
   now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -307,7 +300,7 @@ const Sidebar = memo(function Sidebar({
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, x: number, y: number) => void;
+  onContext: (id: string, title: string) => void;
   onNew: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
@@ -481,10 +474,11 @@ export function App() {
     return r;
   }, [version]);
   const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
-  // right-click note menu; null when closed. x/y are viewport coords (position:fixed).
-  const [menu, setMenu] = useState<{ id: string; title: string; x: number; y: number } | null>(
-    null,
-  );
+  // Note pending deletion (the confirm modal is open); null when closed. Every
+  // delete path — the native context menu, :rm, the palette/chord — routes here
+  // so a destructive action always confirms, and the modal is reachable (and
+  // testable) without the native menu.
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
   const [onboarding, setOnboarding] = useState(false);
 
@@ -846,8 +840,14 @@ export function App() {
     }
   };
 
+  // Open the confirm modal for a note; the modal's confirm runs the delete.
+  const requestDelete = useCallback(
+    (id: string, title: string) => setPendingDelete({ id, title }),
+    [],
+  );
+
   const deleteActive = () => {
-    if (s.status === "note" && s.activeId) void deleteNoteById(s.activeId);
+    if (s.status === "note" && s.activeId) requestDelete(s.activeId, s.title ?? "this note");
   };
 
   const closePalette = () => {
@@ -943,7 +943,7 @@ export function App() {
       themePickerOpen ||
       notebookSwitcherOpen ||
       backlinks ||
-      menu
+      pendingDelete
     ),
     overrides: cfg.chords,
     run: onCommand,
@@ -953,14 +953,13 @@ export function App() {
   // not the whole tree).
   const openNote = useCallback((id: string) => void session.open(id), [session]);
   const onNewNote = useCallback(() => void createNote(), [createNote]);
+  // Right-click a note row → the native OS context menu (Tauri only; a no-op in
+  // the browser demo). "Delete" routes through the same confirm modal as :rm.
   const openNoteMenu = useCallback(
-    (id: string, title: string, x: number, y: number) => setMenu({ id, title, x, y }),
-    [],
+    (id: string, title: string) =>
+      void showNoteContextMenu(id, title, { onOpen: openNote, onDelete: requestDelete }),
+    [openNote, requestDelete],
   );
-  const closeNoteMenu = useCallback(() => {
-    setMenu(null);
-    setRefocus((r) => r + 1);
-  }, []);
 
   // Rebuilt only when the notebook list changes — read lazily by the wikilink
   // autocomplete via the editor's props ref.
@@ -1159,30 +1158,21 @@ export function App() {
             onClose={closeBacklinks}
           />
         )}
-        {menu && (
-          <NoteContextMenu
-            x={menu.x}
-            y={menu.y}
-            title={menu.title}
-            items={
-              [
-                {
-                  id: "open",
-                  label: "Open",
-                  icon: <FileText size={15} aria-hidden="true" />,
-                  run: () => openNote(menu.id),
-                },
-                {
-                  id: "delete",
-                  label: "Delete",
-                  icon: <Trash2 size={15} aria-hidden="true" />,
-                  danger: true,
-                  confirm: { prompt: `Delete “${menu.title}”?`, label: "Delete" },
-                  run: () => void deleteNoteById(menu.id),
-                },
-              ] satisfies NoteMenuItem[]
-            }
-            onClose={closeNoteMenu}
+        {pendingDelete && (
+          <ConfirmDialog
+            title={`Delete “${pendingDelete.title}”?`}
+            message="This permanently removes the note file — it can't be undone."
+            confirmLabel="Delete"
+            danger
+            onConfirm={() => {
+              const { id } = pendingDelete;
+              setPendingDelete(null);
+              void deleteNoteById(id);
+            }}
+            onCancel={() => {
+              setPendingDelete(null);
+              setRefocus((r) => r + 1);
+            }}
           />
         )}
       </div>
