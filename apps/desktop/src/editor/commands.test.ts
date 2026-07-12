@@ -27,7 +27,6 @@ const APP_COMMANDS: AppCommand[] = [
   "palette",
   "commands",
   "togglePreview",
-  "backlinks",
   "reopen",
   "nextNote",
   "prevNote",

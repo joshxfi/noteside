@@ -10,7 +10,6 @@
 mod commands;
 mod error;
 pub mod frecency;
-pub mod links;
 pub mod models;
 pub mod notebook;
 pub mod search;
@@ -56,7 +55,6 @@ pub fn run() {
             commands::record_open,
             commands::search_files,
             commands::search_content,
-            commands::backlinks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

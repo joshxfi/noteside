@@ -30,9 +30,8 @@ and a quiet command line appears at the foot of the page.
 Everything lives on this machine. Nothing leaves it. Close the lid and
 your words are still here, exactly where the cursor left them.
 
-Press j to read on, or open [[Keymap]] for the full set of motions.
-Notes link to each other: type [[ to autocomplete a note's name, and
-press gf on a link like [[Roadmap — Q3]] to follow it.`,
+Press j to read on, or run :find (⌘P) to jump to the Keymap note
+for the full set of motions. Everything is a keystroke away.`,
   },
   {
     id: "keymap",
@@ -127,8 +126,8 @@ This week
   - Write the onboarding note (done — see Welcome)
 
 Someday
-  - Linked notes, the way thoughts actually connect
-  - A focus mode that dims everything but the line you're on`,
+  - A focus mode that dims everything but the line you're on
+  - Snapshots, so you can wander back to an earlier draft`,
   },
   {
     id: "meeting",
@@ -165,8 +164,8 @@ Follow up
   - Plain-text mode for people who don't know vim.
 
 Next
-  - Linked notes and backlinks.
   - A focus mode: dim everything but the current line.
+  - Pinned notes that float to the top of the finder.
 
 Later
   - Sync, maybe. Local-first stays the default either way.

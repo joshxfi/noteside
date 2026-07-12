@@ -21,10 +21,9 @@ import {
 } from "../markdown";
 import { modActive } from "./platform";
 
-/** App-level link openers (wikilink → note, url → browser), provided by the
- *  Editor component so table-cell links stay Mod-clickable while rendered. */
+/** App-level URL opener, provided by the Editor component so table-cell links
+ *  stay Mod-clickable while rendered. */
 export interface LinkHandlers {
-  follow(target: string): void;
   openUrl(url: string): void;
 }
 export const linkHandlers = Facet.define<LinkHandlers, LinkHandlers | null>({
@@ -56,17 +55,9 @@ function renderInline(nodes: Inline[], parent: HTMLElement): void {
         parent.appendChild(el);
         break;
       }
-      case "wikilink": {
-        const el = document.createElement("span");
-        el.className = "cm-wikilink";
-        el.dataset.wiki = n.target;
-        el.textContent = n.display ?? n.target;
-        parent.appendChild(el);
-        break;
-      }
       case "link": {
         const el = document.createElement("span");
-        el.className = "cm-wikilink";
+        el.className = "cm-mdlink";
         el.dataset.url = n.url;
         el.textContent = n.text || n.url;
         parent.appendChild(el);
@@ -150,12 +141,11 @@ class TableWidget extends WidgetType {
       e.preventDefault();
       e.stopPropagation();
       const target = e.target as HTMLElement;
-      const link = target.closest<HTMLElement>("[data-wiki],[data-url]");
-      if (link && modActive(e)) {
+      const link = target.closest<HTMLElement>("[data-url]");
+      if (link?.dataset.url && modActive(e)) {
         const h = view.state.facet(linkHandlers);
         if (h) {
-          if (link.dataset.wiki) h.follow(link.dataset.wiki);
-          else if (link.dataset.url) h.openUrl(link.dataset.url);
+          h.openUrl(link.dataset.url);
           return;
         }
       }

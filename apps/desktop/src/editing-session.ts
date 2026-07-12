@@ -202,7 +202,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // doesn't churn the filesystem. After the body is on disk, ask the backend to
   // rename the file to match the title's slug (no-op when it already matches). The
   // active buffer's id migrates in place; because editorKey excludes activeId there
-  // is no remount (cursor preserved), and title-based [[links]] resolve unchanged.
+  // is no remount (cursor preserved).
   async function maybeRename(id: string, savedTitle: string): Promise<void> {
     if (!id || id === CONFIG_ID || activeId !== id) return; // switched away → skip
     // Pre-check with the meta the save just returned: when the filename already
@@ -263,7 +263,8 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     lastNoteId = id;
     gotoLine = line;
     // bump every open so re-opening the SAME note at the SAME line still remounts
-    // the editor (the goto-line jump only runs on mount) — e.g. self [[links]].
+    // the editor (the goto-line jump only runs on mount) — e.g. a re-open at a
+    // grep hit's line.
     navSeq += 1;
     commit();
   }

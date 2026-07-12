@@ -19,7 +19,6 @@ import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
 import { Finder } from "./components/finder";
 import { SettingsPanel } from "./components/settings-panel";
 import { CommandPalette } from "./components/command-palette";
-import { Backlinks } from "./components/backlinks";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
 import { ConfirmDialog } from "./components/confirm-dialog";
@@ -34,7 +33,6 @@ import {
   paletteCommands,
   withChordOverrides,
 } from "./editor/commands";
-import { type Backlink, resolveLink } from "./links";
 import {
   CONFIG_DEFAULTS,
   type Config,
@@ -477,7 +475,6 @@ export function App() {
     writeUpdateCache({ ts: Date.now(), latest: r.kind === "available" ? r.latest : version });
     return r;
   }, [version]);
-  const [backlinks, setBacklinks] = useState<{ title: string; refs: Backlink[] } | null>(null);
   // Note pending deletion (the confirm modal is open); null when closed. Every
   // delete path — the native context menu, :rm, the palette/chord — routes here
   // so a destructive action always confirms, and the modal is reachable (and
@@ -753,33 +750,11 @@ export function App() {
     setRefocus((r) => r + 1);
   };
 
-  // follow a [[wikilink]] (gf / :follow): resolve to a note and open it
-  const onFollowLink = (target: string) => {
-    const hit = resolveLink(target, notes);
-    if (hit) void session.open(hit.id);
-    else flash(`no note: ${target}`);
-  };
-  // open an external URL under the cursor (gf / gx / :follow / Mod-click)
+  // open an external URL under the cursor (gx / :follow / Mod-click)
   const onOpenUrl = (url: string) => {
     void openExternal(url).then((ok) => {
       if (!ok) flash(`can't open: ${url}`);
     });
-  };
-  const openBacklinks = async () => {
-    if (s.status !== "note" || !s.activeId) {
-      flash("open a note first");
-      return;
-    }
-    try {
-      const refs = await backend.backlinks(s.activeId);
-      setBacklinks({ title: s.title ?? s.activeId, refs });
-    } catch (e) {
-      flash(`backlinks failed: ${e}`);
-    }
-  };
-  const closeBacklinks = () => {
-    setBacklinks(null);
-    setRefocus((r) => r + 1);
   };
 
   const openConfig = () => {
@@ -968,7 +943,6 @@ export function App() {
     else if (c === "rename") renameActive();
     else if (c === "reveal") revealActive();
     else if (c === "togglePreview") togglePreview();
-    else if (c === "backlinks") void openBacklinks();
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
     else if (c === "prevNote") stepNote(-1);
@@ -999,7 +973,6 @@ export function App() {
       settingsOpen ||
       themePickerOpen ||
       notebookSwitcherOpen ||
-      backlinks ||
       pendingDelete ||
       pendingRename
     ),
@@ -1027,10 +1000,6 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openNote, requestRename, requestDelete],
   );
-
-  // Rebuilt only when the notebook list changes — read lazily by the wikilink
-  // autocomplete via the editor's props ref.
-  const linkTargets = useMemo(() => [...new Set(notes.map((n) => n.title))], [notes]);
 
   const searchableCommands = useMemo(
     () =>
@@ -1133,14 +1102,12 @@ export function App() {
                     relativeNumbers={cfg.relativeNumbers}
                     chordOverrides={cfg.chords}
                     preview={previewOn}
-                    linkTargets={linkTargets}
                     gotoLine={s.gotoLine}
                     refocusToken={refocus}
                     onChange={(text, dirty) => session.change(text, dirty)}
                     onSave={(text) => session.save(text)}
                     onQuit={() => session.quit()}
                     onCommand={onCommand}
-                    onFollowLink={onFollowLink}
                     onOpenUrl={onOpenUrl}
                   />
                 </Suspense>
@@ -1215,17 +1182,6 @@ export function App() {
             overrides={cfg.chords}
             onSetOverrides={(chords) => setCfgPatch({ chords })}
             onClose={closeCheatsheet}
-          />
-        )}
-        {backlinks && (
-          <Backlinks
-            title={backlinks.title}
-            refs={backlinks.refs}
-            onOpen={(id, line) => {
-              closeBacklinks();
-              void session.open(id, line);
-            }}
-            onClose={closeBacklinks}
           />
         )}
         {pendingDelete && (

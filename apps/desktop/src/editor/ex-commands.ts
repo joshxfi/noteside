@@ -3,7 +3,7 @@
 // editor is currently mounted via a module-level handler registry.
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
-import { urlAt, wikilinkAt } from "../links";
+import { urlAt } from "../links";
 import { COMMANDS, type Command } from "./commands";
 import { registerVimApplier } from "./vim-config";
 
@@ -23,7 +23,6 @@ export type AppCommand =
   | "palette"
   | "commands"
   | "togglePreview"
-  | "backlinks"
   | "reopen"
   | "nextNote"
   | "prevNote"
@@ -41,7 +40,6 @@ export interface EditorHandlers {
   quit: () => void;
   saveQuit: () => void;
   command: (c: AppCommand) => void;
-  followLink: (target: string) => void;
   openUrl: (url: string) => void;
 }
 
@@ -106,22 +104,15 @@ function applyUserKeymaps(lines: string[]) {
 }
 registerVimApplier({ escMap: applyInsertEscape, keymaps: applyUserKeymaps });
 
-// `:follow` (and `gf` / `gx`): open whatever is under the cursor — a [[wikilink]]
-// jumps to its note, otherwise an http(s)/mailto URL (bare or a markdown
-// `[text](url)` target) opens in the browser. Reads the raw line/column, so it
-// works regardless of live-preview.
+// `:follow` (and `gx`): open the http(s)/mailto URL under the cursor (bare or a
+// markdown `[text](url)` target) in the browser. Reads the raw line/column, so
+// it works regardless of live-preview.
 function runFollow() {
   const v = active?.view;
   if (!active || !v) return;
   const head = v.state.selection.main.head;
   const ln = v.state.doc.lineAt(head);
-  const col = head - ln.from;
-  const target = wikilinkAt(ln.text, col);
-  if (target) {
-    active.followLink(target);
-    return;
-  }
-  const url = urlAt(ln.text, col);
+  const url = urlAt(ln.text, head - ln.from);
   if (url) active.openUrl(url);
 }
 
@@ -145,9 +136,7 @@ export function defineExCommands() {
     for (const name of c.ex) Vim.defineEx(name, name, () => runEx(c));
   }
 
-  // `gf`/`gx` follow the link under the cursor (wikilink → note, else open the
-  // URL); `<Space>` opens the leader palette.
-  Vim.map("gf", ":follow<CR>", "normal");
+  // `gx` opens the URL under the cursor; `<Space>` opens the leader palette.
   Vim.map("gx", ":follow<CR>", "normal");
   Vim.map("<Space>", ":palette<CR>", "normal");
 

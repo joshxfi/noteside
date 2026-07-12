@@ -118,17 +118,6 @@ export const COMMANDS: Command[] = [
     inCheatsheet: false,
   },
   {
-    id: "backlinks",
-    title: "Backlinks to this note",
-    group: "Find",
-    chord: "Mod-Shift-l",
-    ex: ["backlinks", "back"],
-    leader: "l",
-    command: "backlinks",
-    needsNote: true,
-    paletteHint: "links here",
-  },
-  {
     id: "notebooks",
     title: "Switch notebook",
     group: "Find",
@@ -227,7 +216,7 @@ export const COMMANDS: Command[] = [
   },
   {
     id: "follow",
-    title: "Follow link under cursor",
+    title: "Open URL under cursor",
     group: "Note",
     chord: "Alt-Enter",
     ex: ["follow"],

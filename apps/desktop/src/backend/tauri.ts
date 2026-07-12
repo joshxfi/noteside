@@ -3,15 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Config } from "../settings";
-import type {
-  Backend,
-  Backlink,
-  ContentHit,
-  FileHit,
-  NoteDoc,
-  NoteMeta,
-  NotebookRef,
-} from "./types";
+import type { Backend, ContentHit, FileHit, NoteDoc, NoteMeta, NotebookRef } from "./types";
 
 let storeP: Promise<Store> | null = null;
 const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults: {} }));
@@ -65,7 +57,6 @@ export const tauriBackend: Backend = {
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
   previewNote: (path) => invoke<NoteDoc>("preview_note", { path }),
-  backlinks: (noteId) => invoke<Backlink[]>("backlinks", { id: noteId }),
   saveNote: (path, body) => invoke<NoteMeta>("save_note", { path, body }),
   renameNote: (path) => invoke<NoteMeta>("rename_note", { path }),
   createNote: (title) => invoke<NoteMeta>("create_note", { title: title ?? null }),

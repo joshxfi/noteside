@@ -45,14 +45,6 @@ export interface ContentHit {
   ranges: [number, number][];
 }
 
-/** A note that links to the current one (one reference line per source note). */
-export interface Backlink {
-  id: string;
-  title: string;
-  lineNumber: number;
-  line: string;
-}
-
 export interface Backend {
   /** true when backed by the real Rust notebook (vs the in-memory mock). */
   readonly live: boolean;
@@ -72,11 +64,9 @@ export interface Backend {
   readNote(path: string): Promise<NoteDoc>;
   /** Preview text from the in-memory notebook index; opening still uses readNote. */
   previewNote(path: string): Promise<NoteDoc>;
-  /** Notes that link to `noteId` via [[wikilinks]] — scanned backend-side. */
-  backlinks(noteId: string): Promise<Backlink[]>;
   saveNote(path: string, body: string): Promise<NoteMeta>;
   /** Rename a note's file so its slug matches its title. No-op (returns the current
-   *  meta) when the filename already represents the title. Title-based [[links]] survive. */
+   *  meta) when the filename already represents the title. */
   renameNote(path: string): Promise<NoteMeta>;
   createNote(title?: string): Promise<NoteMeta>;
   /** Copy a note to a "<title> copy" sibling (same directory, retitled so the two

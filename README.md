@@ -51,7 +51,6 @@ Everything lives at **[docs.noteside.app](https://docs.noteside.app)**:
 - [Getting started](https://docs.noteside.app/getting-started) — install, open a notebook, your first note
 - [Keybindings](https://docs.noteside.app/keybindings) — vim + conventional chords, and remapping them
 - [Search](https://docs.noteside.app/search) — fuzzy file finder and line-level content grep
-- [Wikilinks](https://docs.noteside.app/wikilinks) — `[[links]]`, autocomplete, and backlinks
 - [Live preview](https://docs.noteside.app/live-preview) — inline Markdown that hides markup off the cursor line
 - [Configuration](https://docs.noteside.app/configuration) — `~/.notesiderc`, themes, and settings
 - [Performance](https://docs.noteside.app/performance) — how it stays fast at scale

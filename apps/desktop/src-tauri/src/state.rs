@@ -28,10 +28,9 @@ pub fn find_record(records: &[Arc<NoteRecord>], path: &str) -> Option<usize> {
 
 /// Replace the record at the same path, or insert at the path-sorted position:
 /// `scan_notebook` returns path-sorted records, and every in-place mutation must
-/// preserve that order (wikilink resolution's first-record tie-break, and the
-/// binary searches above, depend on it). The record is freshly `Arc`-wrapped —
-/// never mutated through an existing `Arc` — so live search snapshots keep
-/// their exact data.
+/// preserve that order (the binary searches above depend on it). The record is
+/// freshly `Arc`-wrapped — never mutated through an existing `Arc` — so live
+/// search snapshots keep their exact data.
 fn upsert_sorted(records: &mut Vec<Arc<NoteRecord>>, rec: NoteRecord) {
     let rec = Arc::new(rec);
     match search_by_path(records, &rec.meta.path) {

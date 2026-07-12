@@ -1,19 +1,6 @@
 import { boot, expect, test } from "./fixtures";
 
-test.describe("follow link", () => {
-  test("Mod-click a wikilink opens the target note", async ({ page }) => {
-    await boot(page, { vimMode: false });
-    // The seeded Welcome note (open on boot) contains [[Keymap]] near its end;
-    // scroll it into CM's rendered viewport, then Mod-click the styled link.
-    await page.locator(".cm-scroller").evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
-    const link = page.locator(".cm-wikilink").first();
-    await expect(link).toBeVisible();
-    await link.click({ modifiers: ["ControlOrMeta"] });
-    await expect(page.locator(".av-file")).toContainText("Keymap");
-  });
-
+test.describe("open URL under cursor", () => {
   test("following a URL opens it externally", async ({ page }) => {
     // Web build routes external opens through window.open — stub it (no network)
     // and record the URL the app hands off.

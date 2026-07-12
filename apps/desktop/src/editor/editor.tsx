@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -7,7 +7,6 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import { completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
   closeSearchPanel,
@@ -26,8 +25,7 @@ import { type ChordOverrides, type Command, commandChordKeymap } from "./command
 import { activeLineHighlight } from "./active-line";
 import { livePreview } from "./live-preview";
 import { blockPreview, linkHandlers } from "./block-preview";
-import { wikilinkComplete, wikilinks } from "./wikilinks";
-import { urlAt, wikilinkAt } from "../links";
+import { urlAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
 import { isModKey, modActive } from "./platform";
 
@@ -56,13 +54,9 @@ const selectionComp = new Compartment();
 const previewComp = new Compartment();
 const lineNumbersComp = new Compartment();
 
-// wikilinks closes over the preview flag at construction, so a reconfigure must
-// build a fresh instance; livePreview/blockPreview are singletons the
-// compartment just adds or removes.
-const previewExts = (preview: boolean): Extension => [
-  ...(preview ? [livePreview, blockPreview] : []),
-  wikilinks(preview),
-];
+// livePreview/blockPreview are singletons the compartment just adds or removes
+// when preview toggles.
+const previewExts = (preview: boolean): Extension => (preview ? [livePreview, blockPreview] : []);
 const lineNumbersExt = (relative: boolean): Extension =>
   lineNumbers(relative ? { formatNumber: relFmt } : undefined);
 
@@ -95,8 +89,6 @@ const markdownExt = markdown({
   codeLanguages: languages,
 });
 const noteSyntax = syntaxHighlighting(noteHighlight);
-// high precedence so the completion popup wins Enter/Tab/Esc over vim
-const completionKeys = Prec.high(keymap.of(completionKeymap));
 const defaultKeys = keymap.of(defaultKeymap);
 
 defineExCommands();
@@ -121,8 +113,6 @@ export interface EditorProps {
   chordOverrides?: ChordOverrides;
   /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
   preview: boolean;
-  /** Note titles offered as `[[ ]]` autocompletion targets. */
-  linkTargets: string[];
   /** 1-based line to place the cursor on at mount (e.g. opening a grep hit). */
   gotoLine?: number;
   refocusToken: number;
@@ -130,24 +120,15 @@ export interface EditorProps {
   onSave: (text: string) => void;
   onQuit: () => void;
   onCommand: (c: AppCommand) => void;
-  /** Follow the wikilink target under the cursor (`gf` / `:follow`). */
-  onFollowLink: (target: string) => void;
   /** Open an external URL under the cursor in the system browser. */
   onOpenUrl: (url: string) => void;
 }
 
-// Resolve the link at a document offset and dispatch it: a [[wikilink]] follows
-// to its note, otherwise an external URL opens in the browser. Shared by the
-// `follow` chord and Mod-click. Reads raw line text, so live-preview is moot.
+// Open the external URL at a document offset in the browser (`gx` / `:follow` /
+// Mod-click). Reads raw line text, so live-preview is moot.
 function openLinkAt(view: EditorView, pos: number, p: EditorProps): boolean {
   const ln = view.state.doc.lineAt(pos);
-  const col = pos - ln.from;
-  const target = wikilinkAt(ln.text, col);
-  if (target) {
-    p.onFollowLink(target);
-    return true;
-  }
-  const url = urlAt(ln.text, col);
+  const url = urlAt(ln.text, pos - ln.from);
   if (url) {
     p.onOpenUrl(url);
     return true;
@@ -273,8 +254,7 @@ export function Editor(props: EditorProps) {
         if (searchPanelOpen(v.state)) closeSearchPanel(v);
         else openSearchPanel(v);
       } else if (cmd.editor === "follow" && v) {
-        // Non-vim equivalent of `gf` / `:follow`: open the link under the cursor
-        // (wikilink → note, else external URL → browser).
+        // Non-vim equivalent of `gx` / `:follow`: open the URL under the cursor.
         openLinkAt(v, v.state.selection.main.head, p);
       } else if (cmd.editor === "searchNext" && v) {
         findNext(v);
@@ -299,20 +279,17 @@ export function Editor(props: EditorProps) {
       markdownExt,
       noteSyntax,
       previewComp.of(previewExts(preview)),
-      // rendered-table cells route their Mod-clicked links through the same
-      // app handlers as gf / Mod-click on raw text
+      // rendered-table cells route their Mod-clicked URLs through the same app
+      // handler as gx / Mod-click on raw text
       linkHandlers.of({
-        follow: (t) => propsRef.current.onFollowLink(t),
         openUrl: (u) => propsRef.current.onOpenUrl(u),
       }),
-      wikilinkComplete(() => propsRef.current.linkTargets),
-      completionKeys,
       EditorView.lineWrapping,
       nsTheme,
-      // Mod-click (Cmd/Ctrl) opens the link under the pointer — a wikilink or an
-      // external URL — leaving plain click for cursor placement. A `cm-mod-active`
-      // class (toggled while Mod is held) reveals the link cursor only then, so
-      // the pointer affordance is honest; blur clears any lingering state.
+      // Mod-click (Cmd/Ctrl) opens the external URL under the pointer, leaving
+      // plain click for cursor placement. A `cm-mod-active` class (toggled while
+      // Mod is held) reveals the link cursor only then, so the pointer affordance
+      // is honest; blur clears any lingering state.
       EditorView.domEventHandlers({
         mousedown(e, view) {
           if (e.button !== 0 || !modActive(e)) return false;
@@ -380,7 +357,6 @@ export function Editor(props: EditorProps) {
         propsRef.current.onQuit();
       },
       command: (c) => propsRef.current.onCommand(c),
-      followLink: (t) => propsRef.current.onFollowLink(t),
       openUrl: (u) => propsRef.current.onOpenUrl(u),
     });
 
