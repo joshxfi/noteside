@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { byIdHelper as byId, type Config, EDITOR_FONTS, ESC_PRESETS } from "../settings";
 import { previewGradient, themeById } from "../themes";
-import { checkForUpdate, DOWNLOAD_PAGE, type UpdateCheck } from "../check-update";
+import { DOWNLOAD_PAGE, type UpdateCheck } from "../check-update";
 import { openExternal } from "../open-external";
 import { useAppVersion } from "../use-app-version";
 
@@ -63,6 +63,10 @@ function Row({
 export interface SettingsPanelProps {
   cfg: Config;
   setCfg: (patch: Partial<Config>) => void;
+  /** Latest update-check result, owned by App (the boot check runs there). */
+  update: UpdateCheck | null;
+  /** Force an on-demand re-check; resolves to the fresh result. */
+  onCheckUpdate: () => Promise<UpdateCheck>;
   onClose: () => void;
   onEditFile: () => void;
   onShortcuts: () => void;
@@ -72,6 +76,8 @@ export interface SettingsPanelProps {
 export function SettingsPanel({
   cfg,
   setCfg,
+  update,
+  onCheckUpdate,
   onClose,
   onEditFile,
   onShortcuts,
@@ -83,7 +89,11 @@ export function SettingsPanel({
     ESC_PRESETS.some((p) => p.value === cfg.escMap) ? "" : cfg.escMap,
   );
   const version = useAppVersion();
-  const [about, setAbout] = useState<{ kind: "idle" | "checking" } | UpdateCheck>({ kind: "idle" });
+  // Seed from App's boot-check result (an auto-check may already have found an
+  // update while Settings was closed); the manual button re-checks through App.
+  const [about, setAbout] = useState<{ kind: "idle" | "checking" } | UpdateCheck>(
+    update ?? { kind: "idle" },
+  );
 
   useEffect(() => {
     panelRef.current?.focus();
@@ -91,7 +101,7 @@ export function SettingsPanel({
 
   const runCheck = async () => {
     setAbout({ kind: "checking" });
-    setAbout(await checkForUpdate(version));
+    setAbout(await onCheckUpdate());
   };
   // The About row's keyboard/click action: once an update is found (or the check
   // failed) it opens the landing's OS-aware download section; otherwise it
@@ -147,7 +157,7 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..11) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => onPickTheme() }, // idx 0 — Theme: opens the live-preview picker
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
@@ -176,7 +186,8 @@ export function SettingsPanel({
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
     { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
-    { cycle: onAboutAction }, // idx 11 — About: check for updates / open releases
+    { cycle: () => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck }) }, // idx 11 — Automatic updates
+    { cycle: onAboutAction }, // idx 12 — About: check for updates / open releases
   ];
 
   const currentTheme = themeById(cfg.theme);
@@ -447,7 +458,23 @@ export function SettingsPanel({
           </Row>
 
           <div className="set-sec">About</div>
-          <Row idx={11} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+          <Row
+            idx={11}
+            focus={focus}
+            setFocus={setFocus}
+            label="Automatic updates"
+            hint="check on launch"
+          >
+            <button
+              type="button"
+              tabIndex={-1}
+              className={"set-switch" + (cfg.autoUpdateCheck ? " is-on" : "")}
+              onClick={() => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck })}
+            >
+              <span className="set-knob" />
+            </button>
+          </Row>
+          <Row idx={12} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
             {aboutControl()}
           </Row>
         </div>

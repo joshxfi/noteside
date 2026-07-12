@@ -25,6 +25,9 @@ export interface Config {
   cursorBlink: boolean;
   /** Render markdown inline (Obsidian-style), hiding markup off the cursor line. */
   livePreview: boolean;
+  /** Check GitHub for a newer release on launch (throttled). No auto-install —
+   *  a found update just surfaces a badge + the About row's download link. */
+  autoUpdateCheck: boolean;
   vimMode: boolean;
   escMap: string;
   /** Raw vim map lines (e.g. "nmap <Space>w :w<CR>"), applied via Vim.map. */
@@ -72,6 +75,7 @@ export const CONFIG_DEFAULTS: Config = {
   cursor: "block",
   cursorBlink: true,
   livePreview: true,
+  autoUpdateCheck: true,
   vimMode: true,
   escMap: "",
   keymaps: [],
@@ -106,6 +110,9 @@ export function serializeConfig(c: Config): string {
   L.push('" editor');
   L.push(`set live-preview = ${c.livePreview ? "on" : "off"}`);
   L.push(`set relative-numbers = ${c.relativeNumbers ? "on" : "off"}`);
+  L.push("");
+  L.push('" updates');
+  L.push(`set auto-update  = ${c.autoUpdateCheck ? "on" : "off"}`);
   L.push("");
   L.push('" keys');
   L.push(`set vim          = ${c.vimMode ? "on" : "off"}`);
@@ -180,6 +187,8 @@ export function parseConfig(text: string, base: Config): Config {
       } else if (key === "cursor-blink") c.cursorBlink = /^(on|true|yes|1)$/i.test(val);
       else if (key === "live-preview" || key === "preview")
         c.livePreview = /^(on|true|yes|1)$/i.test(val);
+      else if (key === "auto-update" || key === "auto-updates" || key === "update-check")
+        c.autoUpdateCheck = /^(on|true|yes|1)$/i.test(val);
       else if (key === "relative-numbers" || key === "relativenumber" || key === "rnu")
         c.relativeNumbers = /^(on|true|yes|1)$/i.test(val);
       else if (key === "vim" || key === "vim-mode") c.vimMode = /^(on|true|yes|1)$/i.test(val);
