@@ -7,6 +7,7 @@
 // Scope: the conventional Mod- chord layer only. Vim nmap/imap mappings live in
 // ~/.notesiderc and are out of scope (noted in the footer).
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import {
   type ChordOverrides,
   chordConflict,
@@ -15,6 +16,7 @@ import {
   effectiveChord,
   eventChord,
 } from "../editor/commands";
+import { subseq } from "./list-nav";
 
 const GROUP_ORDER: Command["group"][] = ["Find", "Note", "View", "Settings", "Help"];
 // Lone modifier keydowns are ignored while recording so the user can hold them.
@@ -36,8 +38,9 @@ function slotFor(c: Command, overrides: ChordOverrides): Slot {
 }
 
 export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: CheatsheetProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [query, setQuery] = useState("");
   const [focus, setFocus] = useState(0);
   const [recording, setRecording] = useState(false);
   const [conflict, setConflict] = useState<{
@@ -48,18 +51,27 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
-    ref.current?.focus();
+    inputRef.current?.focus();
   }, []);
 
-  // Flat, group-ordered command list; the flat index drives j/k focus.
+  // Filter by action name, ex-command, and group — then flatten (group-ordered).
+  // The flat index drives ↑↓ focus; empty groups drop out while searching.
+  const q = query.trim().toLowerCase();
   const { groups, flat } = useMemo(() => {
+    const match = (c: Command) =>
+      subseq(q, c.title) || subseq(q, c.group) || (c.ex?.some((e) => subseq(q, e)) ?? false);
     let i = 0;
     const gs = GROUP_ORDER.map((g) => ({
       g,
-      rows: commands.filter((c) => c.group === g).map((c) => ({ c, i: i++ })),
+      rows: commands.filter((c) => c.group === g && match(c)).map((c) => ({ c, i: i++ })),
     })).filter((grp) => grp.rows.length);
     return { groups: gs, flat: gs.flatMap((grp) => grp.rows.map((r) => r.c)) };
-  }, [commands]);
+  }, [commands, q]);
+
+  // A shrinking filter can leave focus past the end — clamp it back into range.
+  useEffect(() => {
+    setFocus((f) => (f >= flat.length ? Math.max(0, flat.length - 1) : f));
+  }, [flat.length]);
 
   useEffect(() => {
     rowRefs.current[focus]?.scrollIntoView({ block: "nearest" });
@@ -103,7 +115,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     setConfirmReset(false);
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (conflict) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -139,54 +151,55 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
       }
       return;
     }
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault();
-        onClose();
-        break;
-      case "j":
-      case "ArrowDown":
-        e.preventDefault();
-        setFocus((f) => Math.min(flat.length - 1, f + 1));
-        break;
-      case "k":
-      case "ArrowUp":
-        e.preventDefault();
-        setFocus((f) => Math.max(0, f - 1));
-        break;
-      case "Enter":
-      case " ":
-        e.preventDefault();
-        setRecording(true);
-        break;
-      case "Backspace":
-      case "Delete":
-        e.preventDefault();
-        setChord(cur.id, "");
-        break;
-      case "r":
-        e.preventDefault();
-        setChord(cur.id, null);
-        break;
+    // Navigation + editing run alongside typing in the search field: ↑↓ (Ctrl-n/p)
+    // move, Enter rebinds the selected row; everything else falls through so the
+    // input filters. j/k/r can't be bare keys here — they'd type into the query.
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
+      e.preventDefault();
+      setFocus((f) => Math.min(flat.length - 1, f + 1));
+    } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
+      e.preventDefault();
+      setFocus((f) => Math.max(0, f - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (cur) setRecording(true);
+    } else if ((e.key === "Backspace" || e.key === "Delete") && query === "" && cur) {
+      // With no query to edit, Backspace/Delete unbinds the selected row (reset
+      // still lives on the ⟲ button + "Reset all"), keeping quick unbind reachable.
+      e.preventDefault();
+      setChord(cur.id, "");
     }
+    // otherwise: let the key type into / edit the search query
   };
 
   return (
     <div className="pal-scrim" onMouseDown={onClose}>
       <div
         className="pal-panel cheat-panel"
-        ref={ref}
-        tabIndex={0}
         role="dialog"
         aria-label="Keyboard shortcuts"
-        onKeyDown={onKeyDown}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="pal-head">Keyboard shortcuts</div>
-        <div className="cheat-subhead">
-          j/k move · enter rebind · del unbind · r reset · esc close
+        <div className="cheat-search">
+          <Search className="cheat-search-glyph" size={14} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            className="cheat-search-input"
+            value={query}
+            spellCheck={false}
+            placeholder="search shortcuts…"
+            aria-label="Search shortcuts"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
         </div>
+        <div className="cheat-subhead">↑↓ move · ↵ rebind · type to search · esc close</div>
         <div className="cheat-list" role="list">
+          {groups.length === 0 && <div className="cheat-empty">no shortcuts match “{query}”</div>}
           {groups.map(({ g, rows }) => (
             <div key={g} className="cheat-group">
               <div className="cheat-grouphead">{g}</div>
@@ -215,6 +228,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       onClick={() => {
                         setFocus(i);
                         setRecording(true);
+                        inputRef.current?.focus(); // recording captures keys via the input
                       }}
                     >
                       <span className="cheat-title">
