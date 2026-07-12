@@ -17,4 +17,11 @@ describe("tauri capabilities", () => {
       expect(caps.permissions).toContain(p);
     }
   });
+
+  // The note row's native right-click menu (native-menu.ts → Menu.new/popup)
+  // needs this grant; without it the popup invoke is silently denied and
+  // right-click does nothing — the same failure mode as the destroy gap above.
+  it("grants the menu permissions the native context menu needs", () => {
+    expect(caps.permissions).toContain("core:menu:default");
+  });
 });
