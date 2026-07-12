@@ -61,7 +61,9 @@ the app:
 | `:find` (`:files`)    | Fuzzy file & content finder                      |
 | `:grep`               | Search note contents                             |
 | `gx` / `:follow`      | Open the URL under the cursor in the browser     |
-| `:new` / `:rm`        | New note · delete note                           |
+| `:new` / `:rm`        | New note · delete note (asks to confirm)         |
+| `:dup` · `:rename`    | Duplicate · rename the current note              |
+| `:reveal`             | Reveal the note's file in the OS file manager    |
 | `:notebook` (`:nb`)   | Switch, open, or create a notebook               |
 | `:preview`            | Toggle inline live-preview                       |
 | `:theme`              | Theme picker (also vim's `:colorscheme`/`:colo`) |
@@ -73,6 +75,12 @@ the app:
 
 Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
 `~/.notesiderc` and apply on `:w`.
+
+<Callout title="Right-click a note">
+  A right-click on a note in the sidebar opens a native menu — **Open**, **Reveal in
+  Finder/Explorer**, **Duplicate**, **Rename…**, and **Delete** — the same actions as the commands
+  above. Delete and Rename open a small confirmation / input dialog.
+</Callout>
 
 ## The `<Space>` leader palette
 
@@ -99,17 +107,19 @@ Three surfaces help you find your way:
 - **`⌘⇧P` — command palette.** A searchable list of every command (also `:commands`).
 - **`<Space>` — which-key menu.** In vim normal mode, shows the leader keys above as
   you start typing.
-- **`⌘/` — cheatsheet.** A scannable overview of every chord and command.
+- **`⌘/` — cheatsheet.** A **searchable** list of every chord and command — type to
+  filter it down.
 
 ## Editing shortcuts
 
 The `⌘/` cheatsheet doubles as a **live keymap editor** — no config file needed. Open it
-(or **Settings → Keys → Edit keys**), focus a command with `j`/`k`, then:
+(or **Settings → Keys → Edit keys**). It leads with a **search box**: type to filter the
+list (by command name or `:ex`-command), then `↑`/`↓` to pick a command and:
 
-- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Replace / Cancel)
-- **Del** — unbind the command
-- **r** — reset it to its default
-- **Reset all keys** — restore every default (footer)
+- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Replace /
+  Cancel). While recording, **Backspace** unbinds the command instead.
+- **⟲** on the selected row resets that command to its default; **Reset all keys** (footer)
+  restores every default.
 
 Changes apply instantly and persist to `~/.notesiderc` as `bind` lines, so the file and
 the editor never drift.
