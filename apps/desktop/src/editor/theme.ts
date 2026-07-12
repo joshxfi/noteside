@@ -61,8 +61,8 @@ export const nsTheme = EditorView.theme({
   ".cm-searchMatch-selected": {
     backgroundColor: "color-mix(in oklab, var(--accent), transparent 35%)",
   },
-  // [[wikilinks]]
-  ".cm-wikilink": {
+  // rendered-table URL links (block-preview.ts)
+  ".cm-mdlink": {
     color: "var(--accent)",
     textDecoration: "underline",
     textDecorationColor: "color-mix(in oklab, var(--accent), transparent 55%)",
@@ -70,7 +70,7 @@ export const nsTheme = EditorView.theme({
   },
   // The "clickable" affordance is only true while Mod is held (Mod-click opens),
   // so surface the pointer cursor + brighter underline only then.
-  "&.cm-mod-active .cm-wikilink": {
+  "&.cm-mod-active .cm-mdlink": {
     cursor: "pointer",
     textDecorationColor: "var(--accent)",
   },

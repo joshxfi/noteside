@@ -2,7 +2,7 @@
 // from the sample notebook; search mirrors the Rust behaviour closely enough for
 // the demo. Config/last-notebook persist to localStorage.
 import { NOTES } from "../data";
-import { computeBacklinks, slugifyTitle, stemMatchesSlug } from "../links";
+import { slugifyTitle, stemMatchesSlug } from "../links";
 import type { Config } from "../settings";
 import type {
   Backend,
@@ -58,7 +58,7 @@ const JOURNAL: Seed[] = [
   {
     path: "ideas.md",
     title: "Ideas",
-    body: "# Ideas\n\n- a calmer inbox\n- revisit [[Monday]]\n",
+    body: "# Ideas\n\n- a calmer inbox\n- revisit Monday's notes\n",
     tag: "log",
   },
 ];
@@ -340,11 +340,6 @@ export const mockBackend: Backend = {
     const r = recs.get(path);
     if (!r) throw new Error(`no such note: ${path}`);
     return { ...r.meta, body: r.body };
-  },
-  async backlinks(noteId) {
-    const notes = metas();
-    const docs = notes.map((m) => ({ ...m, body: recs.get(m.path)?.body ?? "" }));
-    return computeBacklinks(noteId, docs, notes);
   },
   async saveNote(path, body) {
     const existing = recs.get(path);

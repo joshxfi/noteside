@@ -17,10 +17,10 @@ pub struct NoteRecord {
 
 /// Walk a notebook folder and read every Markdown file into a record. Hidden
 /// directories (including `.noteside/` and `.git/`) are skipped. The reads fan
-/// out across threads, then the result is sorted by path: a scan must be
-/// deterministic because wikilink resolution tie-breaks on the first record.
-/// Records come `Arc`-wrapped: the index treats them as immutable values, so
-/// state mutations shallow-copy the index instead of cloning note bodies.
+/// out across threads, then the result is sorted by path so by-path lookups can
+/// binary-search and the ordering stays deterministic. Records come
+/// `Arc`-wrapped: the index treats them as immutable values, so state mutations
+/// shallow-copy the index instead of cloning note bodies.
 pub fn scan_notebook(root: &Path) -> Vec<Arc<NoteRecord>> {
     let paths: Vec<PathBuf> = WalkDir::new(root)
         .into_iter()
@@ -288,10 +288,10 @@ pub fn atomic_write(abs: &Path, text: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Build a filesystem-safe slug from a title. ASCII-only: mirrors `links::slug`
-/// and the JS `slugifyTitle` byte-for-byte (so the rename pre-check and wikilink
-/// resolution agree — see src/test-vectors/parity.json). Non-ASCII and
-/// punctuation collapse to a single '-'; falls back to "untitled".
+/// Build a filesystem-safe slug from a title. ASCII-only: mirrors the JS
+/// `slugifyTitle` byte-for-byte (so the rename pre-check agrees across the IPC
+/// boundary — see src/test-vectors/parity.json). Non-ASCII and punctuation
+/// collapse to a single '-'; falls back to "untitled".
 pub fn slugify(title: &str) -> String {
     let mut out = String::new();
     let mut in_dash = false;

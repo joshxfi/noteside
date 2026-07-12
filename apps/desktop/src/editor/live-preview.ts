@@ -94,12 +94,11 @@ class CheckboxWidget extends WidgetType {
 const checkbox = { checked: new CheckboxWidget(true), unchecked: new CheckboxWidget(false) };
 
 // Lines touched by any selection range stay in "source" form so editing — and
-// vim column math — always sees the literal characters. Shared with the
-// wikilink decorations (same reveal-on-cursor-line behaviour). Ranges are
-// clamped to the viewport (a contiguous superset of visibleRanges) — both
-// consumers only query visible lines, and an unclamped whole-buffer selection
-// (ggVG) would otherwise materialize one Set entry per document line.
-export function activeLines(view: EditorView): Set<number> {
+// vim column math — always sees the literal characters. Ranges are clamped to
+// the viewport (a contiguous superset of visibleRanges) — the plugin only
+// queries visible lines, and an unclamped whole-buffer selection (ggVG) would
+// otherwise materialize one Set entry per document line.
+function activeLines(view: EditorView): Set<number> {
   const lines = new Set<number>();
   const { doc } = view.state;
   const { from: vFrom, to: vTo } = view.viewport;
@@ -113,9 +112,9 @@ export function activeLines(view: EditorView): Set<number> {
 }
 
 // A cheap identity for the current active-line set, letting the decoration
-// plugins skip a full viewport rebuild on selection moves that stayed on the
+// plugin skip a full viewport rebuild on selection moves that stayed on the
 // same lines (every h/l keypress). Sorted so multi-cursor range order is moot.
-export function activeLinesKey(view: EditorView): string {
+function activeLinesKey(view: EditorView): string {
   return [...activeLines(view)].sort((a, b) => a - b).join(",");
 }
 

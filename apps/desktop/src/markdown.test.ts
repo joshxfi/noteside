@@ -145,8 +145,6 @@ const show = (nodes: Inline[]): string =>
           return `em(${show(n.children)})`;
         case "strike":
           return `strike(${show(n.children)})`;
-        case "wikilink":
-          return `wiki(${n.target}${n.display ? "|" + n.display : ""})`;
         case "link":
           return `link(${n.text}→${n.url})`;
       }
@@ -176,11 +174,6 @@ describe("parseInline", () => {
     expect(show(parseInline("`a | b` x"))).toBe("code(a | b) x");
     expect(show(parseInline("`` a`b ``"))).toBe("code(a`b)");
     expect(show(parseInline("`**not bold**`"))).toBe("code(**not bold**)");
-  });
-
-  it("parses wikilinks with optional display text", () => {
-    expect(show(parseInline("see [[Keymap]]"))).toBe("see wiki(Keymap)");
-    expect(show(parseInline("[[Roadmap — Q3|the plan]]"))).toBe("wiki(Roadmap — Q3|the plan)");
   });
 
   it("parses web links; relative targets and images collapse to their text", () => {

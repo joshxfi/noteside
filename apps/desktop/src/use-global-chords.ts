@@ -5,7 +5,7 @@
 //
 // It defers in two cases, both load-bearing: (1) `enabled` is false whenever any
 // overlay is open — gated on React state, NOT document.activeElement, because the
-// which-key palette and backlinks panels focus tabIndex divs and don't
+// which-key palette and similar panels focus tabIndex divs and don't
 // stopPropagation; (2) an input/textarea/contenteditable or the CM editor owns
 // focus (the editor's own keymap handles those, so we never double-dispatch).
 import { useEffect, useRef } from "react";

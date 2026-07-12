@@ -7,8 +7,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, Result};
 use crate::frecency::{self, FrecencyEntry};
-use crate::links;
-use crate::models::{Backlink, ContentHit, FileHit, NoteDoc, NoteMeta};
+use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
 use crate::search;
 use crate::state::{find_record, AppState};
@@ -241,7 +240,7 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
 /// Rename a note's file so its slug matches its (frontmatter/heading-derived) title,
 /// staying WITHIN the note's own directory (a nested note is never hoisted to the
 /// root). No-op when the filename already represents the title (returns the current
-/// meta). Wikilinks resolve by title, so `[[links]]` keep working across the move.
+/// meta).
 #[tauri::command]
 pub async fn rename_note(
     path: String,
@@ -499,17 +498,6 @@ pub async fn search_content(
         )?)
     })
     .await
-}
-
-/// Notes that link to `id` via [[wikilinks]]. Scanned in Rust over the cached
-/// index so only the matching references cross IPC (not every note body).
-#[tauri::command]
-pub async fn backlinks(id: String, state: State<'_, AppState>) -> Result<Vec<Backlink>> {
-    let records = {
-        let g = state.notebook.lock().unwrap();
-        g.records.clone()
-    };
-    blocking(move || Ok(links::backlinks(records.as_slice(), &id))).await
 }
 
 #[cfg(test)]

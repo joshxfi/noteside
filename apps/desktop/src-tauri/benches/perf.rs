@@ -31,7 +31,7 @@ const WORDS: &[&str] = &[
     "offline",
     "markdown",
     "search",
-    "backlink",
+    "outline",
 ];
 const FOLDERS: &[&str] = &["journal", "work", "ideas", "recipes", "notes"];
 

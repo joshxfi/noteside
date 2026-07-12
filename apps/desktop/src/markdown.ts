@@ -4,10 +4,10 @@
 // benchable (perf.bench.ts) in node. The editor side (editor/block-preview.ts)
 // maps these line-indexed blocks onto document positions and widgets.
 //
-// The scanner is line-based on purpose (the same philosophy as the wikilink
-// regex scan): it re-derives every block from the raw lines in one pass, so the
-// result is deterministic, independent of lezer's incremental parse state, and
-// cheap enough to run on every document change (see the scanBlocks bench).
+// The scanner is line-based on purpose: it re-derives every block from the raw
+// lines in one pass, so the result is deterministic, independent of lezer's
+// incremental parse state, and cheap enough to run on every document change
+// (see the scanBlocks bench).
 
 export type Align = "left" | "center" | "right" | null;
 
@@ -176,8 +176,8 @@ export function scanBlocks(lines: readonly string[]): MarkdownBlocks {
 
 // ── inline tokenizer ───────────────────────────────────────────────────────
 // Just enough inline markdown for rendered table cells: code spans, strong,
-// em, strikethrough, wikilinks, and http(s)/mailto links. Everything the
-// tokenizer doesn't recognize stays literal text — cells never lose content.
+// em, strikethrough, and http(s)/mailto links. Everything the tokenizer doesn't
+// recognize stays literal text — cells never lose content.
 
 export type Inline =
   | { t: "text"; text: string }
@@ -185,13 +185,10 @@ export type Inline =
   | { t: "strong"; children: Inline[] }
   | { t: "em"; children: Inline[] }
   | { t: "strike"; children: Inline[] }
-  | { t: "wikilink"; target: string; display: string | null }
   | { t: "link"; text: string; url: string };
 
-// Sticky regexes, lastIndex set before every exec. parseInline recurses, but
-// each exec completes before the recursive call, so the shared state is safe
-// (the same non-reentrancy argument as links.ts's module-level /g regexes).
-const WIKI_Y = /\[\[([^[\]|\n]+?)(?:\|([^[\]|\n]+?))?\]\]/y;
+// Sticky regex, lastIndex set before every exec. parseInline recurses, but each
+// exec completes before the recursive call, so the shared state is safe.
 const LINK_Y = /\[([^\]\n]*)\]\(([^()\s]+)\)/y;
 const URL_SCHEME = /^(?:https?|mailto):/i;
 const MAX_DEPTH = 6;
@@ -243,15 +240,6 @@ export function parseInline(src: string, depth = 0): Inline[] {
           flush();
           out.push({ t: "code", text: code });
           i = close + run - 1;
-          continue;
-        }
-      } else if (ch === "[" && src[i + 1] === "[") {
-        WIKI_Y.lastIndex = i;
-        const m = WIKI_Y.exec(src);
-        if (m) {
-          flush();
-          out.push({ t: "wikilink", target: m[1].trim(), display: m[2] ? m[2].trim() : null });
-          i += m[0].length - 1;
           continue;
         }
       } else if (ch === "[" || (ch === "!" && src[i + 1] === "[")) {

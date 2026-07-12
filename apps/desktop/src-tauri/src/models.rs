@@ -40,16 +40,6 @@ pub struct FileHit {
     pub title_positions: Vec<u32>,
 }
 
-/// A note that links to the current one (one reference line per source note).
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Backlink {
-    pub id: String,
-    pub title: String,
-    pub line_number: u32,
-    pub line: String,
-}
-
 /// A single line-level content match. `ranges` are byte offsets into `line`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
