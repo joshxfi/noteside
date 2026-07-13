@@ -99,6 +99,13 @@ export function SettingsPanel({
     panelRef.current?.focus();
   }, []);
 
+  // If App's boot/auto check resolves while the panel is already open, reflect it
+  // in the About row too (not just the sidebar dot) — unless a manual check is
+  // mid-flight, which owns the row until it settles.
+  useEffect(() => {
+    if (update) setAbout((a) => (a.kind === "checking" ? a : update));
+  }, [update]);
+
   const runCheck = async () => {
     setAbout({ kind: "checking" });
     setAbout(await onCheckUpdate());
