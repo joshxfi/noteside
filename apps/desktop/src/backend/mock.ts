@@ -425,7 +425,9 @@ export const mockBackend: Backend = {
     const dirEnd = path.lastIndexOf("/") + 1;
     const stem = path.slice(dirEnd).replace(/\.md$/, "");
     if (stemMatchesSlug(stem, slug)) {
-      const meta: NoteMeta = { ...r.meta, title: newTitle };
+      // Rust rewrites the file (bumping mtime → updated), so mirror that here or
+      // the two adapters disagree on sidebar order after a same-slug retitle.
+      const meta: NoteMeta = { ...r.meta, title: newTitle, updated: Date.now() };
       recs.set(path, { meta, body });
       return meta;
     }
