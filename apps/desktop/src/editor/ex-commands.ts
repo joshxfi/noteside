@@ -4,35 +4,8 @@
 import { Vim } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
 import { urlAt } from "../links";
-import { COMMANDS, type Command } from "./commands";
+import { COMMANDS, type AppCommand, type Command } from "./commands";
 import { registerVimApplier } from "./vim-config";
-
-export type AppCommand =
-  | "find"
-  | "grep"
-  | "notebooks"
-  | "nav"
-  | "settings"
-  | "theme"
-  | "config"
-  | "new"
-  | "delete"
-  | "duplicate"
-  | "reveal"
-  | "rename"
-  | "palette"
-  | "commands"
-  | "togglePreview"
-  | "reopen"
-  | "nextNote"
-  | "prevNote"
-  | "fontUp"
-  | "fontDown"
-  | "fontReset"
-  | "uiUp"
-  | "uiDown"
-  | "uiReset"
-  | "cheatsheet";
 
 export interface EditorHandlers {
   view: EditorView;

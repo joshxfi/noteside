@@ -209,6 +209,27 @@ describe("editingSession", () => {
     expect(bodies.get("b.md")).toBe("content B");
   });
 
+  it("open() awaits an autosave that the debounce timer already launched", async () => {
+    const { session, calls, bodies } = makeSession(
+      { "a.md": "A", "b.md": "B" },
+      {},
+      { "a.md": 50 },
+    );
+    const firstOpen = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await firstOpen;
+    session.change("A saved slowly");
+    await vi.advanceTimersByTimeAsync(800); // launch save(A), still 50ms from landing
+
+    const switchNote = session.open("b.md");
+    await vi.advanceTimersByTimeAsync(49);
+    expect(calls).not.toContain("read:b.md");
+    await vi.advanceTimersByTimeAsync(1);
+    await switchNote;
+    expect(bodies.get("a.md")).toBe("A saved slowly");
+    expect(calls.indexOf("save:a.md")).toBeLessThan(calls.indexOf("read:b.md"));
+  });
+
   it("a stale in-flight save does not clear dirty after a newer edit", async () => {
     const { session, bodies } = makeSession({ "a.md": "A" }, {}, { "a.md": 50 });
     const open = session.open("a.md");
@@ -335,6 +356,19 @@ describe("editingSession", () => {
     expect(s.initialText).toBe("v3");
   });
 
+  it("reconcile() preserves a dirty buffer when the note is temporarily absent", async () => {
+    const { session, bodies, notices } = makeSession({ "a.md": "on disk" });
+    await session.open("a.md");
+    session.change("only in memory");
+    bodies.delete("a.md"); // transient scan omission and a delete look identical here
+
+    await session.reconcile();
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("a.md");
+    expect(s.dirty).toBe(true);
+    expect(notices).toContain("note unavailable on disk; unsaved buffer preserved");
+  });
+
   it("C2: editorKey changes when re-opening the SAME note at the SAME line", async () => {
     const { session } = makeSession({ "a.md": "A" });
     await session.open("a.md", 0);
@@ -454,6 +488,21 @@ describe("editingSession", () => {
     expect(session.getSnapshot().activeId).toBe("a.md");
   });
 
+  it("immediate reopen waits for the save started by quit()", async () => {
+    const { session } = makeSession({ "a.md": "A" }, {}, { "a.md": 50 });
+    const firstOpen = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await firstOpen;
+    session.change("edited before quit");
+
+    const quit = session.quit();
+    session.reopenLast();
+    await vi.advanceTimersByTimeAsync(50);
+    await quit;
+    await vi.advanceTimersByTimeAsync(50);
+    expect(session.getSnapshot().initialText).toBe("edited before quit");
+  });
+
   it("cancelAutosave() drops a queued save so a later delete can't be resurrected", async () => {
     const { session, bodies } = makeSession({ "a.md": "A" });
     await session.open("a.md");
@@ -461,6 +510,39 @@ describe("editingSession", () => {
     session.cancelAutosave();
     await vi.advanceTimersByTimeAsync(800);
     expect(bodies.get("a.md")).toBe("A"); // the queued save never fired
+  });
+
+  it("cancelAutosave() awaits a timer-fired save before deletion may proceed", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" }, {}, { "a.md": 50 });
+    const firstOpen = session.open("a.md");
+    await vi.advanceTimersByTimeAsync(50);
+    await firstOpen;
+    session.change("already writing");
+    await vi.advanceTimersByTimeAsync(800);
+
+    let readyToDelete = false;
+    const barrier = session.cancelAutosave().then(() => {
+      readyToDelete = true;
+    });
+    await vi.advanceTimersByTimeAsync(49);
+    expect(readyToDelete).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await barrier;
+    expect(bodies.get("a.md")).toBe("already writing");
+  });
+
+  it("resumeAutosave() restores the latest edit after a failed delete", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.change("before delete");
+    await session.cancelAutosave();
+    session.change("typed while delete was pending");
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("a.md")).toBe("A"); // paused: cannot race after delete
+
+    session.resumeAutosave(); // backend delete failed; restore durability
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("a.md")).toBe("typed while delete was pending");
   });
 
   it("explicit save renames the file to match the title, migrating the id without a remount", async () => {
@@ -593,9 +675,7 @@ describe("editingSession", () => {
     expect(session.getSnapshot().dirty).toBe(false); // and settled the buffer
   });
 
-  // REGRESSION (review): noteTitle was assigned unconditionally after the rename
-  // await, clobbering the title of a note opened while the rename was in flight.
-  it("switching notes during an in-flight rename does not clobber the new note's title", async () => {
+  it("switching notes waits for an in-flight save+rename before reading the destination", async () => {
     const { session, renamed } = makeSession(
       { "untitled.md": "# Hello World\n", "b.md": "B" },
       {},
@@ -603,12 +683,14 @@ describe("editingSession", () => {
     );
     await session.open("untitled.md");
     session.save("# Hello World\n");
-    const openB = session.open("b.md"); // parked on the 10ms read
+    const openB = session.open("b.md"); // waits on rename first, then the 10ms read
     await vi.advanceTimersByTimeAsync(0); // persist resolves; rename passes its guard, parks on 50ms
-    await vi.advanceTimersByTimeAsync(10); // b.md opens
+    await vi.advanceTimersByTimeAsync(49);
+    expect(session.getSnapshot().activeId).toBe("untitled.md");
+    await vi.advanceTimersByTimeAsync(1); // rename resolves
+    await vi.advanceTimersByTimeAsync(10); // b.md opens only after the barrier
     await openB;
     expect(session.getSnapshot().title).toBe("b");
-    await vi.advanceTimersByTimeAsync(50); // rename resolves with A's new meta
     const s = session.getSnapshot();
     expect(s.activeId).toBe("b.md");
     expect(s.title).toBe("b"); // NOT "Hello World"

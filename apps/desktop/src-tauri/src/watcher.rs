@@ -25,6 +25,85 @@ enum Refresh {
     Full(Vec<Arc<NoteRecord>>),
 }
 
+fn compute_refresh(root: &Path, events: Option<&[DebouncedEvent]>) -> std::io::Result<Refresh> {
+    if let Some(events) = events {
+        if let Some(updates) = classify_events(events).and_then(|c| targeted_updates(root, &c)) {
+            return Ok(Refresh::Targeted(updates));
+        }
+    }
+    Ok(Refresh::Full(notebook::scan_notebook(root)?))
+}
+
+fn apply_refresh(state: &mut NotebookState, refresh: Refresh) {
+    match refresh {
+        Refresh::Targeted(updates) => state.apply_external(updates),
+        Refresh::Full(records) => state.set_records(records),
+    }
+}
+
+/// Refresh outside the state lock and commit only when no newer index mutation
+/// raced the disk read. After several collisions, take the rare locked fallback:
+/// commands may still write disk concurrently, but their state commit orders
+/// after this refresh, so the final index cannot regress to the older snapshot.
+fn refresh_current(
+    notebook: &Arc<Mutex<NotebookState>>,
+    root: &Path,
+    generation: u64,
+    events: Option<&[DebouncedEvent]>,
+) -> bool {
+    for _ in 0..3 {
+        let revision = {
+            let Ok(g) = notebook.lock() else { return false };
+            if !g.matches_context(root, generation) {
+                return false;
+            }
+            g.revision()
+        };
+        let Ok(refresh) = compute_refresh(root, events) else {
+            return false; // preserve the current index on any scan/read failure
+        };
+        let Ok(mut g) = notebook.lock() else {
+            return false;
+        };
+        if !g.matches_context(root, generation) {
+            return false;
+        }
+        if g.revision() != revision {
+            continue;
+        }
+        apply_refresh(&mut g, refresh);
+        return true;
+    }
+
+    let Ok(mut g) = notebook.lock() else {
+        return false;
+    };
+    if !g.matches_context(root, generation) {
+        return false;
+    }
+    let Ok(refresh) = compute_refresh(root, events) else {
+        return false;
+    };
+    apply_refresh(&mut g, refresh);
+    true
+}
+
+fn relevant_paths(root: &Path, events: &[DebouncedEvent]) -> Vec<String> {
+    let mut paths: Vec<String> = events
+        .iter()
+        .flat_map(|event| event.paths.iter())
+        .filter(|path| path.extension().and_then(|x| x.to_str()) == Some("md"))
+        .filter_map(|path| {
+            path.strip_prefix(root)
+                .ok()
+                .map(|_| notebook::rel_path(root, path))
+        })
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 /// Map a debounced batch to targeted per-path changes, or `None` when only a
 /// full rescan is safe: renames (surface with unreliable paths), multi-path
 /// events, non-`.md` paths mixed in, and unknown event kinds.
@@ -108,12 +187,14 @@ fn targeted_updates(
 /// debounced change to any `.md` file, refresh the in-memory index — reading just
 /// the reported paths when the batch is unambiguous, rebuilding it whole otherwise —
 /// and notify the frontend via the `notebook:changed` event. Our own writes are
-/// skipped via `suppress_until`.
+/// skipped only when every relevant path is an own-write echo.
 pub fn start_watcher(
     app: AppHandle,
     notebook: Arc<Mutex<NotebookState>>,
     root: PathBuf,
+    generation: u64,
 ) -> notify::Result<Debouncer<RecommendedWatcher, FileIdMap>> {
+    let watched_root = root.clone();
     let mut debouncer = new_debouncer(
         Duration::from_millis(400),
         None,
@@ -125,59 +206,31 @@ pub fn start_watcher(
                 // ambiguous batch. No paths are available here, so skip the .md
                 // prefilter and the echo-suppression check and rescan wholesale.
                 Err(_) => {
-                    let r = {
-                        let Ok(g) = notebook.lock() else { return };
-                        let Some(r) = g.root.clone() else { return };
-                        r
-                    };
-                    let records = notebook::scan_notebook(&r);
-                    let Ok(mut g) = notebook.lock() else { return };
-                    if g.root.as_ref() != Some(&r) {
-                        return; // notebook switched while the rescan was running
+                    if refresh_current(&notebook, &watched_root, generation, None) {
+                        let _ = app.emit("notebook:changed", ());
                     }
-                    g.set_records(records);
-                    drop(g);
-                    let _ = app.emit("notebook:changed", ());
                     return;
                 }
             };
-            let touches_md = events.iter().any(|e| {
-                e.paths
-                    .iter()
-                    .any(|p| p.extension().and_then(|x| x.to_str()) == Some("md"))
-            });
-            if !touches_md {
+            let paths = relevant_paths(&watched_root, &events);
+            if paths.is_empty() {
                 return;
             }
-            let r = {
-                let g = match notebook.lock() {
+            {
+                let mut g = match notebook.lock() {
                     Ok(g) => g,
                     Err(_) => return,
                 };
-                if g.should_ignore_event(Instant::now()) {
+                if !g.matches_context(&watched_root, generation) {
+                    return;
+                }
+                if g.should_ignore_event(&paths, Instant::now()) {
                     return; // echo of our own write
                 }
-                let Some(r) = g.root.clone() else { return };
-                r
-            };
-            // Disk I/O stays outside the lock, exactly like the full rescan.
-            let refresh = match classify_events(&events).and_then(|c| targeted_updates(&r, &c)) {
-                Some(updates) => Refresh::Targeted(updates),
-                None => Refresh::Full(notebook::scan_notebook(&r)),
-            };
-            let mut g = match notebook.lock() {
-                Ok(g) => g,
-                Err(_) => return,
-            };
-            if g.root.as_ref() != Some(&r) {
-                return; // notebook switched while the refresh was running
             }
-            match refresh {
-                Refresh::Targeted(updates) => g.apply_external(updates),
-                Refresh::Full(records) => g.set_records(records),
+            if refresh_current(&notebook, &watched_root, generation, Some(&events)) {
+                let _ = app.emit("notebook:changed", ());
             }
-            drop(g);
-            let _ = app.emit("notebook:changed", ());
         },
     )?;
     debouncer.watcher().watch(&root, RecursiveMode::Recursive)?;
@@ -187,8 +240,10 @@ pub fn start_watcher(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::NoteMeta;
     use notify::event::{CreateKind, DataChange, RemoveKind, RenameMode};
     use notify::Event;
+    use std::collections::HashMap;
 
     fn ev(kind: EventKind, paths: &[&Path]) -> DebouncedEvent {
         let mut e = Event::new(kind);
@@ -196,6 +251,21 @@ mod tests {
             e = e.add_path(p.to_path_buf());
         }
         DebouncedEvent::new(e, Instant::now())
+    }
+
+    fn record(path: &str, body: &str) -> Arc<NoteRecord> {
+        Arc::new(NoteRecord {
+            meta: NoteMeta {
+                id: path.into(),
+                path: path.into(),
+                title: path.trim_end_matches(".md").into(),
+                tags: vec![],
+                created: None,
+                updated: 0,
+                pinned: false,
+            },
+            body: body.into(),
+        })
     }
 
     #[test]
@@ -277,5 +347,50 @@ mod tests {
         assert!(hidden.is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn relevant_paths_deduplicates_markdown_and_ignores_other_files() {
+        let root = Path::new("/nb");
+        let events = [
+            ev(
+                EventKind::Create(CreateKind::File),
+                &[Path::new("/nb/a.md")],
+            ),
+            ev(
+                EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+                &[Path::new("/nb/a.md"), Path::new("/nb/a.tmp")],
+            ),
+        ];
+        assert_eq!(relevant_paths(root, &events), vec!["a.md"]);
+    }
+
+    #[test]
+    fn failed_full_refresh_preserves_the_existing_index() {
+        let root = std::env::temp_dir().join(format!(
+            "noteside-watch-error-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("invalid.md"), [0xff]).unwrap();
+        let mut state = NotebookState::default();
+        let token = state.begin_load();
+        let generation = state
+            .finish_load(
+                token,
+                root.clone(),
+                vec![record("kept.md", "kept")],
+                HashMap::new(),
+            )
+            .unwrap();
+        let state = Arc::new(Mutex::new(state));
+        assert!(!refresh_current(&state, &root, generation, None));
+        assert_eq!(state.lock().unwrap().records[0].meta.path, "kept.md");
+        let _ = std::fs::remove_dir_all(root);
     }
 }

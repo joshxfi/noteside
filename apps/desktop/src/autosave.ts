@@ -23,14 +23,41 @@ export function createAutosave(
   save: (id: string, text: string, version?: number) => unknown,
   delayMs: number,
 ): Autosave {
-  let pending: { id: string; text: string | (() => string); version?: number } | null = null;
+  type PendingSave = { id: string; text: string | (() => string); version?: number };
+  let pending: PendingSave | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Every launched save stays represented here until it settles. Besides making
+  // flush() a real durability barrier, serializing saves prevents two writes to
+  // the same note from racing through the backend's atomic-write temp file.
+  let tail: Promise<void> = Promise.resolve();
+  const queued = new Set<PendingSave>();
+  let hasWork = false;
 
   const clearTimer = () => {
     if (timer !== null) {
       clearTimeout(timer);
       timer = null;
     }
+  };
+
+  const enqueue = (p: PendingSave): Promise<void> => {
+    queued.add(p);
+    const run = async () => {
+      await save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
+    };
+    // Preserve the coordinator's historical synchronous start: when idle, calling
+    // flush() or firing the timer invokes `save` in that same turn. Later work is
+    // chained so writes still cannot overlap.
+    const current = hasWork ? tail.catch(() => {}).then(run) : run();
+    hasWork = true;
+    tail = current
+      .finally(() => {
+        queued.delete(p);
+      })
+      .finally(() => {
+        if (queued.size === 0) hasWork = false;
+      });
+    return tail;
   };
 
   return {
@@ -41,14 +68,26 @@ export function createAutosave(
         timer = null;
         const p = pending;
         pending = null;
-        if (p) save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
+        // The timer has no caller to observe a rejection, but `tail` deliberately
+        // remains rejected so a later flush can still observe it.
+        if (p) void enqueue(p).catch(() => {});
       }, delayMs);
     },
     async flush() {
-      clearTimer();
-      const p = pending;
-      pending = null;
-      if (p) await save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
+      // A new edit can be scheduled while an already-launched save is awaiting
+      // IPC. Keep draining until both the launched tail and pending slot are empty.
+      for (;;) {
+        clearTimer();
+        const p = pending;
+        pending = null;
+        if (p) enqueue(p);
+        const observedTail = tail;
+        await observedTail;
+        // A timer may have fired while `observedTail` was pending. In that case it
+        // consumed `pending` itself and extended `tail`, so checking only the
+        // pending slot would return too early.
+        if (pending === null && tail === observedTail) return;
+      }
     },
     cancel() {
       clearTimer();
@@ -56,6 +95,9 @@ export function createAutosave(
     },
     repin(oldId, newId) {
       if (pending && pending.id === oldId) pending = { ...pending, id: newId };
+      // A save may already be queued behind another operation without having
+      // started yet. Mutate its pin before the callback reads it.
+      for (const p of queued) if (p.id === oldId) p.id = newId;
     },
   };
 }

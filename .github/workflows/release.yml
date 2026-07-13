@@ -3,10 +3,9 @@ name: Release
 # Deliberate, batched releases. You commit feat:/fix:/etc. freely to main; the
 # website + docs deploy on every push as usual. When you want to ship the
 # desktop app, run this workflow manually — semantic-release rolls every commit
-# since the last tag into one version, writes the changelog, tags it, and
-# creates the GitHub Release; the matrix build then attaches binaries to it.
-#
-# First run cuts v1.0.0 (no prior tags → semantic-release starts at 1.0.0).
+# since the last tag into one version, writes the changelog, and tags it. The
+# workflow creates a DRAFT release, the matrix attaches every native binary,
+# and a final job publishes it only after the complete matrix succeeds.
 # Use the dry_run input first to preview the version + notes without shipping.
 
 on:
@@ -27,8 +26,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # commit the changelog/version bump + push the tag
-      issues: write # used by @semantic-release/github
-      pull-requests: write
     outputs:
       version: ${{ steps.semantic.outputs.new_release_version }}
       published: ${{ steps.semantic.outputs.new_release_published }}
@@ -55,6 +52,14 @@ jobs:
           dry_run: ${{ inputs.dry_run }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create draft GitHub release
+        if: steps.semantic.outputs.new_release_published == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.semantic.outputs.new_release_version }}
+          RELEASE_NOTES: ${{ steps.semantic.outputs.new_release_notes }}
+        run: gh release create "v${VERSION}" --draft --title "Noteside v${VERSION}" --notes "${RELEASE_NOTES}"
 
   build:
     name: Build · ${{ matrix.label }}
@@ -115,9 +120,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          # The release already exists (created by the release job above);
-          # tauri-action finds it by tag and uploads this platform's bundles.
+          # The draft already exists; each matrix leg uploads its platform's bundles.
           tagName: v${{ needs.release.outputs.version }}
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish complete release
+    needs: [release, build]
+    if: needs.release.outputs.published == 'true' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish draft after every native build succeeds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release edit "v${VERSION}" --draft=false --latest

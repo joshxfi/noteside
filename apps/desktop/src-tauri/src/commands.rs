@@ -10,7 +10,7 @@ use crate::frecency::{self, FrecencyEntry};
 use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
 use crate::search;
-use crate::state::{find_record, AppState};
+use crate::state::{find_record, AppState, NotebookState};
 use crate::watcher;
 
 async fn blocking<T, F>(f: F) -> Result<T>
@@ -65,6 +65,25 @@ fn sorted_metas(records: &[Arc<NoteRecord>]) -> Vec<NoteMeta> {
     metas
 }
 
+fn notebook_context(state: &AppState) -> Result<(PathBuf, u64)> {
+    state
+        .notebook
+        .lock()
+        .unwrap()
+        .context()
+        .ok_or(AppError::NoNotebook)
+}
+
+fn ensure_context(state: &NotebookState, root: &Path, generation: u64) -> Result<()> {
+    if state.matches_context(root, generation) {
+        Ok(())
+    } else {
+        Err(AppError::Msg(
+            "notebook changed while the operation was running".into(),
+        ))
+    }
+}
+
 /// Sanitize a user-typed notebook name into a single safe path segment: drop
 /// control + reserved filesystem characters and leading/trailing dots/space.
 /// Returns None when nothing usable remains (so the caller can reject it).
@@ -116,27 +135,45 @@ pub async fn open_notebook(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<NoteMeta>> {
-    let root = PathBuf::from(&path);
-    if !root.is_dir() {
+    let requested_root = PathBuf::from(&path);
+    if !requested_root.is_dir() {
         return Err(AppError::Msg(format!("not a directory: {path}")));
     }
-    let scan_root = root.clone();
+    let load_token = state.notebook.lock().unwrap().begin_load();
     let store = frecency_file(&app);
-    let (records, frec) = blocking(move || {
-        let records = notebook::scan_notebook(&scan_root);
+    let (root, records, frec) = blocking(move || {
+        let scan_root = std::fs::canonicalize(&requested_root)?;
+        let records = notebook::scan_notebook(&scan_root)?;
         let frec = store.map_or_else(HashMap::new, |file| {
             frecency::load(&file, &scan_root.to_string_lossy())
         });
-        Ok((records, frec))
+        Ok((scan_root, records, frec))
     })
     .await?;
     let metas = sorted_metas(&records);
-    {
+    let generation = {
         let mut g = state.notebook.lock().unwrap();
-        g.load(root.clone(), records, frec);
-    }
-    match watcher::start_watcher(app, state.notebook.clone(), root) {
-        Ok(d) => *state.watcher.lock().unwrap() = Some(d),
+        let generation = g
+            .finish_load(load_token, root.clone(), records, frec)
+            .ok_or_else(|| {
+                AppError::Msg("notebook open was superseded by a newer request".into())
+            })?;
+        // Stop the previous notebook's watcher as part of the same ordered
+        // commit. Keeping the notebook lock while taking the watcher lock also
+        // establishes the lock order used by the installation below.
+        *state.watcher.lock().unwrap() = None;
+        generation
+    };
+    match watcher::start_watcher(app, state.notebook.clone(), root.clone(), generation) {
+        Ok(d) => {
+            // A newer open may have committed while this watcher was starting.
+            // Hold the generation check across the watcher swap so a newer open
+            // cannot commit between those two operations.
+            let g = state.notebook.lock().unwrap();
+            if g.matches_context(&root, generation) {
+                *state.watcher.lock().unwrap() = Some(d);
+            }
+        }
         Err(e) => eprintln!("noteside: file watcher failed to start: {e}"),
     }
     Ok(metas)
@@ -157,13 +194,12 @@ pub fn list_notes(state: State<AppState>) -> Vec<NoteMeta> {
 /// Read the raw file text fresh from disk (authoritative source of truth).
 #[tauri::command]
 pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteDoc> {
-    let root = {
-        let g = state.notebook.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoNotebook)?
-    };
+    let (root, generation) = notebook_context(&state)?;
     let abs = notebook::safe_note_path(&root, &path)
         .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
-    let rec = blocking(move || Ok(notebook::read_record(&root, &abs)?)).await?;
+    let disk_root = root.clone();
+    let rec = blocking(move || Ok(notebook::read_record(&disk_root, &abs)?)).await?;
+    ensure_context(&state.notebook.lock().unwrap(), &root, generation)?;
     Ok(NoteDoc {
         meta: rec.meta,
         body: rec.body,
@@ -194,10 +230,7 @@ pub fn preview_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
 /// Atomically write the note and refresh its cached record. Returns fresh meta.
 #[tauri::command]
 pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -> Result<NoteMeta> {
-    let root = {
-        let g = state.notebook.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoNotebook)?
-    };
+    let (root, generation) = notebook_context(&state)?;
     let abs = notebook::safe_note_path(&root, &path)
         .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     let (meta, body) = blocking(move || {
@@ -207,32 +240,32 @@ pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), body, Instant::now());
     Ok(meta)
 }
 
 #[tauri::command]
 pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> Result<NoteMeta> {
-    let root = {
-        let g = state.notebook.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoNotebook)?
-    };
+    let (root, generation) = notebook_context(&state)?;
     let raw = title.unwrap_or_default();
     let display = if raw.trim().is_empty() {
         "Untitled".to_string()
     } else {
         raw.trim().to_string()
     };
+    let disk_root = root.clone();
     let (meta, initial) = blocking(move || {
-        let abs = notebook::unique_note_path(&root, &notebook::slugify(&display));
         let initial = format!("# {display}\n\n");
-        notebook::atomic_write(&abs, &initial)?;
-        let rel = notebook::rel_path(&root, &abs);
+        let abs =
+            notebook::atomic_create_unique(&disk_root, &notebook::slugify(&display), &initial)?;
+        let rel = notebook::rel_path(&disk_root, &abs);
         let meta = notebook::parse_meta(rel, &initial, notebook::mtime_millis(&abs));
         Ok((meta, initial))
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), initial, Instant::now());
     Ok(meta)
 }
@@ -249,16 +282,17 @@ pub async fn rename_note(
 ) -> Result<NoteMeta> {
     // The body comes from the in-memory index (save_note just recorded it) — no
     // disk re-read on the hot save path; fall back to disk for an unindexed note.
-    let (root, recorded) = {
+    let (root, generation, recorded) = {
         let g = state.notebook.lock().unwrap();
-        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
         let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, body)
+        (root, generation, body)
     };
     let persist_root = root.clone();
+    let disk_root = root.clone();
     let rel = path.clone();
     let (renamed, meta, body) = blocking(move || {
-        let old_abs = notebook::safe_note_path(&root, &rel)
+        let old_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
         let body = match recorded {
             Some(b) => b,
@@ -276,21 +310,23 @@ pub async fn rename_note(
             meta.updated = notebook::mtime_millis(&old_abs);
             return Ok((false, meta, body));
         }
-        let dir = old_abs.parent().unwrap_or(&root);
-        let new_abs = notebook::unique_note_path(dir, &slug);
-        std::fs::rename(&old_abs, &new_abs)
+        let dir = old_abs.parent().unwrap_or(&disk_root);
+        let new_abs = notebook::rename_unique(&old_abs, dir, &slug)
             .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
-        let new_rel = notebook::rel_path(&root, &new_abs);
+        let new_rel = notebook::rel_path(&disk_root, &new_abs);
         let meta = notebook::parse_meta(new_rel, &body, notebook::mtime_millis(&new_abs));
         Ok((true, meta, body))
     })
     .await?;
-    if renamed {
-        let snapshot = {
-            let mut g = state.notebook.lock().unwrap();
+    let snapshot = {
+        let mut g = state.notebook.lock().unwrap();
+        ensure_context(&g, &root, generation)?;
+        if renamed {
             g.record_own_rename(&path, meta.clone(), body, Instant::now());
-            g.frecency.clone()
-        };
+        }
+        g.frecency.clone()
+    };
+    if renamed {
         // The rename just migrated the note's frecency entry old→new path —
         // persist so a crash before the next open doesn't strand the old key.
         persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
@@ -301,20 +337,16 @@ pub async fn rename_note(
 
 #[tauri::command]
 pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()> {
-    let root = {
-        let g = state.notebook.lock().unwrap();
-        g.root.clone().ok_or(AppError::NoNotebook)?
-    };
+    let (root, generation) = notebook_context(&state)?;
     let abs = notebook::safe_note_path(&root, &path)
         .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     blocking(move || {
-        if abs.exists() {
-            std::fs::remove_file(&abs)?;
-        }
+        notebook::remove_note(&abs)?;
         Ok(())
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
     g.record_own_delete(&path, Instant::now());
     Ok(())
 }
@@ -324,15 +356,16 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
 /// new note's meta (the caller inserts it and opens it).
 #[tauri::command]
 pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
-    let (root, recorded) = {
+    let (root, generation, recorded) = {
         let g = state.notebook.lock().unwrap();
-        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
         let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, body)
+        (root, generation, body)
     };
+    let disk_root = root.clone();
     let rel = path.clone();
     let (meta, new_body) = blocking(move || {
-        let src_abs = notebook::safe_note_path(&root, &rel)
+        let src_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
         let body = match recorded {
             Some(b) => b,
@@ -342,15 +375,16 @@ pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<
         let src_title = notebook::parse_meta(rel.clone(), &body, 0).title;
         let new_title = format!("{src_title} copy");
         let new_body = notebook::set_title(&body, &new_title);
-        let dir = src_abs.parent().unwrap_or(&root);
-        let new_abs = notebook::unique_note_path(dir, &notebook::slugify(&new_title));
-        notebook::atomic_write(&new_abs, &new_body)?;
-        let new_rel = notebook::rel_path(&root, &new_abs);
+        let dir = src_abs.parent().unwrap_or(&disk_root);
+        let new_abs =
+            notebook::atomic_create_unique(dir, &notebook::slugify(&new_title), &new_body)?;
+        let new_rel = notebook::rel_path(&disk_root, &new_abs);
         let meta = notebook::parse_meta(new_rel, &new_body, notebook::mtime_millis(&new_abs));
         Ok((meta, new_body))
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), new_body, Instant::now());
     Ok(meta)
 }
@@ -365,20 +399,21 @@ pub async fn retitle_note(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
-    let (root, recorded) = {
+    let (root, generation, recorded) = {
         let g = state.notebook.lock().unwrap();
-        let root = g.root.clone().ok_or(AppError::NoNotebook)?;
+        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
         let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, body)
+        (root, generation, body)
     };
     let persist_root = root.clone();
+    let disk_root = root.clone();
     let rel = path.clone();
     let new_title = title.trim().to_string();
     if new_title.is_empty() {
         return Err(AppError::Msg("a note title can't be empty".into()));
     }
     let (renamed, meta, new_body) = blocking(move || {
-        let old_abs = notebook::safe_note_path(&root, &rel)
+        let old_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
         let body = match recorded {
             Some(b) => b,
@@ -386,28 +421,28 @@ pub async fn retitle_note(
                 .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
         };
         let new_body = notebook::set_title(&body, &new_title);
-        notebook::atomic_write(&old_abs, &new_body)?; // retitled content first
         let slug = notebook::slugify(&new_title);
         let stem = Path::new(&rel)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("");
         if notebook::stem_matches_slug(stem, &slug) {
+            notebook::atomic_write(&old_abs, &new_body)?;
             let meta =
                 notebook::parse_meta(rel.clone(), &new_body, notebook::mtime_millis(&old_abs));
             return Ok((false, meta, new_body));
         }
-        let dir = old_abs.parent().unwrap_or(&root);
-        let new_abs = notebook::unique_note_path(dir, &slug);
-        std::fs::rename(&old_abs, &new_abs)
-            .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
-        let new_rel = notebook::rel_path(&root, &new_abs);
+        let dir = old_abs.parent().unwrap_or(&disk_root);
+        let new_abs = notebook::retitle_unique(&old_abs, dir, &slug, &new_body)
+            .map_err(|e| AppError::Msg(format!("retitle failed: {e}")))?;
+        let new_rel = notebook::rel_path(&disk_root, &new_abs);
         let meta = notebook::parse_meta(new_rel, &new_body, notebook::mtime_millis(&new_abs));
         Ok((true, meta, new_body))
     })
     .await?;
     let snapshot = {
         let mut g = state.notebook.lock().unwrap();
+        ensure_context(&g, &root, generation)?;
         if renamed {
             g.record_own_rename(&path, meta.clone(), new_body, Instant::now());
         } else {
@@ -502,7 +537,10 @@ pub async fn search_content(
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_folder;
+    use super::{ensure_context, sanitize_folder};
+    use crate::state::NotebookState;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn sanitize_folder_strips_reserved_chars_and_edge_dots() {
@@ -515,5 +553,21 @@ mod tests {
         assert_eq!(sanitize_folder("   "), None);
         assert_eq!(sanitize_folder("///"), None);
         assert_eq!(sanitize_folder("..."), None);
+    }
+
+    #[test]
+    fn operation_context_rejects_a_previous_notebook_generation() {
+        let mut state = NotebookState::default();
+        let first = state.begin_load();
+        let first_generation = state
+            .finish_load(first, PathBuf::from("/first"), vec![], HashMap::new())
+            .unwrap();
+        assert!(ensure_context(&state, Path::new("/first"), first_generation).is_ok());
+
+        let second = state.begin_load();
+        state
+            .finish_load(second, PathBuf::from("/second"), vec![], HashMap::new())
+            .unwrap();
+        assert!(ensure_context(&state, Path::new("/first"), first_generation).is_err());
     }
 }

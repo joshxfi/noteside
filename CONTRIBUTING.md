@@ -37,10 +37,19 @@ pnpm tauri build
 
 ## Before a PR
 
-Run the gates (CI runs the same):
+Run the same gates CI runs:
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:rust
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm test
+pnpm build
+pnpm --filter @noteside/desktop check:editor-lazy
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+pnpm test:rust
+pnpm e2e
 ```
 
 - The codebase is kept `oxfmt`-formatted — run `pnpm format`.
