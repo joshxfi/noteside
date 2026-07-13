@@ -1,3 +1,36 @@
+## [1.5.0](https://github.com/joshxfi/noteside/compare/v1.4.0...v1.5.0) (2026-07-13)
+
+### Features
+
+* add Geist Sans for note titles and Geist Mono to the font catalog ([03f1f16](https://github.com/joshxfi/noteside/commit/03f1f166aaf3e62794f552c54b244b520755e837))
+* add Reveal, Duplicate, and Rename to the note context menu ([94ec97a](https://github.com/joshxfi/noteside/commit/94ec97abaa379f2e0149e19f843fa412fe2e566d))
+* add search to the keyboard-shortcuts cheatsheet ([43586ba](https://github.com/joshxfi/noteside/commit/43586bae3848a21c5aa6df4907d4316a9e2402ab))
+* check for updates automatically on launch (default on, throttled) ([7272d7c](https://github.com/joshxfi/noteside/commit/7272d7ccf3b9ee791b027bb21b0672f04c5f1e83))
+* native right-click note menu with a delete confirmation modal ([71695cd](https://github.com/joshxfi/noteside/commit/71695cd240f2167734eb4a0d49df26ee96ee46bd))
+* render tables, code blocks, tasks, and lists in live preview ([0a898d9](https://github.com/joshxfi/noteside/commit/0a898d915c439cdd835bef118e2d303f251c7b92))
+
+### Bug Fixes
+
+* don't arm the update-check throttle after a failed probe ([787932a](https://github.com/joshxfi/noteside/commit/787932a885d2d93ec151cfa7252001a6959ea11b))
+* retitle notes without leaving a stale heading or rewriting CRLF ([845dc35](https://github.com/joshxfi/noteside/commit/845dc3518d9c09863e168e586e3e08ee7b0bc2fd))
+
+### Polish
+
+* lighten note-title weight to 400 and tighten its tracking ([bc220b6](https://github.com/joshxfi/noteside/commit/bc220b6cdb96401df418288ede2028d342abab96))
+* reflect a boot update check in the open Settings panel ([2b25b66](https://github.com/joshxfi/noteside/commit/2b25b66ae3b5318e246e6753a61c00ef2c9903d6))
+* show the Noteside logo mark on the empty states, matching onboarding ([fcb0a37](https://github.com/joshxfi/noteside/commit/fcb0a37b30501a1a77554a1e94f3c14a4b02f0b3))
+
+### Refactors
+
+* bump updated on a same-slug mock retitle to match the backend ([2deac54](https://github.com/joshxfi/noteside/commit/2deac54816150b4a2ee41e67d6c9c5245aa956ae))
+* make Geist Mono the fixed interface font, drop the interface-font setting ([e486475](https://github.com/joshxfi/noteside/commit/e486475bfa6b1ad8ecd51ce7b5a8062640acdd50))
+* remove wikilinks and backlinks ([99e1f74](https://github.com/joshxfi/noteside/commit/99e1f74faa9be38d9c56ec9dcf79fd916a9bdd05))
+
+### Documentation
+
+* cover markdown rendering, Geist Mono, auto-update, note menu, and cheatsheet search ([ecd8d09](https://github.com/joshxfi/noteside/commit/ecd8d09001ddc42ebeed095ad59d915745fd5fe6))
+* refresh the README app screenshots for the Geist Mono UI ([35252dd](https://github.com/joshxfi/noteside/commit/35252dd438bbbb0c692e565d3db1b516a4066dc3))
+
 ## [1.4.0](https://github.com/joshxfi/noteside/compare/v1.3.1...v1.4.0) (2026-07-09)
 
 ### Features
