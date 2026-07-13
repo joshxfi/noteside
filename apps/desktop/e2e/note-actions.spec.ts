@@ -27,6 +27,21 @@ test.describe("duplicate note", () => {
       2, // "X" and "X copy" both contain "X"
     );
   });
+
+  test(":dup includes edits made immediately before duplication", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.type(" UNSAVED_DUPLICATE_SENTINEL");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press(":");
+    await page.keyboard.type("dup");
+    await page.keyboard.press("Enter");
+
+    await expect(page.locator(".av-toast")).toContainText("note duplicated");
+    await expect(page.locator(".cm-content")).toContainText("UNSAVED_DUPLICATE_SENTINEL");
+  });
 });
 
 test.describe("rename note", () => {

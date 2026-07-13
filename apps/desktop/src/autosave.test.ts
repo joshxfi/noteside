@@ -49,13 +49,13 @@ describe("createAutosave", () => {
 
   // The bug the v1 review caught: a queued save fired against the *active* note
   // instead of the note it was scheduled for, corrupting the new note.
-  it("REGRESSION: a queued save always targets its own note", () => {
+  it("REGRESSION: a queued save always targets its own note", async () => {
     const saved: Array<[string, string]> = [];
     const a = createAutosave((id, text) => saved.push([id, text]), 800);
     a.schedule("a.md", "content A"); // editing A
-    a.flush(); // switching away from A → persist A now
+    await a.flush(); // switching away from A → persist A now
     a.schedule("b.md", "content B"); // now editing B
-    vi.advanceTimersByTime(800);
+    await vi.advanceTimersByTimeAsync(800);
     expect(saved).toEqual([
       ["a.md", "content A"],
       ["b.md", "content B"],
@@ -72,6 +72,83 @@ describe("createAutosave", () => {
     expect(saved).toEqual([["a.md", "x"]]);
     vi.advanceTimersByTime(800); // timer was cleared — no duplicate save
     expect(saved).toEqual([["a.md", "x"]]);
+  });
+
+  it("flush() awaits a save that the debounce timer already launched", async () => {
+    let finish!: () => void;
+    const landed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const a = createAutosave(() => landed, 800);
+    a.schedule("a.md", "x");
+    await vi.advanceTimersByTimeAsync(800); // timer fired; the write is now in flight
+
+    let flushed = false;
+    const flush = a.flush().then(() => {
+      flushed = true;
+    });
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+
+    finish();
+    await flush;
+    expect(flushed).toBe(true);
+  });
+
+  it("flush() also drains an edit queued while an earlier save is in flight", async () => {
+    const saved: string[] = [];
+    let finishFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const a = createAutosave(async (_id, text) => {
+      saved.push(text);
+      if (text === "one") await first;
+    }, 800);
+    a.schedule("a.md", "one");
+    await vi.advanceTimersByTimeAsync(800);
+
+    const flush = a.flush();
+    a.schedule("a.md", "two");
+    finishFirst();
+    await flush;
+    expect(saved).toEqual(["one", "two"]);
+  });
+
+  it("flush() follows a debounce that fires while an earlier save is in flight", async () => {
+    const saved: string[] = [];
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      finishSecond = resolve;
+    });
+    const a = createAutosave(async (_id, text) => {
+      saved.push(text);
+      await (text === "one" ? first : second);
+    }, 800);
+    a.schedule("a.md", "one");
+    await vi.advanceTimersByTimeAsync(800);
+
+    const flush = a.flush();
+    a.schedule("a.md", "two");
+    await vi.advanceTimersByTimeAsync(800); // timer consumes pending and extends tail
+    finishFirst();
+    await Promise.resolve();
+
+    let flushed = false;
+    void flush.then(() => {
+      flushed = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saved).toEqual(["one", "two"]);
+    expect(flushed).toBe(false);
+
+    finishSecond();
+    await flush;
+    expect(flushed).toBe(true);
   });
 
   it("cancel() drops the queued save", () => {

@@ -8,7 +8,37 @@
 // the chord matcher is reused by both the editor keymap and the document-level
 // fallback for the no-note-open state.
 import type { KeyBinding } from "@codemirror/view";
-import type { AppCommand } from "./ex-commands";
+
+/** Canonical app-level command vocabulary. The type derives from this runtime
+ * list, so coverage tests cannot silently maintain a stale hand-written mirror. */
+export const APP_COMMANDS = [
+  "find",
+  "grep",
+  "notebooks",
+  "nav",
+  "settings",
+  "theme",
+  "config",
+  "new",
+  "delete",
+  "duplicate",
+  "reveal",
+  "rename",
+  "palette",
+  "commands",
+  "togglePreview",
+  "reopen",
+  "nextNote",
+  "prevNote",
+  "fontUp",
+  "fontDown",
+  "fontReset",
+  "uiUp",
+  "uiDown",
+  "uiReset",
+  "cheatsheet",
+] as const;
+export type AppCommand = (typeof APP_COMMANDS)[number];
 
 /** Editor-scoped actions that need live editor state (not plain AppCommands). */
 export type EditorAction =

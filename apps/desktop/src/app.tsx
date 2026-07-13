@@ -14,7 +14,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Library, PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
-import type { AppCommand } from "./editor/ex-commands";
+import type { AppCommand } from "./editor/commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
 import { Finder } from "./components/finder";
 import { SettingsPanel } from "./components/settings-panel";
@@ -49,7 +49,7 @@ import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
 import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-update";
-import { showNoteContextMenu } from "./native-menu";
+import { disposeNoteContextMenu, showNoteContextMenu } from "./native-menu";
 
 // The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
@@ -556,26 +556,40 @@ export function App() {
   // is flushed on unmount/pagehide so a quick quit can't drop the last change.
   const persistTimer = useRef<number | null>(null);
   const cfgRef = useRef(cfg);
+  const configWriteTail = useRef<Promise<void>>(Promise.resolve());
+  const persistConfig = useCallback((next: Config): Promise<void> => {
+    const write = configWriteTail.current.catch(() => {}).then(() => backend.setConfig(next));
+    configWriteTail.current = write;
+    return write;
+  }, []);
   useEffect(() => {
     cfgRef.current = cfg;
     if (!configLoaded.current) return;
     if (persistTimer.current !== null) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
       persistTimer.current = null;
-      void backend.setConfig(cfgRef.current);
+      void persistConfig(cfgRef.current).catch(() => {});
     }, 300);
-  }, [cfg]);
-  useEffect(() => {
-    const flushConfig = () => {
-      if (persistTimer.current === null) return;
+  }, [cfg, persistConfig]);
+  const flushConfig = useCallback(async (): Promise<void> => {
+    if (persistTimer.current !== null) {
       window.clearTimeout(persistTimer.current);
       persistTimer.current = null;
-      void backend.setConfig(cfgRef.current);
+      await persistConfig(cfgRef.current);
+    }
+    await configWriteTail.current;
+  }, [persistConfig]);
+  useEffect(() => {
+    const flushAll = async () => {
+      // allSettled keeps a failed config write from preventing note durability
+      // (and vice versa), while guaranteeing the native close handler never throws.
+      await Promise.allSettled([flushConfig(), session.flush()]);
     };
     // pagehide covers the browser/demo; WKWebView doesn't reliably fire it on a
     // native close/Cmd-Q, so the Tauri close-requested event is the real flush
     // there (without it, a theme commit + fast quit would silently revert).
-    window.addEventListener("pagehide", flushConfig);
+    const onPageHide = () => void flushAll();
+    window.addEventListener("pagehide", onPageHide);
     let unlisten: (() => void) | undefined;
     let disposed = false;
     if (isTauri()) {
@@ -586,15 +600,7 @@ export function App() {
       // bug). tauri-capabilities.test.ts pins that coupling. The handler must
       // also never throw, or destroy() is skipped and close breaks again.
       void import("@tauri-apps/api/window")
-        .then(({ getCurrentWindow }) =>
-          getCurrentWindow().onCloseRequested(() => {
-            try {
-              flushConfig();
-            } catch {
-              /* never block closing over a failed flush */
-            }
-          }),
-        )
+        .then(({ getCurrentWindow }) => getCurrentWindow().onCloseRequested(async () => flushAll()))
         .then((u) => {
           if (disposed) u();
           else unlisten = u;
@@ -603,11 +609,12 @@ export function App() {
     }
     return () => {
       disposed = true;
-      window.removeEventListener("pagehide", flushConfig);
+      window.removeEventListener("pagehide", onPageHide);
       unlisten?.();
-      flushConfig();
+      void disposeNoteContextMenu();
+      void flushAll();
     };
-  }, []);
+  }, [flushConfig, session]);
 
   // keep the vim insert-escape mapping (e.g. "jj" → <Esc>) in sync with settings
   useEffect(() => {
@@ -646,6 +653,7 @@ export function App() {
       await openNotebook(path);
     } catch (e) {
       void backend.removeRecentNotebook(path); // a folder that's gone shouldn't linger in recents
+      session.reopenLast(); // the old backend context remains authoritative when open fails
       flash(`couldn't open notebook: ${e}`);
     }
   };
@@ -810,8 +818,8 @@ export function App() {
   // note leaves the current buffer untouched.
   const deleteNoteById = async (id: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
-    if (wasActive) session.cancelAutosave();
     try {
+      if (wasActive) await session.cancelAutosave();
       await backend.deleteNote(id);
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
       const remaining = notes.filter((n) => n.id !== id).sort(metaOrder);
@@ -823,6 +831,7 @@ export function App() {
       }
       flash("note deleted");
     } catch (e) {
+      if (wasActive) session.resumeAutosave();
       flash(`delete failed: ${e}`);
     }
   };
@@ -840,6 +849,7 @@ export function App() {
   // Duplicate a note → a "<title> copy" sibling; open the copy so it's ready to edit.
   const duplicateNote = async (id: string) => {
     try {
+      if (s.status === "note" && s.activeId === id) await session.flush();
       const meta = await backend.duplicateNote(id);
       setNotes((ns) => insertMeta(ns, meta));
       await session.open(meta.id);
@@ -958,6 +968,10 @@ export function App() {
     else if (c === "uiUp") bumpUi(0.05);
     else if (c === "uiDown") bumpUi(-0.05);
     else if (c === "uiReset") bumpUi(0);
+    else {
+      const exhaustive: never = c;
+      return exhaustive;
+    }
   };
 
   // Run a command chosen from the searchable palette. App-level: AppCommands via

@@ -17,6 +17,58 @@ export interface NoteMenuActions {
   onDelete: (id: string, title: string) => void;
 }
 
+interface MenuContext {
+  id: string;
+  title: string;
+  actions: NoteMenuActions;
+}
+
+let activeContext: MenuContext | null = null;
+let menuPromise: Promise<import("@tauri-apps/api/menu").Menu> | null = null;
+
+async function noteMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
+  if (menuPromise) return menuPromise;
+  menuPromise = import("@tauri-apps/api/menu").then(({ Menu }) =>
+    Menu.new({
+      items: [
+        {
+          id: "note-open",
+          text: "Open",
+          action: () => activeContext?.actions.onOpen(activeContext.id),
+        },
+        {
+          id: "note-reveal",
+          text: revealLabel(),
+          action: () => activeContext?.actions.onReveal(activeContext.id),
+        },
+        {
+          id: "note-duplicate",
+          text: "Duplicate",
+          action: () => activeContext?.actions.onDuplicate(activeContext.id),
+        },
+        {
+          id: "note-rename",
+          text: "Rename…",
+          action: () => {
+            const context = activeContext;
+            if (context) context.actions.onRename(context.id, context.title);
+          },
+        },
+        { item: "Separator" },
+        {
+          id: "note-delete",
+          text: "Delete",
+          action: () => {
+            const context = activeContext;
+            if (context) context.actions.onDelete(context.id, context.title);
+          },
+        },
+      ],
+    }),
+  );
+  return menuPromise;
+}
+
 // The OS-appropriate label for "reveal the file in the system file manager".
 function revealLabel(): string {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
@@ -33,16 +85,20 @@ export async function showNoteContextMenu(
   actions: NoteMenuActions,
 ): Promise<void> {
   if (!isTauri()) return;
-  const { Menu } = await import("@tauri-apps/api/menu");
-  const menu = await Menu.new({
-    items: [
-      { id: "note-open", text: "Open", action: () => actions.onOpen(id) },
-      { id: "note-reveal", text: revealLabel(), action: () => actions.onReveal(id) },
-      { id: "note-duplicate", text: "Duplicate", action: () => actions.onDuplicate(id) },
-      { id: "note-rename", text: "Rename…", action: () => actions.onRename(id, title) },
-      { item: "Separator" },
-      { id: "note-delete", text: "Delete", action: () => actions.onDelete(id, title) },
-    ],
-  });
+  activeContext = { id, title, actions };
+  const menu = await noteMenu();
   await menu.popup(); // no position → at the cursor
+}
+
+/** Release the one reusable native resource during app teardown/HMR. */
+export async function disposeNoteContextMenu(): Promise<void> {
+  activeContext = null;
+  const current = menuPromise;
+  menuPromise = null;
+  if (!current) return;
+  try {
+    await (await current).close();
+  } catch {
+    // Window teardown may have already dropped the resource table.
+  }
 }

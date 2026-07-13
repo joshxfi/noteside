@@ -35,6 +35,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm build # web bundles for all apps — catches bundler/prerender breakage typecheck can't
+      - run: pnpm --filter @noteside/desktop check:editor-lazy
 
   rust:
     name: Rust fmt, clippy & test

@@ -1,6 +1,7 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
@@ -21,28 +22,33 @@ pub struct NoteRecord {
 /// binary-search and the ordering stays deterministic. Records come
 /// `Arc`-wrapped: the index treats them as immutable values, so state mutations
 /// shallow-copy the index instead of cloning note bodies.
-pub fn scan_notebook(root: &Path) -> Vec<Arc<NoteRecord>> {
-    let paths: Vec<PathBuf> = WalkDir::new(root)
+pub fn scan_notebook(root: &Path) -> std::io::Result<Vec<Arc<NoteRecord>>> {
+    let mut paths = Vec::new();
+    for entry in WalkDir::new(root)
         .into_iter()
-        .filter_entry(|e| !is_hidden(e.path()))
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.file_type().is_file() && e.path().extension().and_then(|x| x.to_str()) == Some("md")
-        })
-        .map(|e| e.into_path())
-        .collect();
+        // A dot-prefixed notebook root is a valid user choice; only descendants
+        // are hidden entries that should prune their subtree.
+        .filter_entry(|e| e.depth() == 0 || !is_hidden(e.path()))
+    {
+        let entry = entry.map_err(walk_error)?;
+        if entry.file_type().is_file()
+            && entry.path().extension().and_then(|x| x.to_str()) == Some("md")
+        {
+            paths.push(entry.into_path());
+        }
+    }
 
     let workers = std::thread::available_parallelism()
         .map_or(1, |n| n.get())
         .min(paths.len());
-    let read_all = |paths: &[PathBuf]| -> Vec<Arc<NoteRecord>> {
+    let read_all = |paths: &[PathBuf]| -> std::io::Result<Vec<Arc<NoteRecord>>> {
         paths
             .iter()
-            .filter_map(|p| read_record(root, p).ok().map(Arc::new))
+            .map(|p| read_record(root, p).map(Arc::new))
             .collect()
     };
-    let mut out: Vec<Arc<NoteRecord>> = if workers <= 1 {
-        read_all(&paths)
+    let mut out = if workers <= 1 {
+        read_all(&paths)?
     } else {
         let chunk_len = paths.len().div_ceil(workers);
         std::thread::scope(|s| {
@@ -52,12 +58,22 @@ pub fn scan_notebook(root: &Path) -> Vec<Arc<NoteRecord>> {
                 .collect();
             handles
                 .into_iter()
-                .flat_map(|h| h.join().expect("scan worker panicked"))
-                .collect()
-        })
+                .map(|h| {
+                    h.join()
+                        .map_err(|_| std::io::Error::other("scan worker panicked"))?
+                })
+                .collect::<std::io::Result<Vec<_>>>()
+                .map(|chunks| chunks.into_iter().flatten().collect::<Vec<_>>())
+        })?
     };
     out.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
-    out
+    Ok(out)
+}
+
+fn walk_error(error: walkdir::Error) -> std::io::Error {
+    error
+        .into_io_error()
+        .unwrap_or_else(|| std::io::Error::other("invalid notebook walk entry"))
 }
 
 fn is_hidden(path: &Path) -> bool {
@@ -90,7 +106,22 @@ pub fn safe_note_path(root: &Path, rel: &str) -> Option<PathBuf> {
     if abs.extension().and_then(|e| e.to_str()) != Some("md") {
         return None;
     }
-    Some(abs)
+    if Path::new(rel).components().any(
+        |c| matches!(c, Component::Normal(n) if n.to_str().is_some_and(|s| s.starts_with('.'))),
+    ) {
+        return None;
+    }
+    // Lexical `..` rejection is insufficient when a normal component is a
+    // symlink. Canonicalize the target when it exists, otherwise its nearest
+    // existing parent, and require the resolved location to remain under root.
+    let canonical_root = fs::canonicalize(root).ok()?;
+    let resolved = if abs.exists() {
+        fs::canonicalize(&abs).ok()?
+    } else {
+        let parent = fs::canonicalize(abs.parent()?).ok()?;
+        parent.join(abs.file_name()?)
+    };
+    resolved.starts_with(&canonical_root).then_some(abs)
 }
 
 pub fn rel_path(root: &Path, abs: &Path) -> String {
@@ -310,24 +341,80 @@ fn parse_tags(v: &str) -> Vec<String> {
         .collect()
 }
 
-/// Crash-safe write: write to a sibling temp file, fsync, then atomically
-/// rename over the target so a reader never sees a half-written file.
-pub fn atomic_write(abs: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(dir) = abs.parent() {
-        fs::create_dir_all(dir)?;
-    }
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn unique_temp_path(abs: &Path) -> PathBuf {
     let file_name = abs
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("note.md");
-    let tmp = abs.with_file_name(format!(".{file_name}.tmp"));
-    {
-        let mut f = fs::File::create(&tmp)?;
-        f.write_all(text.as_bytes())?;
-        f.sync_all()?;
+    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    abs.with_file_name(format!(
+        ".{file_name}.tmp-{}-{sequence}",
+        std::process::id()
+    ))
+}
+
+fn create_unique_temp(abs: &Path) -> std::io::Result<(PathBuf, fs::File)> {
+    loop {
+        let tmp = unique_temp_path(abs);
+        match OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => return Ok((tmp, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
     }
-    fs::rename(&tmp, abs)?;
+}
+
+#[cfg(unix)]
+fn sync_directory(dir: &Path) -> std::io::Result<()> {
+    fs::File::open(dir)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_dir: &Path) -> std::io::Result<()> {
     Ok(())
+}
+
+/// Crash-safe write: write to a unique sibling temp file, fsync, then atomically
+/// rename over the target so a reader never sees a half-written file. Existing
+/// permissions are retained and the parent directory entry is synced on Unix.
+pub fn atomic_write(abs: &Path, text: &str) -> std::io::Result<()> {
+    let dir = abs
+        .parent()
+        .ok_or_else(|| std::io::Error::other("note has no parent directory"))?;
+    fs::create_dir_all(dir)?;
+    let existing_permissions = fs::metadata(abs).ok().map(|m| m.permissions());
+    let (tmp, mut f) = create_unique_temp(abs)?;
+    let result = (|| {
+        f.write_all(text.as_bytes())?;
+        if let Some(permissions) = existing_permissions {
+            f.set_permissions(permissions)?;
+        }
+        f.sync_all()?;
+        drop(f);
+        fs::rename(&tmp, abs)?;
+        sync_directory(dir)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
+/// Remove a note and durably record the directory-entry change. Missing notes
+/// are idempotent successes, matching delete command semantics.
+pub fn remove_note(abs: &Path) -> std::io::Result<()> {
+    match fs::remove_file(abs) {
+        Ok(()) => {
+            if let Some(dir) = abs.parent() {
+                sync_directory(dir)?;
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Build a filesystem-safe slug from a title. ASCII-only: mirrors the JS
@@ -367,25 +454,132 @@ pub fn stem_matches_slug(stem: &str, slug: &str) -> bool {
     }
 }
 
-/// Pick a unique `<slug>.md` (or `<slug>-N.md`) path within the notebook root.
-pub fn unique_note_path(root: &Path, slug: &str) -> PathBuf {
-    let first = root.join(format!("{slug}.md"));
-    if !first.exists() {
-        return first;
+fn candidate_note_path(root: &Path, slug: &str, n: usize) -> PathBuf {
+    if n == 1 {
+        root.join(format!("{slug}.md"))
+    } else {
+        root.join(format!("{slug}-{n}.md"))
     }
-    let mut n = 2;
-    loop {
-        let candidate = root.join(format!("{slug}-{n}.md"));
-        if !candidate.exists() {
-            return candidate;
+}
+
+/// Publish a fully-written temp file without replacing an existing destination.
+/// Hard links provide an atomic complete-file publication on normal desktop
+/// filesystems. The create-new copy fallback retains no-clobber behavior on
+/// filesystems without hard links (at the cost of brief partial visibility).
+fn publish_temp_noclobber(tmp: &Path, candidate: &Path) -> std::io::Result<bool> {
+    match fs::hard_link(tmp, candidate) {
+        Ok(()) => return Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+        Err(_) => {}
+    }
+    let mut destination = match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(candidate)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    let copy_result = (|| {
+        let mut source = fs::File::open(tmp)?;
+        std::io::copy(&mut source, &mut destination)?;
+        destination.sync_all()
+    })();
+    if let Err(error) = copy_result {
+        drop(destination);
+        let _ = fs::remove_file(candidate);
+        return Err(error);
+    }
+    Ok(true)
+}
+
+/// Atomically create a complete new note at the first available slug path. A
+/// hard-link publishes the fully-fsynced temp inode only when the destination
+/// does not exist, eliminating the exists-check/write race and partial readers.
+pub fn atomic_create_unique(root: &Path, slug: &str, text: &str) -> std::io::Result<PathBuf> {
+    fs::create_dir_all(root)?;
+    let (tmp, mut file) = create_unique_temp(&root.join(format!("{slug}.md")))?;
+    let result = (|| {
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        let mut n = 1;
+        loop {
+            let candidate = candidate_note_path(root, slug, n);
+            match publish_temp_noclobber(&tmp, &candidate) {
+                Ok(true) => break Ok(candidate),
+                Ok(false) => n += 1,
+                Err(error) => break Err(error),
+            }
         }
-        n += 1;
+    })();
+    let _ = fs::remove_file(&tmp);
+    let path = result?;
+    sync_directory(root)?;
+    Ok(path)
+}
+
+/// Move `old_abs` to the first available slug without ever replacing an existing
+/// note. Linking then unlinking is same-directory and no-clobber; a failed unlink
+/// removes the new link again so the original remains authoritative.
+pub fn rename_unique(old_abs: &Path, root: &Path, slug: &str) -> std::io::Result<PathBuf> {
+    let mut n = 1;
+    loop {
+        let candidate = candidate_note_path(root, slug, n);
+        match publish_temp_noclobber(old_abs, &candidate) {
+            Ok(true) => {
+                if let Ok(permissions) = fs::metadata(old_abs).map(|m| m.permissions()) {
+                    if let Err(error) = fs::set_permissions(&candidate, permissions) {
+                        let _ = fs::remove_file(&candidate);
+                        return Err(error);
+                    }
+                }
+                if let Err(error) = fs::remove_file(old_abs) {
+                    let _ = fs::remove_file(&candidate);
+                    return Err(error);
+                }
+                sync_directory(root)?;
+                return Ok(candidate);
+            }
+            Ok(false) => n += 1,
+            Err(error) => return Err(error),
+        }
     }
+}
+
+/// Publish retitled content at a unique destination, then remove the old path.
+/// If removing the old path fails, clean up the new file so callers never observe
+/// a reported failure with two authoritative copies.
+pub fn retitle_unique(
+    old_abs: &Path,
+    root: &Path,
+    slug: &str,
+    text: &str,
+) -> std::io::Result<PathBuf> {
+    let candidate = atomic_create_unique(root, slug, text)?;
+    if let Ok(permissions) = fs::metadata(old_abs).map(|m| m.permissions()) {
+        if let Err(error) = fs::set_permissions(&candidate, permissions) {
+            let _ = fs::remove_file(&candidate);
+            return Err(error);
+        }
+    }
+    if let Err(error) = fs::remove_file(old_abs) {
+        let _ = fs::remove_file(&candidate);
+        return Err(error);
+    }
+    sync_directory(root)?;
+    Ok(candidate)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_dir(label: &str) -> PathBuf {
+        let n = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("noteside-{label}-{}-{n}", std::process::id()))
+    }
 
     #[test]
     fn safe_join_rejects_traversal_and_absolute() {
@@ -400,12 +594,31 @@ mod tests {
 
     #[test]
     fn safe_note_path_requires_markdown() {
-        let root = Path::new("/notebook");
-        assert!(safe_note_path(root, "a.md").is_some());
-        assert!(safe_note_path(root, "notes/a.md").is_some());
-        assert!(safe_note_path(root, "notes/a.txt").is_none());
-        assert!(safe_note_path(root, ".git/config").is_none());
-        assert!(safe_note_path(root, "../a.md").is_none());
+        let root = test_dir("safe-path");
+        fs::create_dir_all(root.join("notes")).unwrap();
+        fs::write(root.join("a.md"), "a").unwrap();
+        assert!(safe_note_path(&root, "a.md").is_some());
+        assert!(safe_note_path(&root, "notes/a.md").is_some());
+        assert!(safe_note_path(&root, "notes/a.txt").is_none());
+        assert!(safe_note_path(&root, ".git/note.md").is_none());
+        assert!(safe_note_path(&root, "../a.md").is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_note_path_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_dir("safe-symlink-root");
+        let outside = test_dir("safe-symlink-outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.md"), "secret").unwrap();
+        symlink(&outside, root.join("linked")).unwrap();
+        assert!(safe_note_path(&root, "linked/secret.md").is_none());
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
     }
 
     // set_title must make parse_meta derive the new title, whatever the source of
@@ -548,7 +761,7 @@ mod tests {
 
     #[test]
     fn scan_notebook_is_path_sorted_and_skips_hidden_and_non_md() {
-        let dir = std::env::temp_dir().join(format!("noteside-scan-test-{}", std::process::id()));
+        let dir = test_dir("scan");
         let _ = std::fs::remove_dir_all(&dir);
         for (path, body) in [
             ("zeta.md", "# Z"),
@@ -562,7 +775,7 @@ mod tests {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(&p, body).unwrap();
         }
-        let recs = scan_notebook(&dir);
+        let recs = scan_notebook(&dir).unwrap();
         let paths: Vec<&str> = recs.iter().map(|r| r.meta.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -575,13 +788,118 @@ mod tests {
     }
 
     #[test]
+    fn scan_allows_a_dot_prefixed_notebook_root() {
+        let base = test_dir("hidden-root");
+        let root = base.join(".notes");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("visible.md"), "# Visible").unwrap();
+        let recs = scan_notebook(&root).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].meta.path, "visible.md");
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn scan_reports_an_unreadable_markdown_file_instead_of_dropping_it() {
+        let dir = test_dir("scan-error");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("invalid.md"), [0xff, 0xfe]).unwrap();
+        assert!(scan_notebook(&dir).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn atomic_write_round_trip_no_temp_left() {
-        let dir = std::env::temp_dir().join(format!("noteside-test-{}", std::process::id()));
+        let dir = test_dir("atomic");
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("sub").join("note.md");
         atomic_write(&file, "hello\nworld").unwrap();
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "hello\nworld");
-        assert!(!file.with_file_name(".note.md.tmp").exists());
+        assert!(fs::read_dir(file.parent().unwrap())
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".tmp-")));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = test_dir("atomic-mode");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.md");
+        fs::write(&file, "old").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o640)).unwrap();
+        atomic_write(&file, "new").unwrap();
+        assert_eq!(
+            fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn concurrent_unique_creates_never_clobber_each_other() {
+        let dir = Arc::new(test_dir("unique-create"));
+        fs::create_dir_all(dir.as_ref()).unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(8));
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let dir = dir.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    atomic_create_unique(&dir, "note", &format!("body {i}"))
+                })
+            })
+            .collect();
+        let mut paths: Vec<_> = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap().unwrap())
+            .collect();
+        paths.sort();
+        paths.dedup();
+        assert_eq!(paths.len(), 8);
+        let mut bodies: Vec<_> = paths
+            .iter()
+            .map(|path| fs::read_to_string(path).unwrap())
+            .collect();
+        bodies.sort();
+        assert_eq!(
+            bodies,
+            (0..8).map(|i| format!("body {i}")).collect::<Vec<_>>()
+        );
+        let _ = fs::remove_dir_all(dir.as_ref());
+    }
+
+    #[test]
+    fn unique_rename_and_retitle_preserve_existing_collisions() {
+        let dir = test_dir("unique-move");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("target.md"), "existing").unwrap();
+        let old = dir.join("old.md");
+        fs::write(&old, "original").unwrap();
+        let renamed = rename_unique(&old, &dir, "target").unwrap();
+        assert_eq!(renamed.file_name().unwrap(), "target-2.md");
+        assert_eq!(
+            fs::read_to_string(dir.join("target.md")).unwrap(),
+            "existing"
+        );
+        assert_eq!(fs::read_to_string(&renamed).unwrap(), "original");
+
+        let retitled = retitle_unique(&renamed, &dir, "target", "retitled").unwrap();
+        assert_eq!(retitled.file_name().unwrap(), "target-3.md");
+        assert!(!renamed.exists());
+        assert_eq!(fs::read_to_string(&retitled).unwrap(), "retitled");
+        assert_eq!(
+            fs::read_to_string(dir.join("target.md")).unwrap(),
+            "existing"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 }

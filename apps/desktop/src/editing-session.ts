@@ -67,8 +67,8 @@ export interface EditingSession {
   change(text: string | (() => string), dirty?: boolean): void;
   /** `:w` / Mod-s: cancel the debounce and persist now (routes config to onConfigApply). */
   save(text: string): void;
-  /** `:q`: flush, then restore the last note (from config) or go empty (from a note). */
-  quit(): void;
+  /** `:q`: close synchronously, returning the durability barrier for the abandoned buffer. */
+  quit(): Promise<void>;
 
   // ---- rarer verbs ----
   /** Enter the config buffer with serialized text — an overlay; the note buffer is preserved. */
@@ -83,7 +83,9 @@ export interface EditingSession {
    *  landing (e.g. a notebook switch must persist into the OLD notebook first). */
   flush(): Promise<void>;
   /** Drop any queued autosave without running it (before deleteNote, so it can't resurrect). */
-  cancelAutosave(): void;
+  cancelAutosave(): Promise<void>;
+  /** Resume a paused autosave after a destructive operation failed. */
+  resumeAutosave(): void;
 }
 
 export function createEditingSession(deps: EditingSessionDeps): EditingSession {
@@ -110,6 +112,9 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   // can resolve out of order.)
   let loadToken = 0;
   let reconcileSeq = 0; // bumped per reconcile() so an older, slower read can't overwrite a newer one
+  type SaveRequest = { id: string; text: string | (() => string); seq: number };
+  let latestSaveRequest: SaveRequest | null = null;
+  let autosavePausedFor: string | null = null;
 
   const listeners = new Set<() => void>();
 
@@ -182,6 +187,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
         // (vim toggle) must reseed from the last-saved text, not open-time text.
         noteInitial = text;
         noteDirty = seq !== editSeq;
+        if (!noteDirty) latestSaveRequest = null;
         commit();
       }
       return meta;
@@ -191,12 +197,30 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     }
   }
 
+  // All note mutations flow through one tail. This is the session-level barrier
+  // for both autosaves and explicit save+rename operations, and prevents an older
+  // write from landing after a newer one.
+  let noteOperationTail: Promise<void> = Promise.resolve();
+  function queueNoteOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = noteOperationTail.catch(() => {}).then(operation);
+    noteOperationTail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
+
   const autosaver: Autosave = createAutosave(
     // Returns the promise so flush() can await the write landing (open() orders
     // its read after it).
-    (id, text, seq) => persistNote(id, text, seq),
+    (id, text, seq) => queueNoteOperation(() => persistNote(id, text, seq)),
     deps.autosaveMs ?? DEFAULT_AUTOSAVE_MS,
   );
+
+  async function flush(): Promise<void> {
+    await autosaver.flush();
+    await noteOperationTail;
+  }
 
   // Explicit save (`:w` / Mod-s) only — never autosave, so a title being typed
   // doesn't churn the filesystem. After the body is on disk, ask the backend to
@@ -208,9 +232,9 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     // Pre-check with the meta the save just returned: when the filename already
     // represents the title (the common case), skip the rename IPC entirely. The
     // backend applies the same stem/slug rule, so this can't diverge.
-    // Only trusted for ASCII titles: links.ts slugs ASCII identically to Rust's
-    // slugify, but Rust keeps Unicode alphanumerics (CJK, accents) the JS slug
-    // strips — for those, always send the IPC and let the backend's no-op decide.
+    // The shared parity vectors keep links.ts and Rust's slugify aligned. Keep
+    // this guard ASCII-only anyway: it makes the cheap client-side optimization
+    // conservative if either implementation later expands Unicode handling.
     const stem = id.slice(id.lastIndexOf("/") + 1).replace(/\.md$/, "");
     // eslint-disable-next-line no-control-regex
     if (/^[\x00-\x7F]*$/.test(savedTitle) && stemMatchesSlug(stem, slugifyTitle(savedTitle))) {
@@ -227,6 +251,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     // A keystroke during the rename round-trip queued an autosave pinned to the old
     // path — re-target it so it can't recreate the renamed-away file on disk.
     autosaver.repin(id, meta.id);
+    if (latestSaveRequest?.id === id) latestSaveRequest.id = meta.id;
     if (lastNoteId === id) lastNoteId = meta.id;
     if (activeId === id) {
       // Only the still-active buffer migrates its id/title; if the user switched
@@ -239,10 +264,14 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   async function open(id: string, line = 0): Promise<void> {
+    // A successful navigation after a delete discards any edits captured while
+    // autosave was paused. A failed delete calls resumeAutosave() instead.
+    autosavePausedFor = null;
+    latestSaveRequest = null;
     const token = ++loadToken; // claimed BEFORE the flush await so :q can supersede us
     // Land the outgoing buffer's queued save BEFORE reading the next — awaited,
     // or a same-note reopen could read pre-flush bytes and seed a stale buffer.
-    await autosaver.flush();
+    await flush();
     if (token !== loadToken) return; // user navigated away during the flush
     let doc: NoteDoc;
     try {
@@ -274,9 +303,13 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     const seq = ++editSeq;
     const nextDirty = dirty ?? (typeof text === "function" ? text() : text) !== noteSaved;
     if (nextDirty) {
-      autosaver.schedule(activeId, text, seq); // pinned to the buffer being edited
+      latestSaveRequest = { id: activeId, text, seq };
+      if (autosavePausedFor !== activeId) {
+        autosaver.schedule(activeId, text, seq); // pinned to the buffer being edited
+      }
     } else {
       autosaver.cancel(); // undo-to-saved should not land a redundant autosave
+      latestSaveRequest = null;
     }
     noteDirty = nextDirty;
     commit();
@@ -292,14 +325,16 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       const id = activeId;
       // Rename only after the write LANDED — a failed save must not trigger a
       // rename derived from the stale on-disk content.
-      void persistNote(id, text, editSeq).then((meta) =>
-        meta ? maybeRename(id, meta.title) : undefined,
-      );
+      void queueNoteOperation(async () => {
+        const meta = await persistNote(id, text, editSeq);
+        if (meta) await maybeRename(id, meta.title);
+      });
     }
   }
 
-  function quit(): void {
-    void autosaver.flush(); // land queued edits of the buffer being abandoned
+  async function quit(): Promise<void> {
+    autosavePausedFor = null;
+    latestSaveRequest = null;
     loadToken += 1; // a pending open resolving after :q must not re-open
     if (activeId === CONFIG_ID) {
       activeId = lastNoteId && lastNoteId !== CONFIG_ID ? lastNoteId : null;
@@ -308,6 +343,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       clearNoteBuffer();
       commit();
     }
+    await flush(); // the UI closes immediately; callers can await durable completion
   }
 
   function openConfig(text: string): void {
@@ -334,6 +370,12 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     if (activeId === null || activeId === CONFIG_ID) return;
     const id = activeId; // pin the note we're reconciling across the read
     if (!list.some((n) => n.id === id)) {
+      if (noteDirty) {
+        // A transient scan/read failure is indistinguishable from an external
+        // delete. Never discard the only in-memory copy of unsaved work.
+        notify("note unavailable on disk; unsaved buffer preserved");
+        return;
+      }
       clearNoteBuffer(); // the active note vanished out from under us
       commit();
       return;
@@ -366,6 +408,8 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
   }
 
   function close(): void {
+    autosavePausedFor = null;
+    latestSaveRequest = null;
     loadToken += 1; // supersede any in-flight open
     clearNoteBuffer();
     commit();
@@ -387,7 +431,18 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     reconcile,
     reopenLast,
     close,
-    flush: () => autosaver.flush(),
-    cancelAutosave: () => autosaver.cancel(),
+    flush,
+    async cancelAutosave() {
+      autosavePausedFor = activeId && activeId !== CONFIG_ID ? activeId : null;
+      autosaver.cancel();
+      // A timer-fired write cannot be cancelled. Let it land before a delete so
+      // it cannot recreate the file after deleteNote removes it.
+      await noteOperationTail;
+    },
+    resumeAutosave() {
+      const request = latestSaveRequest;
+      autosavePausedFor = null;
+      if (request) autosaver.schedule(request.id, request.text, request.seq);
+    },
   };
 }

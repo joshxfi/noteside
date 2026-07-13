@@ -9,8 +9,12 @@
 // stopPropagation; (2) an input/textarea/contenteditable or the CM editor owns
 // focus (the editor's own keymap handles those, so we never double-dispatch).
 import { useEffect, useRef } from "react";
-import { type ChordOverrides, globalChordMap, resolveGlobalChord } from "./editor/commands";
-import type { AppCommand } from "./editor/ex-commands";
+import {
+  type AppCommand,
+  type ChordOverrides,
+  globalChordMap,
+  resolveGlobalChord,
+} from "./editor/commands";
 
 export function useGlobalChords(opts: {
   enabled: boolean;

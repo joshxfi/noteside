@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AppCommand } from "./ex-commands";
 import {
+  APP_COMMANDS,
   chordConflict,
   chordLabel,
   COMMAND_BY_ID,
@@ -14,30 +14,6 @@ import {
   resolveGlobalChord,
   withChordOverrides,
 } from "./commands";
-
-// Mirror of the AppCommand union — the table must cover every one of these.
-const APP_COMMANDS: AppCommand[] = [
-  "find",
-  "grep",
-  "nav",
-  "settings",
-  "config",
-  "new",
-  "delete",
-  "palette",
-  "commands",
-  "togglePreview",
-  "reopen",
-  "nextNote",
-  "prevNote",
-  "fontUp",
-  "fontDown",
-  "fontReset",
-  "uiUp",
-  "uiDown",
-  "uiReset",
-  "cheatsheet",
-];
 
 const ev = (
   key: string,

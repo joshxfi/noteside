@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "build": "vite build",
     "build:web": "vite build",
+    "check:editor-lazy": "node scripts/check-editor-lazy.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
