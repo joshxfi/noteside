@@ -472,7 +472,11 @@ export function App() {
   const runUpdateCheck = useCallback(async (): Promise<UpdateCheck> => {
     const r = await checkForUpdate(version);
     setUpdate(r);
-    writeUpdateCache({ ts: Date.now(), latest: r.kind === "available" ? r.latest : version });
+    // Only a completed check arms the 24h throttle — a failed/offline probe must
+    // not cache as "checked", or it would suppress the next launch's check and
+    // hide a genuinely available update for up to a day.
+    if (r.kind !== "error")
+      writeUpdateCache({ ts: Date.now(), latest: r.kind === "available" ? r.latest : version });
     return r;
   }, [version]);
   // Note pending deletion (the confirm modal is open); null when closed. Every
@@ -687,10 +691,12 @@ export function App() {
         } else {
           void checkForUpdate(version).then((r) => {
             setUpdate(r);
-            writeUpdateCache({
-              ts: Date.now(),
-              latest: r.kind === "available" ? r.latest : version,
-            });
+            // don't arm the throttle on a failed probe (see runUpdateCheck).
+            if (r.kind !== "error")
+              writeUpdateCache({
+                ts: Date.now(),
+                latest: r.kind === "available" ? r.latest : version,
+              });
           });
         }
       }
