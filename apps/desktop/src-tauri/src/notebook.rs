@@ -170,45 +170,87 @@ pub fn parse_meta(rel: String, text: &str, updated: i64) -> NoteMeta {
 /// a leading `# heading` line, else prepend one. Used by duplicate/retitle.
 pub fn set_title(text: &str, new_title: &str) -> String {
     let (frontmatter, body_start) = split_frontmatter(text);
-    // 1) frontmatter: replace an existing `title:` line, or insert one.
-    if let Some(fm) = frontmatter {
+    if frontmatter.is_some() {
         let header = &text[..body_start];
-        let mut lines: Vec<String> = header.lines().map(str::to_string).collect();
-        // header is `---\n<fm>\n---\n`; find the title line inside the fm span.
-        if let Some(i) = lines
-            .iter()
-            .position(|l| l.trim_start().starts_with("title:"))
+        let body = &text[body_start..];
+        // (a) an explicit frontmatter `title:` is authoritative — replace just
+        //     that line (every other byte + line ending preserved) and leave the
+        //     body alone (its heading, if any, may be unrelated to the title).
+        if let Some((idx, seg)) = header
+            .split_inclusive('\n')
+            .enumerate()
+            .find(|(_, seg)| line_body(seg).trim_start().starts_with("title:"))
         {
-            let indent = &lines[i][..lines[i].len() - lines[i].trim_start().len()];
-            lines[i] = format!("{indent}title: {new_title}");
-        } else {
-            // insert right after the opening `---`
-            lines.insert(1, format!("title: {new_title}"));
+            let content = line_body(seg);
+            let indent = &content[..content.len() - content.trim_start().len()];
+            return replace_line_at(text, idx, &format!("{indent}title: {new_title}"));
         }
-        let _ = fm; // documented span; edits happen on the whole header
-        return format!("{}\n{}", lines.join("\n"), &text[body_start..]);
+        // (b) frontmatter without a `title:`, but the body has a heading — retitle
+        //     THAT (parse_meta falls back to it), so the visible title never
+        //     diverges from the filename/metadata by leaving a stale heading.
+        if let Some(retitled) = retitle_leading_heading(body, new_title) {
+            return format!("{header}{retitled}");
+        }
+        // (c) no title anywhere — insert one right after the opening `---`.
+        let nl = if header.contains("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let after_open = header.find('\n').map(|i| i + 1).unwrap_or(header.len());
+        return format!(
+            "{}title: {new_title}{nl}{}{body}",
+            &header[..after_open],
+            &header[after_open..],
+        );
     }
-    // 2) no frontmatter: if the first non-blank line is a heading, replace it.
-    let body = &text[body_start..];
-    for (i, line) in body.lines().enumerate() {
-        if line.trim().is_empty() {
+    // no frontmatter: retitle a leading heading, else prepend one.
+    if let Some(retitled) = retitle_leading_heading(text, new_title) {
+        return retitled;
+    }
+    format!("# {new_title}\n\n{text}")
+}
+
+/// The content of a `split_inclusive('\n')` segment without its trailing
+/// `\n`/`\r\n` (the final, unterminated line yields an empty terminator).
+fn line_body(seg: &str) -> &str {
+    let s = seg.strip_suffix('\n').unwrap_or(seg);
+    s.strip_suffix('\r').unwrap_or(s)
+}
+
+/// Rebuild `text` with its `idx`-th line (0-based, split on `\n`) replaced by
+/// `new_content`, keeping that line's terminator and every other byte verbatim —
+/// so retitling a CRLF note leaves it CRLF instead of silently normalizing to LF.
+fn replace_line_at(text: &str, idx: usize, new_content: &str) -> String {
+    let mut out = String::with_capacity(text.len() + new_content.len());
+    for (j, seg) in text.split_inclusive('\n').enumerate() {
+        if j == idx {
+            out.push_str(new_content);
+            out.push_str(&seg[line_body(seg).len()..]);
+        } else {
+            out.push_str(seg);
+        }
+    }
+    out
+}
+
+/// If the first non-blank line of `text` is a `#`-heading, return `text` with it
+/// rewritten to `<hashes> new_title` (level kept, terminators + other lines
+/// verbatim); `None` when there's no leading heading (caller prepends one).
+fn retitle_leading_heading(text: &str, new_title: &str) -> Option<String> {
+    for (idx, seg) in text.split_inclusive('\n').enumerate() {
+        let content = line_body(seg);
+        if content.trim().is_empty() {
             continue;
         }
-        if line.trim_start().starts_with('#') {
-            let mut lines: Vec<String> = body.lines().map(str::to_string).collect();
-            let hashes: String = line
-                .trim_start()
-                .chars()
-                .take_while(|&c| c == '#')
-                .collect();
-            lines[i] = format!("{hashes} {new_title}");
-            let trailing = if body.ends_with('\n') { "\n" } else { "" };
-            return format!("{}{}", lines.join("\n"), trailing);
+        let after_ws = content.trim_start();
+        if !after_ws.starts_with('#') {
+            return None; // first non-blank line isn't a heading
         }
-        break; // first non-blank line isn't a heading — fall through to prepend
+        let hashes: String = after_ws.chars().take_while(|&c| c == '#').collect();
+        return Some(replace_line_at(text, idx, &format!("{hashes} {new_title}")));
     }
-    // 3) prepend a heading (a blank/plain-text note); keeps existing content below.
-    format!("# {new_title}\n\n{body}")
+    None
 }
 
 /// If the text opens with a `---` fenced YAML block, return its inner text and
@@ -408,6 +450,28 @@ mod tests {
         assert!(out.contains("just some text"));
         // empty note
         assert_eq!(titled(&set_title("", "New")), "New");
+    }
+
+    #[test]
+    fn set_title_retitles_the_body_heading_when_frontmatter_has_no_title() {
+        // frontmatter without `title:` + a body heading: retitle the HEADING (not
+        // insert a competing frontmatter title), so the visible H1 and the derived
+        // title never diverge.
+        let out = set_title("---\ntags: [work]\n---\n# Project Plan\ncontent", "Roadmap");
+        assert_eq!(out, "---\ntags: [work]\n---\n# Roadmap\ncontent");
+        assert_eq!(titled(&out), "Roadmap");
+        assert!(!out.contains("title:")); // no frontmatter title injected
+        assert!(!out.contains("Project Plan")); // old heading is gone, not stale
+    }
+
+    #[test]
+    fn set_title_preserves_crlf_line_endings() {
+        // retitling a CRLF note must not silently rewrite the whole file to LF.
+        assert_eq!(set_title("# Old\r\nbody\r\n", "New"), "# New\r\nbody\r\n");
+        assert_eq!(
+            set_title("---\r\ntitle: Old\r\n---\r\nbody\r\n", "New"),
+            "---\r\ntitle: New\r\n---\r\nbody\r\n"
+        );
     }
 
     #[test]
