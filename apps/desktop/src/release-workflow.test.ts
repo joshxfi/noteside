@@ -13,6 +13,13 @@ describe("release publication ordering", () => {
     expect(workflow).toContain('gh release create "v${VERSION}" --draft');
   });
 
+  it("titles the release with the bare tag, matching the historical convention", () => {
+    // Older releases (v1.0.0 … v1.5.0) are titled "vX.Y.Z". Set the title
+    // explicitly rather than relying on tauri-action to overwrite a "Noteside …" name.
+    expect(workflow).toContain('--title "v${VERSION}"');
+    expect(workflow).not.toContain('--title "Noteside');
+  });
+
   it("uploads every matrix artifact to the draft before publishing", () => {
     expect(workflow).toContain("releaseDraft: true");
     expect(workflow).not.toContain("releaseDraft: false");
