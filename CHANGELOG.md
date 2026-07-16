@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/joshxfi/noteside/compare/v1.5.0...v1.5.1) (2026-07-16)
+
+### Bug Fixes
+
+* declare node types for workflow test ([7862bd5](https://github.com/joshxfi/noteside/commit/7862bd5658956fce14f34ac5a144321fe939ca90))
+* harden persistence and release safety ([774bcdd](https://github.com/joshxfi/noteside/commit/774bcdd45d2b6d93f2505e0f2aa4e3590252920b))
+
 ## [1.5.0](https://github.com/joshxfi/noteside/compare/v1.4.0...v1.5.0) (2026-07-13)
 
 ### Features
