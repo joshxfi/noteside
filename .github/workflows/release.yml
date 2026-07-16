@@ -135,8 +135,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # No checkout: this job only flips the release flag, so pass the repo
+      # explicitly — otherwise gh looks for a .git remote and fails.
       - name: Publish draft after every native build succeeds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.release.outputs.version }}
-        run: gh release edit "v${VERSION}" --draft=false --latest
+        run: gh release edit "v${VERSION}" --repo "${{ github.repository }}" --draft=false --latest
