@@ -59,7 +59,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.semantic.outputs.new_release_version }}
           RELEASE_NOTES: ${{ steps.semantic.outputs.new_release_notes }}
-        run: gh release create "v${VERSION}" --draft --title "Noteside v${VERSION}" --notes "${RELEASE_NOTES}"
+        run: gh release create "v${VERSION}" --draft --title "v${VERSION}" --notes "${RELEASE_NOTES}"
 
   build:
     name: Build · ${{ matrix.label }}
