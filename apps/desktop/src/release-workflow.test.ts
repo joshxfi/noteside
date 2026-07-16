@@ -17,9 +17,13 @@ describe("release publication ordering", () => {
     expect(workflow).toContain("releaseDraft: true");
     expect(workflow).not.toContain("releaseDraft: false");
     expect(workflow).toContain("needs: [release, build]");
-    expect(workflow).toContain('gh release edit "v${VERSION}" --draft=false --latest');
+    // The publish step flips the draft to a public "latest" release. Match the
+    // flag-flip only (not the exact gh invocation) so adding flags like --repo
+    // doesn't break this guard.
+    expect(workflow).toContain("gh release edit");
+    expect(workflow).toContain("--draft=false --latest");
     expect(workflow.indexOf("releaseDraft: true")).toBeLessThan(
-      workflow.indexOf('gh release edit "v${VERSION}" --draft=false --latest'),
+      workflow.indexOf("--draft=false --latest"),
     );
   });
 });
