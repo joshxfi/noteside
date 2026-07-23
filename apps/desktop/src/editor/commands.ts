@@ -8,6 +8,9 @@
 // the chord matcher is reused by both the editor keymap and the document-level
 // fallback for the no-note-open state.
 import type { KeyBinding } from "@codemirror/view";
+import { isSafeChord } from "../shortcut";
+
+export { isSafeChord } from "../shortcut";
 
 /** Canonical app-level command vocabulary. The type derives from this runtime
  * list, so coverage tests cannot silently maintain a stale hand-written mirror. */
@@ -484,7 +487,7 @@ export function commandChordKeymap(
   overrides?: ChordOverrides,
 ): KeyBinding[] {
   return COMMANDS.map((c) => ({ c, chord: effectiveChord(c, overrides) }))
-    .filter((x) => x.chord)
+    .filter((x) => x.chord && isSafeChord(x.chord))
     .flatMap(({ c, chord }) =>
       chordAliases(chord as string).map((key) => ({
         key,
@@ -503,7 +506,7 @@ export function makeGlobalChordMap(overrides?: ChordOverrides): Map<string, Comm
   return new Map(
     COMMANDS.filter((c) => c.command)
       .map((c) => ({ c, chord: effectiveChord(c, overrides) }))
-      .filter((x) => x.chord)
+      .filter((x) => x.chord && isSafeChord(x.chord))
       .map(({ c, chord }) => [normChord(chord as string), c]),
   );
 }

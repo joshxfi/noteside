@@ -50,6 +50,7 @@ import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
 import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-update";
 import { disposeNoteContextMenu, showNoteContextMenu } from "./native-menu";
+import { sanitizeChordOverrides } from "./shortcut";
 
 // The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
@@ -684,7 +685,12 @@ export function App() {
         // (or any unknown id) to a canonical theme id so raw comparisons (e.g.
         // the picker's is-current marker) work and the store converges.
         const theme = typeof stored.theme === "string" ? resolveThemeId(stored.theme) : null;
-        setCfg((c) => ({ ...c, ...stored, theme: theme ?? c.theme }));
+        setCfg((c) => ({
+          ...c,
+          ...stored,
+          theme: theme ?? c.theme,
+          chords: sanitizeChordOverrides(stored.chords),
+        }));
       }
       configLoaded.current = true;
       // Automatic update check — native only (the web/demo never phones home) and
