@@ -35,7 +35,7 @@ export function ConfirmDialog({
     if (e.key === "Escape") {
       e.preventDefault();
       onCancel();
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && e.target === e.currentTarget) {
       e.preventDefault();
       onConfirm();
     }

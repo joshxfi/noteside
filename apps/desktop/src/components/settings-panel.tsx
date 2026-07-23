@@ -202,7 +202,10 @@ export function SettingsPanel({
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).tagName === "INPUT") {
-      if (e.key === "Escape") panelRef.current?.focus();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        panelRef.current?.focus();
+      }
       return;
     }
     const k = e.key;
@@ -211,6 +214,9 @@ export function SettingsPanel({
       onClose();
       return;
     }
+    // Buttons/selects keep their native Enter/Space behavior. Only the panel
+    // itself owns j/k/h/l/arrows and row activation.
+    if (e.target !== e.currentTarget) return;
     if (k === "j" || k === "ArrowDown") {
       e.preventDefault();
       setFocus((f) => (f + 1) % rows.length);

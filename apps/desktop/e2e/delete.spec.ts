@@ -44,11 +44,16 @@ test.describe("delete note", () => {
     await expect(page.locator(".cfm-panel")).toHaveCount(0);
     await expect(page.locator(".av-item")).toHaveCount(before);
 
-    // The Cancel button also dismisses without deleting.
+    // Focus the Cancel button and activate it from the keyboard. Enter must
+    // follow the focused button, not bubble into the panel's default confirm.
+    // Direct focus is portable across Safari's "Tab skips buttons" OS setting.
     await page.keyboard.press(":");
     await page.keyboard.type("rm");
     await page.keyboard.press("Enter");
-    await page.locator(".cfm-btn", { hasText: "Cancel" }).click();
+    const cancel = page.locator(".cfm-btn", { hasText: "Cancel" });
+    await cancel.focus();
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(page.locator(".cfm-panel")).toHaveCount(0);
     await expect(page.locator(".av-item")).toHaveCount(before);
   });

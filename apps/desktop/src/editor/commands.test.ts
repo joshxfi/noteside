@@ -9,6 +9,7 @@ import {
   effectiveChord,
   eventChord,
   globalCommandForEvent,
+  isSafeChord,
   makeGlobalChordMap,
   paletteCommands,
   resolveGlobalChord,
@@ -153,6 +154,20 @@ describe("command table", () => {
   });
 
   describe("chord overrides (bind)", () => {
+    it("accepts command chords but rejects keys that would hijack text editing", () => {
+      expect(isSafeChord("Mod-p")).toBe(true);
+      expect(isSafeChord("Ctrl-j")).toBe(true);
+      expect(isSafeChord("Alt-Enter")).toBe(true);
+      expect(isSafeChord("F3")).toBe(true);
+      expect(isSafeChord("Shift-F3")).toBe(true);
+
+      expect(isSafeChord("a")).toBe(false);
+      expect(isSafeChord("Shift-a")).toBe(false);
+      expect(isSafeChord("Tab")).toBe(false);
+      expect(isSafeChord("Enter")).toBe(false);
+      expect(isSafeChord("ArrowLeft")).toBe(false);
+    });
+
     it("effectiveChord applies a rebind, an unbind, and the default", () => {
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "Mod-g" })).toBe("Mod-g");
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "" })).toBeUndefined();
@@ -164,6 +179,17 @@ describe("command table", () => {
       expect(keys).toContain("Mod-g"); // find rebound
       expect(keys).not.toContain("Mod-p"); // old find chord gone
       expect(keys).not.toContain("Mod-Shift-f"); // grep unbound
+    });
+    it("drops unsafe overrides at both editor and global dispatch boundaries", () => {
+      const overrides = { new: "a", nav: "Tab" };
+      expect(commandChordKeymap(() => {}, overrides).map((b) => b.key)).not.toContain("a");
+      expect(
+        resolveGlobalChord(
+          ev("a"),
+          { enabled: true, editingTarget: false },
+          makeGlobalChordMap(overrides),
+        ),
+      ).toBe(null);
     });
     it("the global fallback respects an override", () => {
       const map = makeGlobalChordMap({ find: "Mod-g" });

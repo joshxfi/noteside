@@ -20,7 +20,7 @@ test.describe("keyboard shortcuts search", () => {
     // it starts unbound ("add chord")
     await expect(rows.first().locator(".cheat-key")).toHaveClass(/is-none/);
 
-    // Enter records; press a (free) chord to bind it
+    // Enter records; press a free modified chord to bind it.
     await page.keyboard.press("Enter");
     await expect(page.locator(".cheat-key.is-recording")).toBeVisible();
     await page.keyboard.press("Alt+d");
@@ -28,6 +28,44 @@ test.describe("keyboard shortcuts search", () => {
     // the row is now bound (no longer the "add chord" placeholder)
     await expect(rows.first().locator(".cheat-key")).not.toHaveClass(/is-none/);
     await expect(rows.first().locator(".cheat-key")).not.toHaveText(/add chord/);
+  });
+
+  test("bare typing keys are rejected while recording", async ({ page }) => {
+    await boot(page, { vimMode: false });
+    const before = await page.locator(".av-item").count();
+    await page.keyboard.press("ControlOrMeta+/");
+    await page.locator(".cheat-search-input").fill("new note");
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("a");
+    await expect(page.locator(".cheat-unsafe")).toContainText(
+      "add Cmd/Ctrl, Alt, or a function key",
+    );
+
+    // Escape stops recording, then closes the shortcut editor.
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".cheat-panel")).toHaveCount(0);
+    await page.keyboard.press("a");
+
+    await expect(page.locator(".av-item")).toHaveCount(before);
+    await expect(page.locator(".cm-content")).toContainText("a");
+  });
+
+  test("unsafe persisted overrides are removed on boot", async ({ page }) => {
+    await boot(page, { vimMode: false, chords: { new: "a" } });
+    const before = await page.locator(".av-item").count();
+    await page.keyboard.press("ControlOrMeta+/");
+    await page.locator(".cheat-search-input").fill("new note");
+
+    // The unsafe legacy override no longer appears as the effective shortcut.
+    await expect(page.locator(".cheat-row")).toHaveCount(1);
+    await expect(page.locator(".cheat-key")).not.toHaveText("A");
+
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("a");
+    await expect(page.locator(".av-item")).toHaveCount(before);
+    await expect(page.locator(".cm-content")).toContainText("a");
   });
 
   test("a no-match query shows the empty state; Escape closes", async ({ page }) => {

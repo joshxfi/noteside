@@ -16,6 +16,7 @@ import {
   effectiveChord,
   eventChord,
 } from "../editor/commands";
+import { isSafeChord } from "../shortcut";
 import { subseq } from "./list-nav";
 
 const GROUP_ORDER: Command["group"][] = ["Find", "Note", "View", "Settings", "Help"];
@@ -48,6 +49,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     otherId: string;
     otherTitle: string;
   } | null>(null);
+  const [unsafeChord, setUnsafeChord] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
@@ -92,8 +94,13 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     onSetOverrides(applyChord(id, chord, overrides));
 
   const commitCapture = (id: string, chord: string) => {
+    if (!isSafeChord(chord)) {
+      setUnsafeChord(chord);
+      return;
+    }
     const other = chordConflict(overrides, chord, id);
     setRecording(false);
+    setUnsafeChord(null);
     if (other) setConflict({ chord, otherId: other.id, otherTitle: other.title });
     else setChord(id, chord);
   };
@@ -141,11 +148,13 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
       e.preventDefault();
       if (e.key === "Escape") {
         setRecording(false);
+        setUnsafeChord(null);
       } else if (MODIFIERS.has(e.key)) {
         /* wait for a real key */
       } else if (e.key === "Backspace" || e.key === "Delete") {
         setChord(cur.id, "");
         setRecording(false);
+        setUnsafeChord(null);
       } else {
         commitCapture(cur.id, eventChord(e));
       }
@@ -165,7 +174,10 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
       setFocus((f) => Math.max(0, f - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (cur) setRecording(true);
+      if (cur) {
+        setUnsafeChord(null);
+        setRecording(true);
+      }
     } else if ((e.key === "Backspace" || e.key === "Delete") && query === "" && cur) {
       // With no query to edit, Backspace/Delete unbinds the selected row (reset
       // still lives on the ⟲ button + "Reset all"), keeping quick unbind reachable.
@@ -208,11 +220,14 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                 const slot = recordingThisRow ? null : slotFor(c, overrides);
                 const overridden = c.id in overrides;
                 const rowConflict = conflict && i === focus ? conflict : null;
-                const ariaLabel = rowConflict
-                  ? `${c.title}: ${chordLabel(rowConflict.chord)} is used by ${rowConflict.otherTitle}. Enter to replace, Esc to cancel.`
-                  : recordingThisRow
-                    ? `${c.title}, recording — press a key combination`
-                    : `${c.title}, ${slot && slot.kind === "bound" ? "bound to " + slot.label : "no chord"}. Enter to rebind.`;
+                const unsafeThisRow = unsafeChord && recordingThisRow ? unsafeChord : null;
+                const ariaLabel = unsafeThisRow
+                  ? `${c.title}: ${chordLabel(unsafeThisRow)} would interfere with typing. Add Cmd/Ctrl, Alt, or a function key.`
+                  : rowConflict
+                    ? `${c.title}: ${chordLabel(rowConflict.chord)} is used by ${rowConflict.otherTitle}. Enter to replace, Esc to cancel.`
+                    : recordingThisRow
+                      ? `${c.title}, recording — press a key combination`
+                      : `${c.title}, ${slot && slot.kind === "bound" ? "bound to " + slot.label : "no chord"}. Enter to rebind.`;
                 return (
                   <div
                     key={c.id}
@@ -227,6 +242,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       onMouseMove={() => i !== focus && !recording && setFocus(i)}
                       onClick={() => {
                         setFocus(i);
+                        setUnsafeChord(null);
                         setRecording(true);
                         inputRef.current?.focus(); // recording captures keys via the input
                       }}
@@ -285,6 +301,12 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                         >
                           <b>Esc</b> cancel
                         </button>
+                      </div>
+                    )}
+                    {unsafeThisRow && (
+                      <div className="cheat-conflict cheat-unsafe" role="alert">
+                        ⚠ {chordLabel(unsafeThisRow)} would interfere with typing — add Cmd/Ctrl,
+                        Alt, or a function key
                       </div>
                     )}
                   </div>

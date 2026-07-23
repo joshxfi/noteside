@@ -7,7 +7,13 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentLess,
+  indentMore,
+} from "@codemirror/commands";
 import {
   closeSearchPanel,
   findNext,
@@ -91,9 +97,24 @@ const markdownExt = markdown({
 });
 const noteSyntax = syntaxHighlighting(noteHighlight);
 // Vim handles normal/visual-mode keys first, then delegates insert-mode editing
-// to the regular CM keymap. Tab is intentionally separate from defaultKeymap in
-// CodeMirror, so opt into editor indentation instead of browser focus traversal.
-const defaultKeys = keymap.of([...defaultKeymap, indentWithTab]);
+// to the regular CM keymap.
+const defaultKeys = keymap.of(defaultKeymap);
+// CodeMirror deliberately excludes Tab from defaultKeymap. Indent in plain text
+// mode and Vim insert mode, but consume it without editing in Vim normal/visual
+// mode so focus stays in the keyboard-first editor.
+const indentationKeys = keymap.of([
+  {
+    key: "Tab",
+    run: (view) => {
+      const vimState = getCM(view)?.state.vim;
+      return vimState && !vimState.insertMode ? true : indentMore(view);
+    },
+    shift: (view) => {
+      const vimState = getCM(view)?.state.vim;
+      return vimState && !vimState.insertMode ? true : indentLess(view);
+    },
+  },
+]);
 
 defineExCommands();
 
@@ -335,7 +356,7 @@ export function Editor(props: EditorProps) {
         }
       }),
     );
-    extensions.push(defaultKeys);
+    extensions.push(defaultKeys, indentationKeys);
 
     const view = new EditorView({
       state: EditorState.create({ doc: initialText, extensions }),

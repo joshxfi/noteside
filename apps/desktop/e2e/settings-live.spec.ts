@@ -24,4 +24,18 @@ test.describe("settings apply live", () => {
     await expect.poll(paperVar).not.toBe("");
     await expect(page.locator(".thm-cols")).toHaveCount(0); // click commits + closes
   });
+
+  test("Enter follows the focused close button", async ({ page }) => {
+    await boot(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const close = page.locator(".set-x");
+
+    // Direct focus is portable across Safari's "Tab skips buttons" OS setting.
+    await close.focus();
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(page.locator(".set-panel")).toHaveCount(0);
+    await expect(page.locator(".thm-cols")).toHaveCount(0);
+  });
 });

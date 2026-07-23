@@ -3,6 +3,7 @@
 // the metadata + helpers exported here. The full color palette is owned by the
 // theme (themes.ts) — there is no separate accent knob.
 import { DEFAULT_THEME, resolveThemeId } from "./themes";
+import { isSafeChord } from "./shortcut";
 
 export interface FontOption {
   id: string;
@@ -120,9 +121,9 @@ export function serializeConfig(c: Config): string {
   else L.push('" imap jj <Esc>          (no insert-mode escape mapping set)');
   if (c.keymaps.length) for (const km of c.keymaps) L.push(km);
   else L.push('" nmap <Space>w :w<CR>   (custom key mappings go here)');
-  const binds = Object.entries(c.chords);
+  const binds = Object.entries(c.chords).filter(([, chord]) => !chord || isSafeChord(chord));
   if (binds.length) for (const [id, chord] of binds) L.push(`bind ${chord || "none"} ${id}`);
-  else L.push('" bind Ctrl-j find       (rebind a chord; bind none <cmd> to unbind)');
+  else L.push('" bind Ctrl-j find       (use Cmd/Ctrl/Alt or an F-key; bind none <cmd> to unbind)');
   L.push("");
   return L.join("\n");
 }
@@ -148,7 +149,8 @@ export function parseConfig(text: string, base: Config): Config {
     }
     // `bind <chord> <command-id>` rebinds a non-vim chord; `bind none <id>` unbinds it.
     if ((m = line.match(/^bind\s+(\S+)\s+(\S+)\s*$/i))) {
-      c.chords[m[2]] = /^none$/i.test(m[1]) ? "" : m[1];
+      if (/^none$/i.test(m[1])) c.chords[m[2]] = "";
+      else if (isSafeChord(m[1])) c.chords[m[2]] = m[1];
       continue;
     }
     if (/^(n|v|i|o)?(nore)?map\s+\S+\s+.+$/i.test(line)) {

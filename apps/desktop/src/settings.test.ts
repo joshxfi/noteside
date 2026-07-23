@@ -38,6 +38,29 @@ describe("config serialize/parse round-trip", () => {
     expect(parsed.chords).toEqual({ find: "Ctrl-j", grep: "" });
   });
 
+  it("ignores bind lines that would hijack ordinary editor keys", () => {
+    const parsed = parseConfig(
+      [
+        "bind a new",
+        "bind Shift-a grep",
+        "bind Tab nav",
+        "bind Ctrl-j find",
+        "bind F4 searchNext",
+        "bind none grep",
+      ].join("\n"),
+      CONFIG_DEFAULTS,
+    );
+    expect(parsed.chords).toEqual({ find: "Ctrl-j", searchNext: "F4", grep: "" });
+
+    const serialized = serializeConfig({
+      ...CONFIG_DEFAULTS,
+      chords: { new: "a", nav: "Tab", find: "Ctrl-j", grep: "" },
+    });
+    expect(serialized).not.toMatch(/^bind (?:a|Tab) /m);
+    expect(serialized).toMatch(/^bind Ctrl-j find$/m);
+    expect(serialized).toMatch(/^bind none grep$/m);
+  });
+
   it("round-trips uiScale and accepts %/decimal forms, clamped + snapped", () => {
     const cfg: Config = { ...CONFIG_DEFAULTS, uiScale: 1.15 };
     expect(serializeConfig(cfg)).toMatch(/^set ui-scale\s*=\s*115%$/m);
