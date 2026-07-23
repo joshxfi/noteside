@@ -1,6 +1,6 @@
 [package]
 name = "noteside"
-version = "1.5.1"
+version = "1.5.2"
 description = "Noteside — notes for keyboard people"
 authors = ["Noteside"]
 edition = "2021"

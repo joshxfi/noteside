@@ -1,3 +1,9 @@
+## [1.5.2](https://github.com/joshxfi/noteside/compare/v1.5.1...v1.5.2) (2026-07-23)
+
+### Bug Fixes
+
+* prevent keyboard controls from hijacking input ([2c0f3e9](https://github.com/joshxfi/noteside/commit/2c0f3e93e12281ed9ff794c0b72615ddb9d98ad2))
+
 ## [1.5.1](https://github.com/joshxfi/noteside/compare/v1.5.0...v1.5.1) (2026-07-16)
 
 ### Bug Fixes
