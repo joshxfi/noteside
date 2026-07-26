@@ -19,6 +19,7 @@ describe("config serialize/parse round-trip", () => {
       editorFont: "spectral",
       fontSize: 22,
       lineHeight: 1.9,
+      tabWidth: 4,
       uiScale: 1.2,
       relativeNumbers: true,
       cursor: "bar",
@@ -104,6 +105,34 @@ describe("config serialize/parse round-trip", () => {
   it("ignores comments and unknown keys", () => {
     const parsed = parseConfig('" a comment\nset bogus = 1\nset theme = dark', CONFIG_DEFAULTS);
     expect(parsed.theme).toBe("noteside-dark"); // dark alias → builtin id
+  });
+
+  // ISSUE #23/#24: someone reaching for indent width types vim's spelling.
+  describe("tab width", () => {
+    it("accepts the Noteside key and vim's aliases", () => {
+      for (const line of [
+        "set tab-width = 4",
+        "set tabwidth=4",
+        "set tabstop=4",
+        "set ts=4",
+        "set shiftwidth = 4",
+        "set sw=4",
+      ]) {
+        expect(parseConfig(line, CONFIG_DEFAULTS).tabWidth, line).toBe(4);
+      }
+    });
+
+    it("clamps to a sane range and ignores garbage", () => {
+      expect(parseConfig("set tab-width = 0", CONFIG_DEFAULTS).tabWidth).toBe(1);
+      expect(parseConfig("set tab-width = 99", CONFIG_DEFAULTS).tabWidth).toBe(8);
+      expect(parseConfig("set tab-width = wide", CONFIG_DEFAULTS).tabWidth).toBe(
+        CONFIG_DEFAULTS.tabWidth,
+      );
+    });
+
+    it("defaults to CodeMirror's own indent unit, so existing users see no change", () => {
+      expect(CONFIG_DEFAULTS.tabWidth).toBe(2);
+    });
   });
 
   it("resolves theme ids + light/dark aliases and ignores stale accent lines", () => {

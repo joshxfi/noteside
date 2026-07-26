@@ -1213,6 +1213,7 @@ export function App() {
                     cursorBlink={cfg.cursorBlink}
                     cursor={cfg.cursor}
                     relativeNumbers={cfg.relativeNumbers}
+                    tabWidth={cfg.tabWidth}
                     chordOverrides={cfg.chords}
                     preview={previewOn}
                     gotoLine={s.gotoLine}

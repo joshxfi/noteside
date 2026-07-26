@@ -32,6 +32,26 @@ test.describe("vim mode", () => {
     expect(text).toMatch(/^ {2}indented/);
   });
 
+  // ISSUE #23: Tab was bound to indentMore, which indents the whole LINE wherever
+  // the caret sits — so pressing it mid-sentence jumped the indent to the line's
+  // left edge instead of inserting at the cursor. Both older Tab tests press at
+  // the line start, where indentMore and insertTab agree, which is how this hid.
+  test("Tab inserts at the cursor, not at the start of the line", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    await page.getByRole("button", { name: "New note" }).click();
+    const content = page.locator(".cm-content");
+
+    await page.keyboard.press("i");
+    await page.keyboard.type("ab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("cd");
+
+    // the indent lands between "ab" and "cd" — the line is NOT left-shifted
+    const line = (await content.textContent())?.split("\n")[0] ?? "";
+    expect(line).toContain("ab  cd");
+    expect(line.startsWith(" ")).toBe(false);
+  });
+
   test("Tab does not indent in normal mode", async ({ page }) => {
     await boot(page, { vimMode: true });
     await page.getByRole("button", { name: "New note" }).click();
