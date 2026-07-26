@@ -37,6 +37,11 @@ export interface Config {
   keymaps: string[];
   /** Non-vim chord overrides from `bind` lines: command id → chord ("" = unbound). */
   chords: Record<string, string>;
+  /** Lines the parser did not recognize, kept verbatim and re-emitted on
+   *  serialize. The config buffer is a view of this object, not a real file, so
+   *  without this a `:w` silently ate anything Noteside didn't understand —
+   *  including the user's own comments (issue #24). */
+  extraLines: string[];
 }
 
 // ---- option metadata ------------------------------------------------
@@ -84,12 +89,16 @@ export const CONFIG_DEFAULTS: Config = {
   escMap: "",
   keymaps: [],
   chords: {},
+  extraLines: [],
 };
 
 export const TAB_WIDTH_MIN = 1;
 export const TAB_WIDTH_MAX = 8;
 
-// The comment lines serializeConfig writes.
+// The comment lines serializeConfig writes. Held as constants so parseConfig can
+// tell OUR boilerplate (regenerated every serialize) from a comment the user
+// typed (preserved via extraLines) — one source, so the two can't drift and
+// reopening the buffer can never duplicate a header.
 const C = {
   header: '" ~/.notesiderc — Noteside configuration',
   howto: '" Edit any line and :w to apply. The Settings panel writes here too.',
@@ -102,7 +111,9 @@ const C = {
   noEsc: '" imap jj <Esc>          (no insert-mode escape mapping set)',
   noMaps: '" nmap <Space>w :w<CR>   (custom key mappings go here)',
   noBinds: '" bind Ctrl-j find       (use Cmd/Ctrl/Alt or an F-key; bind none <cmd> to unbind)',
+  extras: '" kept as written — Noteside does not recognize these lines',
 } as const;
+const GENERATED_COMMENTS: ReadonlySet<string> = new Set(Object.values(C));
 
 const byId = <T extends { id: string }>(list: T[], id: string): T =>
   list.find((x) => x.id === id) || list[0];
@@ -146,6 +157,13 @@ export function serializeConfig(c: Config): string {
   const binds = Object.entries(c.chords).filter(([, chord]) => !chord || isSafeChord(chord));
   if (binds.length) for (const [id, chord] of binds) L.push(`bind ${chord || "none"} ${id}`);
   else L.push(C.noBinds);
+  // Anything Noteside didn't understand goes back out verbatim, so a round-trip
+  // through the buffer is never lossy.
+  if (c.extraLines.length) {
+    L.push("");
+    L.push(C.extras);
+    for (const line of c.extraLines) L.push(line);
+  }
   L.push("");
   return L.join("\n");
 }
@@ -155,6 +173,7 @@ export function parseConfig(text: string, base: Config): Config {
   c.escMap = ""; // an imap line re-enables it
   c.keymaps = []; // collected fresh from the map lines below
   c.chords = {}; // collected fresh from the bind lines below
+  c.extraLines = []; // ditto — every line no rule below claims
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, "");
   const matchFont = (list: FontOption[], val: string): string | null => {
     const n = norm(val);
@@ -163,7 +182,10 @@ export function parseConfig(text: string, base: Config): Config {
   };
   for (const raw of String(text).split("\n")) {
     const line = raw.trim();
-    if (!line || line.startsWith('"') || line.startsWith("#")) continue;
+    if (!line) continue;
+    // Our own boilerplate is regenerated on serialize, so drop it; a comment the
+    // USER wrote falls through to extraLines and survives.
+    if (GENERATED_COMMENTS.has(line)) continue;
     let m: RegExpMatchArray | null;
     if ((m = line.match(/^imap\s+(\S+)\s+<esc>/i))) {
       c.escMap = m[1];
@@ -182,6 +204,7 @@ export function parseConfig(text: string, base: Config): Config {
     if ((m = line.match(/^set\s+([\w-]+)\s*=?\s*(.+?)\s*$/i))) {
       const key = m[1].toLowerCase(),
         val = m[2].trim();
+      let known = true;
       if (key === "theme") {
         // Accept a theme id, an alias (light/dark), or a label. Dark/light-ish
         // strings ("dark mode") keep the pre-themes parser's tolerance; anything
@@ -221,9 +244,24 @@ export function parseConfig(text: string, base: Config): Config {
       else if (key === "relative-numbers" || key === "relativenumber" || key === "rnu")
         c.relativeNumbers = /^(on|true|yes|1)$/i.test(val);
       else if (key === "vim" || key === "vim-mode") c.vimMode = /^(on|true|yes|1)$/i.test(val);
+      else known = false;
+      if (known) continue;
     }
+    // No rule claimed this line — keep it exactly as written (indentation and
+    // all) so `:w` never eats something the user typed.
+    c.extraLines.push(raw.replace(/\s+$/, ""));
   }
   return c;
+}
+
+/** The preserved lines that are actual directives, not comments — i.e. the ones
+ *  the user probably expected to DO something. Drives the "not recognized"
+ *  toast, so a silent partial apply can't masquerade as a clean one. */
+export function unrecognizedDirectives(c: Config): string[] {
+  return c.extraLines.filter((l) => {
+    const t = l.trim();
+    return t !== "" && !t.startsWith('"') && !t.startsWith("#");
+  });
 }
 
 export const byIdHelper = byId;

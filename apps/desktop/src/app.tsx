@@ -41,6 +41,7 @@ import {
   isFirstLaunch,
   parseConfig,
   serializeConfig,
+  unrecognizedDirectives,
 } from "./settings";
 import { applyThemeVars, resolveThemeId, resolveThemeVars, themeById } from "./themes";
 import { ThemePicker } from "./components/theme-picker";
@@ -557,8 +558,19 @@ export function App() {
     autosaveMs: AUTOSAVE_MS,
     notify: flash,
     onConfigApply: (text) => {
-      setCfg(parseConfig(text, cfg));
-      flash("config applied");
+      const next = parseConfig(text, cfg);
+      setCfg(next);
+      // A partial apply must not report as a clean one. Unrecognized directives
+      // are kept in the buffer verbatim, but they did nothing — say so, and name
+      // them, or the user is left believing a setting took effect (issue #24).
+      const ignored = unrecognizedDirectives(next);
+      if (!ignored.length) {
+        flash("config applied");
+        return;
+      }
+      const keys = ignored.map((l) => l.trim().split(/[\s=]+/)[1] ?? l.trim()).slice(0, 3);
+      const more = ignored.length > keys.length ? `, +${ignored.length - keys.length} more` : "";
+      flash(`config applied — not recognized: ${keys.join(", ")}${more}`, "error");
     },
     onNoteSaved: (meta) => setNotes((ns) => ns.map((n) => (n.id === meta.id ? meta : n))),
     onNoteRenamed: (oldId, meta) => setNotes((ns) => ns.map((n) => (n.id === oldId ? meta : n))),

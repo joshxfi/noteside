@@ -5,6 +5,7 @@ import {
   isFirstLaunch,
   parseConfig,
   serializeConfig,
+  unrecognizedDirectives,
 } from "./settings";
 
 describe("config serialize/parse round-trip", () => {
@@ -30,6 +31,7 @@ describe("config serialize/parse round-trip", () => {
       escMap: "jj",
       keymaps: ["nmap <Space>w :w<CR>", "vmap > >gv"],
       chords: { find: "Ctrl-j", grep: "" },
+      extraLines: [],
     };
     expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual(cfg);
   });
@@ -102,9 +104,49 @@ describe("config serialize/parse round-trip", () => {
     expect(small.lineHeight).toBe(1.4);
   });
 
-  it("ignores comments and unknown keys", () => {
+  it("applies known keys alongside unknown ones", () => {
     const parsed = parseConfig('" a comment\nset bogus = 1\nset theme = dark', CONFIG_DEFAULTS);
     expect(parsed.theme).toBe("noteside-dark"); // dark alias → builtin id
+  });
+
+  // ISSUE #24: the config buffer is a view of the Config object, not a real
+  // file, so serialize() used to regenerate it from scratch — silently eating
+  // every line the parser didn't know, including the user's own comments.
+  describe("unrecognized lines survive the round-trip", () => {
+    it("keeps unknown directives and user comments verbatim", () => {
+      const parsed = parseConfig(
+        'set theme = dark\nset bogus = 1\n" my own note\nset mystery on',
+        CONFIG_DEFAULTS,
+      );
+      expect(parsed.extraLines).toEqual(["set bogus = 1", '" my own note', "set mystery on"]);
+      const reopened = serializeConfig(parsed);
+      expect(reopened).toContain("set bogus = 1");
+      expect(reopened).toContain('" my own note');
+      expect(reopened).toContain("set mystery on");
+    });
+
+    it("is idempotent — reopening never duplicates or drops the kept lines", () => {
+      const once = serializeConfig(parseConfig("set bogus = 1", CONFIG_DEFAULTS));
+      const twice = serializeConfig(parseConfig(once, CONFIG_DEFAULTS));
+      expect(twice).toBe(once);
+      expect(twice.match(/set bogus = 1/g)).toHaveLength(1);
+    });
+
+    it("never re-collects Noteside's own boilerplate as a user line", () => {
+      // Regression guard for the obvious way this breaks: if the generated
+      // comments weren't recognized as ours they'd accumulate on every save.
+      let text = serializeConfig(CONFIG_DEFAULTS);
+      for (let i = 0; i < 3; i++) text = serializeConfig(parseConfig(text, CONFIG_DEFAULTS));
+      expect(parseConfig(text, CONFIG_DEFAULTS).extraLines).toEqual([]);
+      expect(text.match(/Noteside configuration/g)).toHaveLength(1);
+    });
+
+    it("stops keeping a line once Noteside learns to parse it", () => {
+      // `set tabstop=4` is exactly what the issue reporter tried.
+      const parsed = parseConfig("set tabstop=4", CONFIG_DEFAULTS);
+      expect(parsed.tabWidth).toBe(4);
+      expect(parsed.extraLines).toEqual([]);
+    });
   });
 
   // ISSUE #23/#24: someone reaching for indent width types vim's spelling.
@@ -132,6 +174,17 @@ describe("config serialize/parse round-trip", () => {
 
     it("defaults to CodeMirror's own indent unit, so existing users see no change", () => {
       expect(CONFIG_DEFAULTS.tabWidth).toBe(2);
+    });
+  });
+
+  describe("unrecognizedDirectives", () => {
+    it("reports directives but not comments (the toast should not nag about prose)", () => {
+      const parsed = parseConfig('set bogus = 1\n" just a note', CONFIG_DEFAULTS);
+      expect(unrecognizedDirectives(parsed)).toEqual(["set bogus = 1"]);
+    });
+
+    it("is empty for a config Noteside fully understands", () => {
+      expect(unrecognizedDirectives(parseConfig("set vim = off", CONFIG_DEFAULTS))).toEqual([]);
     });
   });
 
