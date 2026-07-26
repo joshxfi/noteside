@@ -3,7 +3,9 @@
 // block-preview StateField re-derives tables/fences/quotes from the raw lines) —
 // this pins the per-keystroke cost on a large, block-heavy note.
 import { bench, describe } from "vitest";
+import { ChangeSet, Text } from "@codemirror/state";
 import { parseInline, scanBlocks } from "./markdown";
+import { countWordsIn, wordCountDelta } from "./editor/word-count";
 
 function buildMarkdownDoc(lines: number): string[] {
   const out: string[] = [];
@@ -47,3 +49,21 @@ describe("parseInline", () => {
     parseInline(cellText);
   });
 });
+
+// The status bar's word counter runs on EVERY doc change. The delta path should
+// be flat in document size; the full rescan it replaced is the comparison arm.
+for (const n of [1000, 10000]) {
+  const doc = Text.of(buildMarkdownDoc(n));
+  const text = doc.toString();
+  const at = doc.line(Math.floor(n / 2)).from;
+  const typed = ChangeSet.of({ from: at, to: at, insert: "x" }, doc.length);
+  const after = typed.apply(doc);
+  describe(`word count N=${n} lines`, () => {
+    bench("delta (one typed character)", () => {
+      wordCountDelta(typed, doc, after);
+    });
+    bench("full rescan (the old per-keystroke path)", () => {
+      countWordsIn(text);
+    });
+  });
+}

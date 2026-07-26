@@ -35,6 +35,7 @@ import { blockPreview, linkHandlers } from "./block-preview";
 import { urlAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
 import { isModKey, modActive } from "./platform";
+import { countWordsIn, wordCountDelta } from "./word-count";
 
 const MODE_LABEL: Record<string, string> = {
   normal: "NORMAL",
@@ -43,7 +44,6 @@ const MODE_LABEL: Record<string, string> = {
   replace: "REPLACE",
 };
 
-const WORD_COUNT_DELAY_MS = 180;
 const DIRTY_CHECK_DELAY_MS = 220;
 
 // The always-on chord keymap lives in a Compartment so a rebind (cfg.chords)
@@ -174,8 +174,11 @@ export function Editor(props: EditorProps) {
   propsRef.current = props;
   const savedRef = useRef(props.savedText);
   savedRef.current = props.savedText;
-  const wordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirtyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Running word total, seeded once at mount and advanced by per-change deltas
+  // (see word-count.ts). Held in a ref, not state: the delta is computed from the
+  // update's own before/after docs, so it must not depend on a rendered value.
+  const wordsRef = useRef(0);
   // dispatchCommand lives inside the mount effect; expose it so the live chord
   // reconfigure effect below can rebuild the keymap with fresh overrides.
   const dispatchRef = useRef<(cmd: Command) => void>(() => {});
@@ -191,12 +194,6 @@ export function Editor(props: EditorProps) {
     const host = hostRef.current;
     if (!host) return;
 
-    const clearWordTimer = () => {
-      if (wordTimerRef.current !== null) {
-        clearTimeout(wordTimerRef.current);
-        wordTimerRef.current = null;
-      }
-    };
     const clearDirtyTimer = () => {
       if (dirtyTimerRef.current !== null) {
         clearTimeout(dirtyTimerRef.current);
@@ -214,35 +211,23 @@ export function Editor(props: EditorProps) {
         pct,
       };
     };
-    const countWords = (state: EditorState) => {
-      let words = 0;
-      const iter = state.doc.iter();
-      while (!iter.done) {
-        const matches = iter.value.match(/\S+/g);
-        if (matches) words += matches.length;
-        iter.next();
-      }
-      return words;
-    };
+    // `words` defaults to the running total so a cursor move never recounts.
     const setCursorStat = (state: EditorState, dirty?: boolean) => {
       const next = cursorStat(state);
       setStat((s) => {
         const d = dirty === undefined ? s.dirty : dirty;
-        if (s.line === next.line && s.col === next.col && s.pct === next.pct && s.dirty === d) {
+        const w = wordsRef.current;
+        if (
+          s.line === next.line &&
+          s.col === next.col &&
+          s.pct === next.pct &&
+          s.dirty === d &&
+          s.words === w
+        ) {
           return s; // unchanged — skip the re-render
         }
-        return { ...s, ...next, dirty: d };
+        return { ...s, ...next, words: w, dirty: d };
       });
-    };
-    const setFullStat = (state: EditorState, dirty: boolean) => {
-      setStat({ words: countWords(state), ...cursorStat(state), dirty });
-    };
-    const scheduleWordCount = (state: EditorState) => {
-      clearWordTimer();
-      wordTimerRef.current = setTimeout(() => {
-        wordTimerRef.current = null;
-        setStat((s) => ({ ...s, words: countWords(state) }));
-      }, WORD_COUNT_DELAY_MS);
     };
     const scheduleExactCleanCheck = (state: EditorState) => {
       clearDirtyTimer();
@@ -347,10 +332,12 @@ export function Editor(props: EditorProps) {
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
           const state = u.state;
+          // Exact, and O(changed lines) rather than O(doc) — so the count is live
+          // instead of debounced, and a long note costs nothing extra per keystroke.
+          wordsRef.current += wordCountDelta(u.changes, u.startState.doc, state.doc);
           propsRef.current.onChange(() => state.doc.toString(), true);
           setCursorStat(state, true);
           scheduleExactCleanCheck(state);
-          scheduleWordCount(state);
         } else if (u.selectionSet) {
           setCursorStat(u.state);
         }
@@ -363,9 +350,17 @@ export function Editor(props: EditorProps) {
       parent: host,
     });
     viewRef.current = view;
-    // The doc was just created from initialText, so compare the props directly
-    // (a reference compare in the clean case) instead of stringifying the doc.
-    setFullStat(view.state, initialText !== savedRef.current);
+    // Seed the running word total from the mount text itself — the doc was just
+    // built from it, and word counts are line-ending agnostic, so CodeMirror's
+    // CRLF→LF normalization can't make this disagree with the doc.
+    wordsRef.current = countWordsIn(initialText);
+    // Same reasoning for dirtiness: compare the props directly (a reference
+    // compare in the clean case) instead of stringifying the doc.
+    setStat({
+      words: wordsRef.current,
+      ...cursorStat(view.state),
+      dirty: initialText !== savedRef.current,
+    });
 
     const goto = propsRef.current.gotoLine ?? 0;
     if (goto > 0) {
@@ -390,7 +385,6 @@ export function Editor(props: EditorProps) {
     view.focus();
 
     return () => {
-      clearWordTimer();
       clearDirtyTimer();
       cm?.off("vim-mode-change", onVimMode);
       setActiveHandlers(null);
