@@ -25,6 +25,7 @@ import { ConfirmDialog } from "./components/confirm-dialog";
 import { PromptDialog } from "./components/prompt-dialog";
 import { NotebookSwitcher } from "./components/notebook-switcher";
 import { Onboarding } from "./components/onboarding";
+import { scrollRowIntoView } from "./components/list-nav";
 import {
   cheatsheetCommands,
   chordLabel,
@@ -233,6 +234,44 @@ const NoteRow = memo(function NoteRow({
   );
 });
 
+// The plain list for typical notebooks. Keeps the active row on screen: Mod-j /
+// Mod-k step through notes without touching the scroll position, so without this
+// the selection walks off the fold (the virtual list below already handles it).
+function PlainNoteList({
+  notes,
+  activeId,
+  onPick,
+  onContext,
+  now,
+}: {
+  notes: NoteMeta[];
+  activeId: string | null;
+  onPick: (id: string) => void;
+  onContext: (id: string, title: string, pinned: boolean) => void;
+  now: number;
+}) {
+  const listRef = useRef<HTMLElement>(null);
+  const activeIndex = activeId ? notes.findIndex((n) => n.id === activeId) : -1;
+  useEffect(() => {
+    if (activeIndex >= 0) scrollRowIntoView(listRef.current, activeIndex);
+  }, [activeIndex]);
+
+  return (
+    <nav className="av-list" ref={listRef} aria-label="Notes">
+      {notes.map((n) => (
+        <NoteRow
+          key={n.id}
+          note={n}
+          active={n.id === activeId}
+          onPick={onPick}
+          onContext={onContext}
+          now={now}
+        />
+      ))}
+    </nav>
+  );
+}
+
 // Windowed note list for large notebooks — measures real row heights (titles
 // may wrap), so the scrollbar stays accurate without assuming a fixed row size.
 function VirtualNoteList({
@@ -326,18 +365,13 @@ const Sidebar = memo(function Sidebar({
           <div className="av-brandsub">notes for keyboard people</div>
         </div>
         {notes.length <= VIRTUAL_THRESHOLD ? (
-          <nav className="av-list" aria-label="Notes">
-            {notes.map((n) => (
-              <NoteRow
-                key={n.id}
-                note={n}
-                active={n.id === activeId}
-                onPick={onPick}
-                onContext={onContext}
-                now={now}
-              />
-            ))}
-          </nav>
+          <PlainNoteList
+            notes={notes}
+            activeId={activeId}
+            onPick={onPick}
+            onContext={onContext}
+            now={now}
+          />
         ) : (
           <VirtualNoteList
             notes={notes}
