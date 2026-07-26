@@ -78,6 +78,42 @@ test.describe("markdown preview", () => {
     await expect(page.locator(".cm-task-done")).toHaveCount(1);
   });
 
+  // REGRESSION: lezer has no frontmatter rule, so it read the block as a
+  // thematic break + a setext heading — a pinned note opened with a big bold
+  // "pinned: true" above its own title. The block is app bookkeeping, not
+  // content: preview hides it outright (the sidebar's pin icon is the UI).
+  test("frontmatter is hidden entirely, and stays reachable for editing", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    const content = page.locator(".cm-content");
+    await content.click();
+
+    await page.keyboard.press(":");
+    await page.keyboard.type("pin");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".av-toast")).toContainText("note pinned");
+    await expect(page.locator(".av-item.is-active .av-item-pin")).toHaveCount(1);
+
+    // nothing of the block shows: not the keys, not a rule, not a heading
+    await expect(content).not.toContainText("pinned");
+    await expect(page.locator(".cm-hr")).toHaveCount(0);
+
+    // `gg` to the top of the buffer reveals the raw YAML — it is hidden, not gone
+    await page.keyboard.press("g");
+    await page.keyboard.press("g");
+    await expect(content).toContainText("pinned: true");
+  });
+
+  test("a bare --- outside frontmatter still renders as a horizontal rule", async ({ page }) => {
+    await boot(page, { vimMode: false });
+    await page.getByRole("button", { name: "New note" }).click();
+    const content = page.locator(".cm-content");
+    await content.click();
+
+    await page.keyboard.type("above\n\n---\n\nbelow");
+    await expect(page.locator(".cm-hr")).toHaveCount(1);
+    await expect(page.locator(".cm-content")).toContainText("above");
+  });
+
   test("fenced code blocks style their lines, badge the language, and copy", async ({
     page,
     browserName,
