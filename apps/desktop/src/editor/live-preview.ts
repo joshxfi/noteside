@@ -10,6 +10,7 @@
 // which is a StateField for exactly that reason.
 import { syntaxTree } from "@codemirror/language";
 import type { Range } from "@codemirror/state";
+import { bodyStart } from "./block-preview";
 import {
   Decoration,
   type DecorationSet,
@@ -127,12 +128,18 @@ function buildDecorations(view: EditorView): DecorationSet {
   const ranges: Range<Decoration>[] = [];
   const active = activeLines(view);
   const { doc } = view.state;
+  // lezer has no frontmatter rule — it reads the block as a thematic break plus
+  // a setext heading, which rendered a pinned note's `pinned: true` as a big
+  // bold H2 under a rule. Nothing in that range is markup, so nothing in it is
+  // decorated; block-preview.ts owns how the block itself is displayed.
+  const body = bodyStart(doc);
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter: (node) => {
         if (node.from === node.to) return;
+        if (node.from < body) return; // inside frontmatter — not markdown
         const { name } = node;
         // cheap name gate before any doc/tree work
         let kind:

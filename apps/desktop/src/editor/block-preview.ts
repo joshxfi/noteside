@@ -13,6 +13,7 @@
 import { EditorState, Facet, type Range, StateField, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import {
+  frontmatterEndLine,
   type Inline,
   type MarkdownBlocks,
   parseInline,
@@ -206,6 +207,36 @@ class CopyWidget extends WidgetType {
 }
 const copyWidget = new CopyWidget();
 
+// Frontmatter is bookkeeping the app writes for itself (`pinned:`), not content
+// the reader asked for — and the sidebar already shows pin state as an icon. So
+// preview hides the block outright rather than rendering it as a widget: a
+// widget-less block replace collapses the lines to zero height. It is still
+// fully editable — the raw YAML returns the moment the selection touches the
+// range, same contract as a table — and the gutter keeps the real line numbers,
+// so the block is never secretly gone.
+const hideBlock = Decoration.replace({ block: true });
+
+/**
+ * Document offset where the note's prose starts, past any frontmatter (0 when
+ * there is none). Shared by live-preview (which must not decorate inside the
+ * block) and the editor's mount (which parks the cursor here, so opening a
+ * pinned note doesn't immediately reveal its raw YAML).
+ *
+ * Only the first line is read unless the doc really opens with `---`, so this
+ * is O(1) for the overwhelmingly common note without frontmatter.
+ */
+export function bodyStart(doc: Text): number {
+  // Lazy line access, not a materialized array: live preview calls this on
+  // every keystroke, so it has to cost O(frontmatter) — one line read for the
+  // overwhelmingly common note that has none.
+  const end = frontmatterEndLine(doc.lines, (i) => doc.line(i + 1).text);
+  if (end < 0) return 0;
+  // The START of the line after the closing fence, not the fence line's end —
+  // that offset is still within the block's range, so a caret parked there
+  // would count as touching it and reveal the YAML right back.
+  return end + 2 <= doc.lines ? doc.line(end + 2).from : doc.length;
+}
+
 function scan(state: EditorState): MarkdownBlocks {
   const lines: string[] = [];
   const it = state.doc.iterLines();
@@ -213,34 +244,49 @@ function scan(state: EditorState): MarkdownBlocks {
   return scanBlocks(lines);
 }
 
-function tableRange(doc: Text, t: TableBlock): { from: number; to: number } {
-  return { from: doc.line(t.fromLine + 1).from, to: doc.line(t.toLine + 1).to };
+function lineRange(doc: Text, fromLine: number, toLine: number): { from: number; to: number } {
+  return { from: doc.line(fromLine + 1).from, to: doc.line(toLine + 1).to };
 }
 
-/** Indexes of tables the selection touches — these show raw source. */
-function revealedTables(state: EditorState, blocks: MarkdownBlocks): Set<number> {
-  const out = new Set<number>();
+function tableRange(doc: Text, t: TableBlock): { from: number; to: number } {
+  return lineRange(doc, t.fromLine, t.toLine);
+}
+
+function touched(state: EditorState, from: number, to: number): boolean {
+  return state.selection.ranges.some((r) => r.to >= from && r.from <= to);
+}
+
+/** Collapsed blocks the selection touches — these show raw source instead. */
+interface Revealed {
+  tables: Set<number>;
+  frontmatter: boolean;
+}
+
+function revealedBlocks(state: EditorState, blocks: MarkdownBlocks): Revealed {
+  const tables = new Set<number>();
   for (let i = 0; i < blocks.tables.length; i++) {
     const { from, to } = tableRange(state.doc, blocks.tables[i]);
-    for (const r of state.selection.ranges) {
-      if (r.to >= from && r.from <= to) {
-        out.add(i);
-        break;
-      }
-    }
+    if (touched(state, from, to)) tables.add(i);
   }
-  return out;
+  const fm = blocks.frontmatter;
+  let frontmatter = false;
+  if (fm) {
+    const { from, to } = lineRange(state.doc, fm.fromLine, fm.toLine);
+    frontmatter = touched(state, from, to);
+  }
+  return { tables, frontmatter };
 }
 
-function buildDeco(
-  state: EditorState,
-  blocks: MarkdownBlocks,
-  revealed: Set<number>,
-): DecorationSet {
+function buildDeco(state: EditorState, blocks: MarkdownBlocks, revealed: Revealed): DecorationSet {
   const doc = state.doc;
   const ranges: Range<Decoration>[] = [];
+  const fm = blocks.frontmatter;
+  if (fm && !revealed.frontmatter) {
+    const { from, to } = lineRange(doc, fm.fromLine, fm.toLine);
+    ranges.push(hideBlock.range(from, to));
+  }
   for (let i = 0; i < blocks.tables.length; i++) {
-    if (revealed.has(i)) continue;
+    if (revealed.tables.has(i)) continue;
     const t = blocks.tables[i];
     const { from, to } = tableRange(doc, t);
     const lineOffsets: number[] = [];
@@ -268,28 +314,29 @@ function buildDeco(
 
 interface BlockValue {
   blocks: MarkdownBlocks;
-  /** Sorted revealed-table indexes — the cheap identity that lets selection
-   *  moves skip the decoration rebuild entirely. */
+  /** Cheap identity of everything currently revealed — lets selection moves
+   *  skip the decoration rebuild entirely. */
   revealKey: string;
   deco: DecorationSet;
 }
 
-const key = (s: Set<number>): string => [...s].sort((a, b) => a - b).join(",");
+const key = (r: Revealed): string =>
+  (r.frontmatter ? "f" : "") + [...r.tables].sort((a, b) => a - b).join(",");
 
 const blockField = StateField.define<BlockValue>({
   create(state) {
     const blocks = scan(state);
-    const revealed = revealedTables(state, blocks);
+    const revealed = revealedBlocks(state, blocks);
     return { blocks, revealKey: key(revealed), deco: buildDeco(state, blocks, revealed) };
   },
   update(value, tr) {
     if (tr.docChanged) {
       const blocks = scan(tr.state);
-      const revealed = revealedTables(tr.state, blocks);
+      const revealed = revealedBlocks(tr.state, blocks);
       return { blocks, revealKey: key(revealed), deco: buildDeco(tr.state, blocks, revealed) };
     }
     if (tr.selection) {
-      const revealed = revealedTables(tr.state, value.blocks);
+      const revealed = revealedBlocks(tr.state, value.blocks);
       const k = key(revealed);
       if (k === value.revealKey) return value;
       return {

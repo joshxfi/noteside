@@ -31,7 +31,7 @@ import { defineExCommands, setActiveHandlers } from "./ex-commands";
 import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
 import { activeLineHighlight } from "./active-line";
 import { livePreview } from "./live-preview";
-import { blockPreview, linkHandlers } from "./block-preview";
+import { blockPreview, bodyStart, linkHandlers } from "./block-preview";
 import { urlAt } from "../links";
 import { noteHighlight, nsTheme } from "./theme";
 import { isModKey, modActive } from "./platform";
@@ -366,6 +366,13 @@ export function Editor(props: EditorProps) {
     if (goto > 0) {
       const ln = view.state.doc.line(Math.min(goto, view.state.doc.lines));
       view.dispatch({ selection: { anchor: ln.from }, scrollIntoView: true });
+    } else {
+      // No explicit target: start on the note's first prose line, not offset 0.
+      // A note with frontmatter would otherwise open with the caret inside the
+      // block, revealing its raw YAML — the caret is never placed in metadata
+      // the user didn't ask to edit. A no-op (0) for the usual note.
+      const body = bodyStart(view.state.doc);
+      if (body > 0) view.dispatch({ selection: { anchor: body } });
     }
 
     setActiveHandlers({

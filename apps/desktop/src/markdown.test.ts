@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type Inline, parseInline, scanBlocks, splitRow } from "./markdown";
+import {
+  frontmatterEndLine,
+  type Inline,
+  parseInline,
+  scanBlocks,
+  scanFrontmatter,
+  splitRow,
+} from "./markdown";
 
 const lines = (s: string) => s.split("\n");
 
@@ -150,6 +157,83 @@ const show = (nodes: Inline[]): string =>
       }
     })
     .join("");
+
+// Mirrors Rust split_frontmatter (notebook.rs) — the editor must hide exactly
+// what parse_meta reads, or a pinned note shows YAML as prose.
+describe("scanFrontmatter", () => {
+  it("finds the closed leading block's line range", () => {
+    expect(scanFrontmatter(lines("---\ntitle: T\npinned: true\n---\n# Body"))).toEqual({
+      fromLine: 0,
+      toLine: 3,
+    });
+  });
+
+  it("tolerates trailing whitespace on the closing fence, like Rust does", () => {
+    expect(scanFrontmatter(lines("---\na: 1\n--- \nbody"))?.toLine).toBe(2);
+  });
+
+  it("requires a bare `---` opener on line 0", () => {
+    expect(scanFrontmatter(lines("# Note\n---\na: 1\n---"))).toBeNull();
+    expect(scanFrontmatter(lines("--- \na: 1\n---"))).toBeNull();
+    expect(scanFrontmatter(lines("----\na: 1\n---"))).toBeNull();
+    expect(scanFrontmatter([])).toBeNull();
+  });
+
+  it("is null for an unclosed block (a bare `---` stays a thematic rule)", () => {
+    expect(scanFrontmatter(lines("---\na: 1\nbody"))).toBeNull();
+    expect(scanFrontmatter(lines("---\n\nsome note"))).toBeNull();
+  });
+
+  it("closes on the FIRST `---`, not a later one", () => {
+    expect(scanFrontmatter(lines("---\njust text\na: 1\n---\nb: 2\n---"))?.toLine).toBe(3);
+  });
+
+  it("reports an empty block (never null)", () => {
+    expect(scanFrontmatter(lines("---\n---\nbody"))).toEqual({ fromLine: 0, toLine: 1 });
+  });
+
+  // Live preview calls this per keystroke via bodyStart(), so it must never walk
+  // the whole document — a note with frontmatter would pay O(doc) on every edit.
+  it("reads only as far as the closing fence", () => {
+    const read: number[] = [];
+    const src = ["---", "a: 1", "---", ...Array.from({ length: 5000 }, (_, i) => `line ${i}`)];
+    const at = (i: number) => {
+      read.push(i);
+      return src[i];
+    };
+    expect(frontmatterEndLine(src.length, at)).toBe(2);
+    expect(read).toEqual([0, 1, 2]);
+  });
+
+  it("reads exactly one line when the note has no frontmatter", () => {
+    const read: number[] = [];
+    const src = Array.from({ length: 5000 }, (_, i) => `line ${i}`);
+    expect(
+      frontmatterEndLine(src.length, (i) => {
+        read.push(i);
+        return src[i];
+      }),
+    ).toBe(-1);
+    expect(read).toEqual([0]);
+  });
+});
+
+describe("scanBlocks: frontmatter is excluded from the markdown scans", () => {
+  it("does not scan frontmatter lines as tables, fences, or quotes", () => {
+    const b = scanBlocks(lines("---\na: x | y\n> q\n```\n---\n\n| h |\n| --- |\n| v |"));
+    expect(b.frontmatter?.toLine).toBe(4);
+    expect(b.quotes).toEqual([]); // the `> q` inside the block is metadata
+    expect(b.fences).toEqual([]); // so is the ``` — it never opens a fence
+    expect(b.tables).toHaveLength(1); // the real table after the block still scans
+    expect(b.tables[0].fromLine).toBe(6);
+  });
+
+  it("leaves a note without frontmatter completely untouched", () => {
+    const b = scanBlocks(lines("# Note\n\n---\n\n> quote"));
+    expect(b.frontmatter).toBeNull();
+    expect(b.quotes).toEqual([4]);
+  });
+});
 
 describe("parseInline", () => {
   it("passes plain text through", () => {

@@ -43,11 +43,23 @@ export interface FenceBlock {
   lang: string;
 }
 
+/** The leading `---` YAML block `parse_meta` reads note metadata out of. It is
+ *  NOT markdown — lezer has no concept of it and would otherwise parse the
+ *  fences as a thematic break plus a setext heading. Only the range matters:
+ *  preview hides the block wholesale rather than rendering its keys. */
+export interface FrontmatterBlock {
+  /** 0-based inclusive line range: opening `---` … closing `---`. */
+  fromLine: number;
+  toLine: number;
+}
+
 export interface MarkdownBlocks {
   tables: TableBlock[];
   fences: FenceBlock[];
   /** 0-based indexes of `>`-prefixed blockquote lines. */
   quotes: number[];
+  /** The leading frontmatter block, or null when the note has none. */
+  frontmatter: FrontmatterBlock | null;
 }
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
@@ -108,16 +120,45 @@ export function parseDelimRow(line: string): Align[] | null {
   return align;
 }
 
+/**
+ * The leading frontmatter block, or null. Mirrors Rust `split_frontmatter` so
+ * the editor hides exactly what `parse_meta` reads: the block must open on line
+ * 0 with a bare `---` and is closed by the first later line that is `---` after
+ * trailing whitespace. Tolerant — an unclosed block is simply not frontmatter.
+ */
+export function scanFrontmatter(lines: readonly string[]): FrontmatterBlock | null {
+  const end = frontmatterEndLine(lines.length, (i) => lines[i]);
+  return end < 0 ? null : { fromLine: 0, toLine: end };
+}
+
+/**
+ * The rule itself, over a lazy line source: 0-based index of the closing `---`,
+ * or -1 for "no frontmatter". Callers holding a CodeMirror `Text` use this
+ * directly rather than materializing a line array — live preview asks on every
+ * keystroke, so it must cost O(frontmatter), not O(document). `at(0)` short-
+ * circuits, so a note without frontmatter reads exactly one line.
+ */
+export function frontmatterEndLine(lineCount: number, at: (i: number) => string): number {
+  if (lineCount === 0 || at(0) !== "---") return -1;
+  for (let i = 1; i < lineCount; i++) {
+    if (at(i).trimEnd() === "---") return i;
+  }
+  return -1;
+}
+
 /** One pass over the note's lines: pipe tables (header + delimiter + rows),
  *  fenced code blocks, and blockquote lines. Table detection is skipped inside
  *  fences, on quote lines, and on list items; rows run until a blank line, a
- *  quote, a fence opener, or a line without an unescaped pipe. */
+ *  quote, a fence opener, or a line without an unescaped pipe. A leading
+ *  frontmatter block is recognized separately and excluded from all three scans
+ *  (its `key: value` lines are metadata, not markdown). */
 export function scanBlocks(lines: readonly string[]): MarkdownBlocks {
   const tables: TableBlock[] = [];
   const fences: FenceBlock[] = [];
   const quotes: number[] = [];
+  const frontmatter = scanFrontmatter(lines);
   let fence: { start: number; marker: string; lang: string } | null = null;
-  for (let i = 0; i < lines.length; i++) {
+  for (let i = frontmatter ? frontmatter.toLine + 1 : 0; i < lines.length; i++) {
     const line = lines[i];
     if (fence) {
       const m = FENCE.exec(line);
@@ -171,7 +212,7 @@ export function scanBlocks(lines: readonly string[]): MarkdownBlocks {
       lang: fence.lang,
     });
   }
-  return { tables, fences, quotes };
+  return { tables, fences, quotes, frontmatter };
 }
 
 // ── inline tokenizer ───────────────────────────────────────────────────────
