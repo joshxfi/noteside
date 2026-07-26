@@ -24,7 +24,9 @@ export function useEditingSession(deps: EditingSessionDeps): {
     createEditingSession({
       backend: deps.backend,
       autosaveMs: deps.autosaveMs,
-      notify: (m) => depsRef.current.notify(m),
+      // Forward the kind too — dropping it silently downgraded every
+      // session-side failure ("save failed", "rename failed") to an info toast.
+      notify: (m, kind) => depsRef.current.notify(m, kind),
       onConfigApply: (t) => depsRef.current.onConfigApply(t),
       onNoteSaved: (m) => depsRef.current.onNoteSaved(m),
       onNoteRenamed: (id, m) => depsRef.current.onNoteRenamed(id, m),
