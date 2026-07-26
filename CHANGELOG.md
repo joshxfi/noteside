@@ -1,3 +1,30 @@
+## [1.6.0](https://github.com/joshxfi/noteside/compare/v1.5.2...v1.6.0) (2026-07-26)
+
+### Features
+
+* pin notes to the top of the sidebar ([796f9fa](https://github.com/joshxfi/noteside/commit/796f9fa47df3eded4e2ff4afab326c57475c9c88))
+
+### Bug Fixes
+
+* forward the toast kind through the session notify bridge ([aa7e7f4](https://github.com/joshxfi/noteside/commit/aa7e7f4bd57feb87c1abaeda93051b5a51f56ec1))
+* hide note frontmatter in live preview instead of parsing it as markdown ([7aece5f](https://github.com/joshxfi/noteside/commit/7aece5fe69cf658435dfe86b610a833c1234b12f))
+* insert Tab at the cursor and make indent width configurable ([d6d7eab](https://github.com/joshxfi/noteside/commit/d6d7eab7cdeffc252fbd94edcee51a056363ef3b))
+* keep the selected row visible in keyboard-driven lists ([59b3213](https://github.com/joshxfi/noteside/commit/59b3213a78704a2822541eefaebd314f5fc24ad3))
+* stop the config buffer discarding lines it does not recognize ([0a7ee40](https://github.com/joshxfi/noteside/commit/0a7ee40df108f8f997c2e9673e84f38fa6b0c8c0))
+
+### Performance
+
+* count words incrementally instead of rescanning the document ([b004900](https://github.com/joshxfi/noteside/commit/b004900704574e4744850290785310c638b45027))
+
+### Polish
+
+* distinguish error toasts from confirmations ([f29aa1c](https://github.com/joshxfi/noteside/commit/f29aa1ce559e158f27fc3f4eae54d4fee5796eb1))
+
+### Documentation
+
+* record pinning, the frontmatter rule, and the word-count delta ([2760e11](https://github.com/joshxfi/noteside/commit/2760e119891eb5d61ad9901019813c302db39d34))
+* record the Tab indent rule and the lossless config buffer ([080e80e](https://github.com/joshxfi/noteside/commit/080e80e038fbfe83b6c6adc12bd91b70e8ba0c6a))
+
 ## [1.5.2](https://github.com/joshxfi/noteside/compare/v1.5.1...v1.5.2) (2026-07-23)
 
 ### Bug Fixes
