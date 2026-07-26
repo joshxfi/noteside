@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mockBackend } from "./mock";
+import { mockBackend, setPinnedBody } from "./mock";
 
 // The mock backs browser dev + the landing demo; the live Rust search is tested
 // separately (cargo test). These cover the mock's behavioral parity.
@@ -73,6 +73,41 @@ describe("mock backend", () => {
     expect((await mockBackend.readNote("journal/fresh-title.md")).body).toContain("Fresh Title");
   });
 
+  it("setPinned floats a stale note above a newer one, and unpinning restores it", async () => {
+    const notes = await mockBackend.listNotes();
+    const stale = notes[notes.length - 1]; // oldest `updated` → normally sorts last
+    expect(stale.pinned).toBe(false);
+    const fresh = await mockBackend.createNote("Newest Note"); // sorts first on recency
+
+    const meta = await mockBackend.setPinned(stale.path, true);
+    expect(meta.pinned).toBe(true);
+    expect(meta.title).toBe(stale.title); // pinning never retitles a note
+    // pinned beats recency — that is the whole point of the flag
+    expect((await mockBackend.listNotes())[0]?.path).toBe(stale.path);
+    expect((await mockBackend.readNote(stale.path)).body).toContain("pinned: true");
+
+    const un = await mockBackend.setPinned(stale.path, false);
+    expect(un.pinned).toBe(false);
+    // the note drops back below the pinned tier; the frontmatter is gone entirely
+    expect((await mockBackend.readNote(stale.path)).body).not.toContain("pinned:");
+    await mockBackend.deleteNote(fresh.path);
+  });
+
+  it("setPinned to the state a note is already in does not bump `updated`", async () => {
+    // `updated` is the sidebar's sort key, so a redundant unpin must not jump
+    // the note to the top of "recently updated" (Rust skips the write too).
+    const note = (await mockBackend.listNotes())[1];
+    expect(note.pinned).toBe(false);
+    const meta = await mockBackend.setPinned(note.path, false);
+    expect(meta.updated).toBe(note.updated);
+
+    await mockBackend.setPinned(note.path, true);
+    const pinned = (await mockBackend.listNotes()).find((n) => n.path === note.path)!;
+    const again = await mockBackend.setPinned(note.path, true);
+    expect(again.updated).toBe(pinned.updated);
+    await mockBackend.setPinned(note.path, false); // restore
+  });
+
   it("deleteNote removes the note from listing and search", async () => {
     const a = await mockBackend.createNote("Alpha To Delete");
     await mockBackend.recordOpen(a.path); // give it frecency so it'd rank in recents
@@ -83,6 +118,64 @@ describe("mock backend", () => {
     expect((await mockBackend.listNotes()).some((n) => n.path === a.path)).toBe(false);
     expect((await mockBackend.searchFiles("")).some((h) => h.path === a.path)).toBe(false);
     expect((await mockBackend.searchFiles("Alpha")).some((h) => h.path === a.path)).toBe(false);
+  });
+});
+
+// setPinnedBody mirrors Rust notebook::set_pinned — same cases as
+// notebook.rs's set_pinned_* tests, so the two adapters can't drift.
+describe("setPinnedBody (mirror of Rust set_pinned)", () => {
+  const roundTrip = (original: string) =>
+    expect(setPinnedBody(setPinnedBody(original, true), false)).toBe(original);
+
+  it("opens a frontmatter block for a plain note", () => {
+    expect(setPinnedBody("# Note\n\nbody\n", true)).toBe(
+      "---\npinned: true\n---\n# Note\n\nbody\n",
+    );
+    expect(setPinnedBody("# Note\n\nbody\n", false)).toBe("# Note\n\nbody\n");
+  });
+
+  it("inserts into existing frontmatter without touching other keys", () => {
+    expect(setPinnedBody("---\ntitle: T\ntags: [a]\n---\nbody", true)).toBe(
+      "---\npinned: true\ntitle: T\ntags: [a]\n---\nbody",
+    );
+  });
+
+  it("rewrites an existing key in place, preserving indentation", () => {
+    expect(setPinnedBody("---\ntitle: T\npinned: false\n---\nbody", true)).toBe(
+      "---\ntitle: T\npinned: true\n---\nbody",
+    );
+    expect(setPinnedBody("---\n  pinned: false\n---\nbody", true)).toBe(
+      "---\n  pinned: true\n---\nbody",
+    );
+  });
+
+  it("unpinning drops the key but keeps the rest of the frontmatter", () => {
+    expect(setPinnedBody("---\ntitle: T\npinned: true\ntags: [a]\n---\nbody", false)).toBe(
+      "---\ntitle: T\ntags: [a]\n---\nbody",
+    );
+  });
+
+  it("unpinning the only key removes the whole block", () => {
+    expect(setPinnedBody("---\npinned: true\n---\nbody", false)).toBe("body");
+  });
+
+  it("round-trips every frontmatter shape back to the original bytes", () => {
+    roundTrip("# Note\n\nbody\n");
+    roundTrip("plain text, no heading");
+    roundTrip("");
+    roundTrip("---\ntitle: T\n---\n# Note\nbody\n");
+    roundTrip("---\ntitle: T\ntags: [a, b]\ncreated: 2026-01-01\n---\nbody");
+    roundTrip("# CRLF\r\nbody\r\n");
+    roundTrip("---\r\ntitle: T\r\n---\r\nbody\r\n");
+  });
+
+  it("preserves CRLF line endings", () => {
+    expect(setPinnedBody("# Note\r\nbody\r\n", true)).toBe(
+      "---\r\npinned: true\r\n---\r\n# Note\r\nbody\r\n",
+    );
+    expect(setPinnedBody("---\r\ntitle: T\r\n---\r\nbody\r\n", true)).toBe(
+      "---\r\npinned: true\r\ntitle: T\r\n---\r\nbody\r\n",
+    );
   });
 });
 

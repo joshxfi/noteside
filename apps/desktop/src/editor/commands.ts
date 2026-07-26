@@ -27,6 +27,8 @@ export const APP_COMMANDS = [
   "duplicate",
   "reveal",
   "rename",
+  "pin",
+  "unpin",
   "palette",
   "commands",
   "togglePreview",
@@ -71,6 +73,8 @@ export interface Command {
   danger?: boolean;
   /** Requires an open note. */
   needsNote?: boolean;
+  /** Only offer when the open note's pinned state matches (pin vs unpin). */
+  needsPinned?: boolean;
   /** Optional hint shown next to the label in the which-key leader palette. */
   paletteHint?: string;
   /** Show in the searchable command palette (default true). */
@@ -187,6 +191,28 @@ export const COMMANDS: Command[] = [
     command: "rename",
     needsNote: true,
     paletteHint: ":rename",
+  },
+  // Two commands, not one toggle with two ex-names: `:unpin` sharing a toggling
+  // handler would PIN an already-unpinned note. Each states what it does, and
+  // `needsPinned` keeps the palette showing only the one that applies.
+  {
+    id: "pin",
+    title: "Pin note",
+    group: "Note",
+    ex: ["pin"],
+    command: "pin",
+    needsNote: true,
+    needsPinned: false,
+    paletteHint: "sorts to the top",
+  },
+  {
+    id: "unpin",
+    title: "Unpin note",
+    group: "Note",
+    ex: ["unpin"],
+    command: "unpin",
+    needsNote: true,
+    needsPinned: true,
   },
   {
     id: "reveal",

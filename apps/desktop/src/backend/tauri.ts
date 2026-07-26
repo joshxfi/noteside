@@ -63,6 +63,7 @@ export const tauriBackend: Backend = {
   duplicateNote: (path) => invoke<NoteMeta>("duplicate_note", { path }),
   retitleNote: (path, title) => invoke<NoteMeta>("retitle_note", { path, title }),
   revealNote: (path) => invoke<void>("reveal_note", { path }),
+  setPinned: (path, pinned) => invoke<NoteMeta>("set_note_pinned", { path, pinned }),
   deleteNote: (path) => invoke<void>("delete_note", { path }),
   recordOpen: (path) => invoke<void>("record_open", { path }),
   searchFiles: (query) => invoke<FileHit[]>("search_files", { query }),

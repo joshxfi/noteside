@@ -77,6 +77,10 @@ export interface Backend {
   retitleNote(path: string, title: string): Promise<NoteMeta>;
   /** Reveal a note's file in the OS file manager. Native only — a no-op in the mock. */
   revealNote(path: string): Promise<void>;
+  /** Pin or unpin a note by rewriting its `pinned` frontmatter flag. Pinned notes
+   *  sort first in the sidebar and in the finder's empty-query recents. Unpinning
+   *  removes the key (and an emptied frontmatter block) rather than writing false. */
+  setPinned(path: string, pinned: boolean): Promise<NoteMeta>;
   deleteNote(path: string): Promise<void>;
   /** A user opened this note (finder/sidebar/link/step — NOT watcher reloads).
    *  Feeds the frecency ranking in searchFiles; best-effort, fire-and-forget. */

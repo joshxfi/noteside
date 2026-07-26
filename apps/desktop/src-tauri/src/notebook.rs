@@ -242,6 +242,61 @@ pub fn set_title(text: &str, new_title: &str) -> String {
     format!("# {new_title}\n\n{text}")
 }
 
+/// Rewrite `text` so `parse_meta` derives `pinned`, leaving every other byte
+/// alone. Pinning writes a frontmatter `pinned: true`, opening a block when the
+/// note has none; unpinning REMOVES the key — and the whole block if that was
+/// its only content — so a note that gets pinned and unpinned ends up byte-identical
+/// to how it started, and users who never pin never grow frontmatter.
+pub fn set_pinned(text: &str, pinned: bool) -> String {
+    let (frontmatter, body_start) = split_frontmatter(text);
+    if frontmatter.is_none() {
+        if !pinned {
+            return text.to_string(); // absent frontmatter already means unpinned
+        }
+        let nl = if text.contains("\r\n") { "\r\n" } else { "\n" };
+        return format!("---{nl}pinned: true{nl}---{nl}{text}");
+    }
+    let header = &text[..body_start];
+    // `header` is a prefix of `text`, so a line index within it indexes `text` too.
+    let existing = header
+        .split_inclusive('\n')
+        .enumerate()
+        .find(|(_, seg)| line_body(seg).trim_start().starts_with("pinned:"));
+    match (existing, pinned) {
+        (Some((idx, seg)), true) => {
+            let content = line_body(seg);
+            let indent = &content[..content.len() - content.trim_start().len()];
+            replace_line_at(text, idx, &format!("{indent}pinned: true"))
+        }
+        (Some((idx, _)), false) => {
+            let stripped = remove_line_at(text, idx);
+            // Removing the sole key would leave an empty `---\n---\n` husk.
+            let (inner, body) = split_frontmatter(&stripped);
+            if inner.is_some_and(|f| f.trim().is_empty()) {
+                stripped[body..].to_string()
+            } else {
+                stripped
+            }
+        }
+        // Insert right after the opening `---`, mirroring set_title's case (c).
+        (None, true) => {
+            let nl = if header.contains("\r\n") {
+                "\r\n"
+            } else {
+                "\n"
+            };
+            let after_open = header.find('\n').map(|i| i + 1).unwrap_or(header.len());
+            format!(
+                "{}pinned: true{nl}{}{}",
+                &header[..after_open],
+                &header[after_open..],
+                &text[body_start..],
+            )
+        }
+        (None, false) => text.to_string(),
+    }
+}
+
 /// The content of a `split_inclusive('\n')` segment without its trailing
 /// `\n`/`\r\n` (the final, unterminated line yields an empty terminator).
 fn line_body(seg: &str) -> &str {
@@ -259,6 +314,18 @@ fn replace_line_at(text: &str, idx: usize, new_content: &str) -> String {
             out.push_str(new_content);
             out.push_str(&seg[line_body(seg).len()..]);
         } else {
+            out.push_str(seg);
+        }
+    }
+    out
+}
+
+/// `text` with its `idx`-th line (0-based, split on `\n`) dropped entirely, its
+/// terminator included; every other byte verbatim.
+fn remove_line_at(text: &str, idx: usize) -> String {
+    let mut out = String::with_capacity(text.len());
+    for (j, seg) in text.split_inclusive('\n').enumerate() {
+        if j != idx {
             out.push_str(seg);
         }
     }
@@ -685,6 +752,94 @@ mod tests {
             set_title("---\r\ntitle: Old\r\n---\r\nbody\r\n", "New"),
             "---\r\ntitle: New\r\n---\r\nbody\r\n"
         );
+    }
+
+    /// The round-trip guarantee `set_pinned` is built on: pin then unpin must
+    /// restore the original bytes, so pinning is not a destructive edit.
+    fn assert_pin_round_trip(original: &str) {
+        let pinned = set_pinned(original, true);
+        assert!(parse_meta("n.md".into(), &pinned, 0).pinned);
+        assert_eq!(
+            set_pinned(&pinned, false),
+            original,
+            "unpinning {original:?} did not restore it"
+        );
+    }
+
+    #[test]
+    fn set_pinned_opens_frontmatter_for_a_plain_note() {
+        assert_eq!(
+            set_pinned("# Note\n\nbody\n", true),
+            "---\npinned: true\n---\n# Note\n\nbody\n"
+        );
+        // Already unpinned — no frontmatter is grown just to say so.
+        assert_eq!(set_pinned("# Note\n\nbody\n", false), "# Note\n\nbody\n");
+    }
+
+    #[test]
+    fn set_pinned_inserts_into_existing_frontmatter_without_touching_other_keys() {
+        assert_eq!(
+            set_pinned("---\ntitle: T\ntags: [a]\n---\nbody", true),
+            "---\npinned: true\ntitle: T\ntags: [a]\n---\nbody"
+        );
+    }
+
+    #[test]
+    fn set_pinned_rewrites_an_existing_key_in_place() {
+        assert_eq!(
+            set_pinned("---\ntitle: T\npinned: false\n---\nbody", true),
+            "---\ntitle: T\npinned: true\n---\nbody"
+        );
+        // Indentation of the existing key is preserved.
+        assert_eq!(
+            set_pinned("---\n  pinned: false\n---\nbody", true),
+            "---\n  pinned: true\n---\nbody"
+        );
+    }
+
+    #[test]
+    fn unpinning_drops_the_key_and_keeps_the_rest_of_the_frontmatter() {
+        assert_eq!(
+            set_pinned("---\ntitle: T\npinned: true\ntags: [a]\n---\nbody", false),
+            "---\ntitle: T\ntags: [a]\n---\nbody"
+        );
+    }
+
+    #[test]
+    fn unpinning_the_only_key_removes_the_whole_block() {
+        assert_eq!(set_pinned("---\npinned: true\n---\nbody", false), "body");
+    }
+
+    #[test]
+    fn set_pinned_round_trips_every_frontmatter_shape() {
+        assert_pin_round_trip("# Note\n\nbody\n");
+        assert_pin_round_trip("plain text, no heading");
+        assert_pin_round_trip("");
+        assert_pin_round_trip("---\ntitle: T\n---\n# Note\nbody\n");
+        assert_pin_round_trip("---\ntitle: T\ntags: [a, b]\ncreated: 2026-01-01\n---\nbody");
+        assert_pin_round_trip("# CRLF\r\nbody\r\n");
+        assert_pin_round_trip("---\r\ntitle: T\r\n---\r\nbody\r\n");
+    }
+
+    #[test]
+    fn set_pinned_preserves_crlf_line_endings() {
+        assert_eq!(
+            set_pinned("# Note\r\nbody\r\n", true),
+            "---\r\npinned: true\r\n---\r\n# Note\r\nbody\r\n"
+        );
+        assert_eq!(
+            set_pinned("---\r\ntitle: T\r\n---\r\nbody\r\n", true),
+            "---\r\npinned: true\r\ntitle: T\r\n---\r\nbody\r\n"
+        );
+    }
+
+    #[test]
+    fn set_pinned_leaves_the_title_and_body_untouched() {
+        let original = "---\ntitle: Keep Me\n---\n# Heading\n\nsome *body* text\n";
+        let pinned = set_pinned(original, true);
+        let meta = parse_meta("n.md".into(), &pinned, 0);
+        assert_eq!(meta.title, "Keep Me");
+        assert!(pinned.ends_with("# Heading\n\nsome *body* text\n"));
     }
 
     #[test]

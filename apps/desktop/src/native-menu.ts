@@ -14,28 +14,42 @@ export interface NoteMenuActions {
   onReveal: (id: string) => void;
   onDuplicate: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   onDelete: (id: string, title: string) => void;
 }
 
 interface MenuContext {
   id: string;
   title: string;
+  pinned: boolean;
   actions: NoteMenuActions;
 }
 
 let activeContext: MenuContext | null = null;
 let menuPromise: Promise<import("@tauri-apps/api/menu").Menu> | null = null;
+// The one item whose label depends on the right-clicked row, retained so each
+// popup can retarget it instead of rebuilding (and leaking) the whole menu.
+let pinItem: import("@tauri-apps/api/menu").MenuItem | null = null;
 
 async function noteMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
   if (menuPromise) return menuPromise;
-  menuPromise = import("@tauri-apps/api/menu").then(({ Menu }) =>
-    Menu.new({
+  menuPromise = import("@tauri-apps/api/menu").then(async ({ Menu, MenuItem }) => {
+    pinItem = await MenuItem.new({
+      id: "note-pin",
+      text: "Pin",
+      action: () => {
+        const context = activeContext;
+        if (context) context.actions.onTogglePin(context.id, !context.pinned);
+      },
+    });
+    return Menu.new({
       items: [
         {
           id: "note-open",
           text: "Open",
           action: () => activeContext?.actions.onOpen(activeContext.id),
         },
+        pinItem,
         {
           id: "note-reveal",
           text: revealLabel(),
@@ -64,8 +78,8 @@ async function noteMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
           },
         },
       ],
-    }),
-  );
+    });
+  });
   return menuPromise;
 }
 
@@ -82,11 +96,15 @@ function revealLabel(): string {
 export async function showNoteContextMenu(
   id: string,
   title: string,
+  pinned: boolean,
   actions: NoteMenuActions,
 ): Promise<void> {
   if (!isTauri()) return;
-  activeContext = { id, title, actions };
+  activeContext = { id, title, pinned, actions };
   const menu = await noteMenu();
+  // Retarget the one state-dependent label before showing (the menu itself is
+  // built once and reused).
+  await pinItem?.setText(pinned ? "Unpin" : "Pin");
   await menu.popup(); // no position → at the cursor
 }
 
@@ -95,6 +113,7 @@ export async function disposeNoteContextMenu(): Promise<void> {
   activeContext = null;
   const current = menuPromise;
   menuPromise = null;
+  pinItem = null; // owned by the menu being closed below
   if (!current) return;
   try {
     await (await current).close();

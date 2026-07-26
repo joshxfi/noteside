@@ -51,6 +51,7 @@ pub fn run() {
             commands::retitle_note,
             commands::duplicate_note,
             commands::reveal_note,
+            commands::set_note_pinned,
             commands::delete_note,
             commands::record_open,
             commands::search_files,

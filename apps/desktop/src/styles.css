@@ -354,6 +354,16 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* pinned marker — sits after the (ellipsised) title, like the dirty dot does */
+.av-item-pin {
+  flex: none;
+  display: block;
+  color: var(--ink-faint);
+  transform: rotate(45deg); /* lucide's Pin points up; angled reads as "pinned down" */
+}
+.av-item.is-active .av-item-pin {
+  color: var(--accent);
+}
 .av-item-meta {
   font-size: calc(10.5px * var(--ui-scale));
   letter-spacing: 0.02em;

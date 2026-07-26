@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Library, PanelLeft, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { Library, PanelLeft, Pin, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
@@ -44,8 +44,8 @@ import {
 import { applyThemeVars, resolveThemeId, resolveThemeVars, themeById } from "./themes";
 import { ThemePicker } from "./components/theme-picker";
 import { openExternal } from "./open-external";
-import { useEditingSession } from "./use-editing-session";
 import type { NotifyKind } from "./editing-session";
+import { useEditingSession } from "./use-editing-session";
 import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
@@ -189,7 +189,7 @@ const NoteRow = memo(function NoteRow({
   note: NoteMeta;
   active: boolean;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string) => void;
+  onContext: (id: string, title: string, pinned: boolean) => void;
   now: number;
   top?: number;
   index?: number;
@@ -204,7 +204,7 @@ const NoteRow = memo(function NoteRow({
       onClick={() => onPick(note.id)}
       onContextMenu={(e) => {
         e.preventDefault(); // suppress the WebView's native menu; ours pops instead
-        onContext(note.id, note.title);
+        onContext(note.id, note.title, note.pinned);
       }}
       style={
         top === undefined
@@ -222,6 +222,7 @@ const NoteRow = memo(function NoteRow({
       <span className="av-item-main">
         <span className="av-item-title">
           <span className="av-item-titletext">{note.title}</span>
+          {note.pinned && <Pin className="av-item-pin" size={11} aria-label="pinned" />}
         </span>
         <span className="av-item-meta">
           {note.tags[0] ? `${note.tags[0]} · ` : ""}
@@ -244,7 +245,7 @@ function VirtualNoteList({
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string) => void;
+  onContext: (id: string, title: string, pinned: boolean) => void;
   now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -301,7 +302,7 @@ const Sidebar = memo(function Sidebar({
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string) => void;
+  onContext: (id: string, title: string, pinned: boolean) => void;
   onNew: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
@@ -897,6 +898,35 @@ export function App() {
     }
   };
 
+  // Set a note's pinned flag. The backend rewrites the note's frontmatter, so
+  // this is a body-changing operation: flush the open buffer first (or the flush
+  // would race the rewrite), and reopen afterwards so the editor picks up the new
+  // frontmatter. Without the reopen the buffer would still hold the pre-pin text
+  // and the next autosave would quietly unpin the note.
+  const setNotePinned = async (id: string, pinned: boolean) => {
+    // Already in the requested state (`:pin` on a pinned note): the backend
+    // writes nothing, so skip the flush + reopen too — a remount here would
+    // throw the cursor back to the top of the note for no reason at all.
+    if (notes.find((n) => n.id === id)?.pinned === pinned) {
+      flash(pinned ? "note pinned" : "note unpinned");
+      return;
+    }
+    const wasActive = s.status === "note" && s.activeId === id;
+    try {
+      if (wasActive) await session.flush();
+      const meta = await backend.setPinned(id, pinned);
+      setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
+      if (wasActive) await session.open(meta.id);
+      flash(pinned ? "note pinned" : "note unpinned");
+    } catch (e) {
+      flash(`${pinned ? "pin" : "unpin"} failed: ${e}`, "error");
+    }
+  };
+
+  const setActivePinned = (pinned: boolean) => {
+    if (s.status === "note" && s.activeId) void setNotePinned(s.activeId, pinned);
+  };
+
   const renameActive = () => {
     if (s.status === "note" && s.activeId) requestRename(s.activeId, s.title ?? "");
   };
@@ -969,6 +999,8 @@ export function App() {
     else if (c === "delete") deleteActive();
     else if (c === "duplicate") duplicateActive();
     else if (c === "rename") renameActive();
+    else if (c === "pin") setActivePinned(true);
+    else if (c === "unpin") setActivePinned(false);
     else if (c === "reveal") revealActive();
     else if (c === "togglePreview") togglePreview();
     else if (c === "reopen") session.reopenLast();
@@ -1019,12 +1051,13 @@ export function App() {
   // Right-click a note row → the native OS context menu (Tauri only; a no-op in
   // the browser demo). "Delete" routes through the same confirm modal as :rm.
   const openNoteMenu = useCallback(
-    (id: string, title: string) =>
-      void showNoteContextMenu(id, title, {
+    (id: string, title: string, pinned: boolean) =>
+      void showNoteContextMenu(id, title, pinned, {
         onOpen: openNote,
         onReveal: revealNote,
         onDuplicate: (nid) => void duplicateNote(nid),
         onRename: requestRename,
+        onTogglePin: (nid, next) => void setNotePinned(nid, next),
         onDelete: requestDelete,
       }),
     // duplicateNote/revealNote are stable closures recreated each render; the menu
@@ -1033,13 +1066,27 @@ export function App() {
     [openNote, requestRename, requestDelete],
   );
 
+  // Pinned state of the open note — drives which of Pin/Unpin the palette offers.
+  // Memoized so the O(notes) lookup runs when the list or the active note
+  // changes, not on every unrelated re-render (a toast, a settings tweak).
+  const activePinned = useMemo(
+    () =>
+      s.status === "note" && s.activeId
+        ? (notes.find((n) => n.id === s.activeId)?.pinned ?? false)
+        : false,
+    [notes, s.activeId, s.status],
+  );
   const searchableCommands = useMemo(
     () =>
       withChordOverrides(
-        paletteCommands.filter((c) => !c.needsNote || s.status === "note"),
+        paletteCommands.filter(
+          (c) =>
+            (!c.needsNote || s.status === "note") &&
+            (c.needsPinned === undefined || c.needsPinned === activePinned),
+        ),
         cfg.chords,
       ),
-    [cfg.chords, s.status],
+    [cfg.chords, s.status, activePinned],
   );
 
   const titleText = s.title;
