@@ -819,6 +819,17 @@ body {
     transform: translate(-50%, 0);
   }
 }
+/* Failures read as failures. Tinted paper + --danger ink rather than a solid red
+   fill: base16 themes map --danger onto their base08, which on a light scheme is
+   too pale to carry --accent-ink — this stays legible under every palette, and
+   matches the danger treatment on .cfm-btn / .pal-row. */
+.av-toast.is-error {
+  background: color-mix(in oklab, var(--paper), var(--danger) 14%);
+  color: var(--danger);
+  box-shadow:
+    0 10px 30px -10px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px color-mix(in oklab, var(--rule), var(--danger) 45%);
+}
 
 /* ── settings panel ───────────────────────────────────────── */
 .set-scrim {

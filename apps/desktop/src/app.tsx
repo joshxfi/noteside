@@ -45,6 +45,7 @@ import { applyThemeVars, resolveThemeId, resolveThemeVars, themeById } from "./t
 import { ThemePicker } from "./components/theme-picker";
 import { openExternal } from "./open-external";
 import { useEditingSession } from "./use-editing-session";
+import type { NotifyKind } from "./editing-session";
 import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
@@ -462,7 +463,7 @@ export function App() {
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; kind: NotifyKind } | null>(null);
   const toastTimer = useRef<number | null>(null);
   // Update-check state lives here (not in SettingsPanel) so the boot check can run
   // with Settings closed and drive the Settings-button badge; the panel reads it.
@@ -492,13 +493,18 @@ export function App() {
 
   const configLoaded = useRef(false);
 
-  const flash = useCallback((msg: string) => {
+  // Errors linger longer than confirmations — they usually carry a reason worth
+  // reading, and unlike "note saved" they aren't predictable from what you just did.
+  const flash = useCallback((msg: string, kind: NotifyKind = "info") => {
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
-    setToast(msg);
-    toastTimer.current = window.setTimeout(() => {
-      toastTimer.current = null;
-      setToast(null);
-    }, 1600);
+    setToast({ msg, kind });
+    toastTimer.current = window.setTimeout(
+      () => {
+        toastTimer.current = null;
+        setToast(null);
+      },
+      kind === "error" ? 3600 : 1600,
+    );
   }, []);
 
   useEffect(
@@ -655,7 +661,7 @@ export function App() {
     } catch (e) {
       void backend.removeRecentNotebook(path); // a folder that's gone shouldn't linger in recents
       session.reopenLast(); // the old backend context remains authoritative when open fails
-      flash(`couldn't open notebook: ${e}`);
+      flash(`couldn't open notebook: ${e}`, "error");
     }
   };
   // Switcher "Open folder…": native dialog → switch to the chosen folder.
@@ -669,7 +675,7 @@ export function App() {
       const path = await backend.createNotebook(parent, name);
       await switchNotebook(path);
     } catch (e) {
-      flash(`couldn't create notebook: ${e}`);
+      flash(`couldn't create notebook: ${e}`, "error");
     }
   };
 
@@ -773,7 +779,7 @@ export function App() {
   // open an external URL under the cursor (gx / :follow / Mod-click)
   const onOpenUrl = (url: string) => {
     void openExternal(url).then((ok) => {
-      if (!ok) flash(`can't open: ${url}`);
+      if (!ok) flash(`can't open: ${url}`, "error");
     });
   };
 
@@ -814,7 +820,7 @@ export function App() {
       setNotes((ns) => insertMeta(ns, meta));
       await session.open(meta.id);
     } catch (e) {
-      flash(`couldn't create note: ${e}`);
+      flash(`couldn't create note: ${e}`, "error");
     }
   }, [session, flash]);
 
@@ -838,7 +844,7 @@ export function App() {
       flash("note deleted");
     } catch (e) {
       if (wasActive) session.resumeAutosave();
-      flash(`delete failed: ${e}`);
+      flash(`delete failed: ${e}`, "error");
     }
   };
 
@@ -861,12 +867,12 @@ export function App() {
       await session.open(meta.id);
       flash("note duplicated");
     } catch (e) {
-      flash(`duplicate failed: ${e}`);
+      flash(`duplicate failed: ${e}`, "error");
     }
   };
 
   const revealNote = (id: string) => {
-    void backend.revealNote(id).catch((e) => flash(`couldn't reveal: ${e}`));
+    void backend.revealNote(id).catch((e) => flash(`couldn't reveal: ${e}`, "error"));
   };
 
   // Open the rename input modal for a note; the modal's confirm runs the rename.
@@ -887,7 +893,7 @@ export function App() {
       if (wasActive) await session.open(meta.id);
       flash("note renamed");
     } catch (e) {
-      flash(`rename failed: ${e}`);
+      flash(`rename failed: ${e}`, "error");
     }
   };
 
@@ -1141,7 +1147,15 @@ export function App() {
             ) : (
               <EmptyState hasClosed={!!s.lastNoteId} onReopen={() => session.reopenLast()} />
             )}
-            {toast && <div className="av-toast">{toast}</div>}
+            {toast && (
+              <div
+                className={"av-toast" + (toast.kind === "error" ? " is-error" : "")}
+                role="status"
+                aria-live="polite"
+              >
+                {toast.msg}
+              </div>
+            )}
           </main>
         </div>
 

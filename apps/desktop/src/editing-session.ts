@@ -14,6 +14,9 @@ const DEFAULT_AUTOSAVE_MS = 800;
 
 export type BufferKind = "note" | "config";
 
+/** Severity of a `notify` message — App renders errors as a danger-tinted toast. */
+export type NotifyKind = "info" | "error";
+
 /** Immutable read-model the editor + chrome render from. Stable by identity between mutations. */
 export interface SessionSnapshot {
   status: "empty" | "note" | "config";
@@ -40,7 +43,7 @@ export interface EditingSessionDeps {
   /** Read once at creation; must be stable. */
   backend: Pick<Backend, "readNote" | "saveNote" | "renameNote" | "listNotes" | "recordOpen">;
   /** Transient toast channel (App's flash): I/O failures + the "reloaded from disk" notice. */
-  notify(message: string): void;
+  notify(message: string, kind?: NotifyKind): void;
   /** A config buffer was saved (`:w`) — App parses, applies, and persists. */
   onConfigApply(text: string): void;
   /** A note was persisted — App updates that row in the sidebar list in place. */
@@ -192,7 +195,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       }
       return meta;
     } catch (e) {
-      notify(`save failed: ${e}`);
+      notify(`save failed: ${e}`, "error");
       return null;
     }
   }
@@ -244,7 +247,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     try {
       meta = await backend.renameNote(id);
     } catch (e) {
-      notify(`rename failed: ${e}`);
+      notify(`rename failed: ${e}`, "error");
       return;
     }
     if (meta.id === id) return; // filename already matched the title
@@ -277,7 +280,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     try {
       doc = await backend.readNote(id);
     } catch (e) {
-      if (token === loadToken) notify(`couldn't open note: ${e}`); // deleted under us — prior buffer intact
+      if (token === loadToken) notify(`couldn't open note: ${e}`, "error"); // deleted under us — prior buffer intact
       return;
     }
     if (token !== loadToken) return; // a newer navigation superseded this open
@@ -373,7 +376,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       if (noteDirty) {
         // A transient scan/read failure is indistinguishable from an external
         // delete. Never discard the only in-memory copy of unsaved work.
-        notify("note unavailable on disk; unsaved buffer preserved");
+        notify("note unavailable on disk; unsaved buffer preserved", "error");
         return;
       }
       clearNoteBuffer(); // the active note vanished out from under us
