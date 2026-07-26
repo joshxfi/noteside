@@ -18,6 +18,8 @@ export interface Config {
   editorFont: string;
   fontSize: number;
   lineHeight: number;
+  /** Indent width in spaces — what Tab inserts and what CodeMirror indents by. */
+  tabWidth: number;
   /** Interface-size multiplier — scales the UI chrome (not the editor). */
   uiScale: number;
   /** Show relative line numbers in the gutter (off = absolute). */
@@ -71,6 +73,7 @@ export const CONFIG_DEFAULTS: Config = {
   editorFont: "newsreader",
   fontSize: 19,
   lineHeight: 1.75,
+  tabWidth: 2, // CodeMirror's own default indentUnit — unchanged for existing users
   uiScale: 1,
   relativeNumbers: false,
   cursor: "block",
@@ -83,6 +86,24 @@ export const CONFIG_DEFAULTS: Config = {
   chords: {},
 };
 
+export const TAB_WIDTH_MIN = 1;
+export const TAB_WIDTH_MAX = 8;
+
+// The comment lines serializeConfig writes.
+const C = {
+  header: '" ~/.notesiderc — Noteside configuration',
+  howto: '" Edit any line and :w to apply. The Settings panel writes here too.',
+  appearance: '" appearance',
+  typography: '" typography',
+  cursor: '" cursor',
+  editor: '" editor',
+  updates: '" updates',
+  keys: '" keys',
+  noEsc: '" imap jj <Esc>          (no insert-mode escape mapping set)',
+  noMaps: '" nmap <Space>w :w<CR>   (custom key mappings go here)',
+  noBinds: '" bind Ctrl-j find       (use Cmd/Ctrl/Alt or an F-key; bind none <cmd> to unbind)',
+} as const;
+
 const byId = <T extends { id: string }>(list: T[], id: string): T =>
   list.find((x) => x.id === id) || list[0];
 
@@ -92,38 +113,39 @@ export const fontStack = (id: string): string => byId(EDITOR_FONTS, id).stack;
 export function serializeConfig(c: Config): string {
   const eLabel = byId(EDITOR_FONTS, c.editorFont).label;
   const L: string[] = [];
-  L.push('" ~/.notesiderc — Noteside configuration');
-  L.push('" Edit any line and :w to apply. The Settings panel writes here too.');
+  L.push(C.header);
+  L.push(C.howto);
   L.push("");
-  L.push('" appearance');
+  L.push(C.appearance);
   L.push(`set theme        = ${c.theme}`);
   L.push("");
-  L.push('" typography');
+  L.push(C.typography);
   L.push(`set editor-font  = ${eLabel}`);
   L.push(`set font-size    = ${c.fontSize}`);
   L.push(`set line-height  = ${c.lineHeight}`);
+  L.push(`set tab-width    = ${c.tabWidth}`);
   L.push(`set ui-scale     = ${Math.round(c.uiScale * 100)}%`);
   L.push("");
-  L.push('" cursor');
+  L.push(C.cursor);
   L.push(`set cursor       = ${c.cursor}`);
   L.push(`set cursor-blink = ${c.cursorBlink ? "on" : "off"}`);
   L.push("");
-  L.push('" editor');
+  L.push(C.editor);
   L.push(`set live-preview = ${c.livePreview ? "on" : "off"}`);
   L.push(`set relative-numbers = ${c.relativeNumbers ? "on" : "off"}`);
   L.push("");
-  L.push('" updates');
+  L.push(C.updates);
   L.push(`set auto-update  = ${c.autoUpdateCheck ? "on" : "off"}`);
   L.push("");
-  L.push('" keys');
+  L.push(C.keys);
   L.push(`set vim          = ${c.vimMode ? "on" : "off"}`);
   if (c.escMap) L.push(`imap ${c.escMap} <Esc>`);
-  else L.push('" imap jj <Esc>          (no insert-mode escape mapping set)');
+  else L.push(C.noEsc);
   if (c.keymaps.length) for (const km of c.keymaps) L.push(km);
-  else L.push('" nmap <Space>w :w<CR>   (custom key mappings go here)');
+  else L.push(C.noMaps);
   const binds = Object.entries(c.chords).filter(([, chord]) => !chord || isSafeChord(chord));
   if (binds.length) for (const [id, chord] of binds) L.push(`bind ${chord || "none"} ${id}`);
-  else L.push('" bind Ctrl-j find       (use Cmd/Ctrl/Alt or an F-key; bind none <cmd> to unbind)');
+  else L.push(C.noBinds);
   L.push("");
   return L.join("\n");
 }
@@ -177,6 +199,11 @@ export function parseConfig(text: string, base: Config): Config {
       } else if (key === "line-height") {
         const v = parseFloat(val);
         if (!isNaN(v)) c.lineHeight = Math.max(1.4, Math.min(2.1, Math.round(v * 100) / 100));
+        // vim's own spellings are accepted: someone reaching for indent width
+        // types `set tabstop=4` long before they read our key list (issue #24).
+      } else if (["tab-width", "tabwidth", "tabstop", "ts", "shiftwidth", "sw"].includes(key)) {
+        const v = parseInt(val, 10);
+        if (!isNaN(v)) c.tabWidth = Math.max(TAB_WIDTH_MIN, Math.min(TAB_WIDTH_MAX, v));
       } else if (key === "ui-scale" || key === "interface-size") {
         const v = parseFloat(val); // accepts "110%", "110", or "1.1"
         if (!isNaN(v)) {

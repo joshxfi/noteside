@@ -24,7 +24,7 @@ import {
 } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { syntaxHighlighting } from "@codemirror/language";
+import { indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
 import type { AppCommand } from "./commands";
 import { defineExCommands, setActiveHandlers } from "./ex-commands";
@@ -60,6 +60,10 @@ const selectionComp = new Compartment();
 // open-time initialText, visibly reverting a mid-edit buffer.
 const previewComp = new Compartment();
 const lineNumbersComp = new Compartment();
+// Indent width, same no-remount reasoning: changing it from Settings must not
+// tear down the view (cursor + undo history) mid-edit.
+const indentComp = new Compartment();
+const indentExt = (width: number): Extension => indentUnit.of(" ".repeat(width));
 
 // livePreview/blockPreview are singletons the compartment just adds or removes
 // when preview toggles.
@@ -99,6 +103,27 @@ const noteSyntax = syntaxHighlighting(noteHighlight);
 // Vim handles normal/visual-mode keys first, then delegates insert-mode editing
 // to the regular CM keymap.
 const defaultKeys = keymap.of(defaultKeymap);
+// Tab with a collapsed caret inserts ONE INDENT UNIT AT THE CARET; with a
+// selection it falls back to indenting the lines.
+//
+// Not `indentMore` (which was the bug in issue #23 — it indents the whole LINE
+// wherever the caret sits, so Tab mid-sentence jumped the indent to the line's
+// left edge), and not CodeMirror's `insertTab` either: that inserts a literal
+// `\t`, which ignores the configured tab width and disagrees with what
+// indentMore/indentLess step by. Reading the `indentUnit` facet keeps Tab,
+// Shift-Tab and auto-indent all speaking the same unit.
+const insertIndentUnit = (view: EditorView): boolean => {
+  const { state } = view;
+  if (state.selection.ranges.some((r) => !r.empty)) return indentMore(view);
+  view.dispatch(
+    state.update(state.replaceSelection(state.facet(indentUnit)), {
+      scrollIntoView: true,
+      userEvent: "input",
+    }),
+  );
+  return true;
+};
+
 // CodeMirror deliberately excludes Tab from defaultKeymap. Indent in plain text
 // mode and Vim insert mode, but consume it without editing in Vim normal/visual
 // mode so focus stays in the keyboard-first editor.
@@ -107,7 +132,7 @@ const indentationKeys = keymap.of([
     key: "Tab",
     run: (view) => {
       const vimState = getCM(view)?.state.vim;
-      return vimState && !vimState.insertMode ? true : indentMore(view);
+      return vimState && !vimState.insertMode ? true : insertIndentUnit(view);
     },
     shift: (view) => {
       const vimState = getCM(view)?.state.vim;
@@ -134,6 +159,8 @@ export interface EditorProps {
   /** Caret shape for insert / non-vim mode (vim normal mode is always a block). */
   cursor: "block" | "bar" | "underline";
   relativeNumbers: boolean;
+  /** Indent width in spaces — what Tab inserts and what indent/dedent step by. */
+  tabWidth: number;
   /** Non-vim chord overrides (`bind` lines), applied to the chord keymap at mount. */
   chordOverrides?: ChordOverrides;
   /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
@@ -280,6 +307,7 @@ export function Editor(props: EditorProps) {
     if (vimMode) extensions.push(vim());
     extensions.push(
       lineNumbersComp.of(lineNumbersExt(relativeNumbers)),
+      indentComp.of(indentExt(props.tabWidth)),
       activeLineHighlight,
       gutterHighlight,
       selectionComp.of(drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {})),
@@ -448,6 +476,14 @@ export function Editor(props: EditorProps) {
       effects: lineNumbersComp.reconfigure(lineNumbersExt(props.relativeNumbers)),
     });
   }, [props.relativeNumbers]);
+
+  // Same for the indent width.
+  useEffect(() => {
+    if (!didMountRef.current) return;
+    viewRef.current?.dispatch({
+      effects: indentComp.reconfigure(indentExt(props.tabWidth)),
+    });
+  }, [props.tabWidth]);
 
   useEffect(() => {
     const view = viewRef.current;
