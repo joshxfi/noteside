@@ -35,6 +35,21 @@ describe("command table", () => {
     }
   });
 
+  it("has unique ex-names, so no two commands claim the same `:` word", () => {
+    const ex = COMMANDS.flatMap((c) => c.ex ?? []);
+    expect(new Set(ex).size, `duplicate ex name in ${ex.join(", ")}`).toBe(ex.length);
+  });
+
+  // REGRESSION: pin/unpin were one toggling command with ex: ["pin", "unpin"],
+  // so `:unpin` on an unpinned note PINNED it. An ex-name must describe the
+  // effect it actually has, which means state-setting pairs are two commands.
+  it("pin and unpin are separate, state-guarded commands", () => {
+    expect(COMMAND_BY_ID.pin?.ex).toEqual(["pin"]);
+    expect(COMMAND_BY_ID.unpin?.ex).toEqual(["unpin"]);
+    expect(COMMAND_BY_ID.pin?.needsPinned).toBe(false); // offered when unpinned
+    expect(COMMAND_BY_ID.unpin?.needsPinned).toBe(true); // offered when pinned
+  });
+
   it("has unique ids and unique chords", () => {
     const ids = COMMANDS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);

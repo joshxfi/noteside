@@ -456,6 +456,57 @@ pub async fn retitle_note(
     Ok(meta)
 }
 
+/// Pin or unpin a note by rewriting its `pinned` frontmatter flag. Pinned notes
+/// sort to the top of the sidebar and of the finder's empty-query recents. The
+/// filename never changes, so — unlike retitle — there is no rename or frecency
+/// migration to do; this is just an own-write of the same path.
+#[tauri::command]
+pub async fn set_note_pinned(
+    path: String,
+    pinned: bool,
+    state: State<'_, AppState>,
+) -> Result<NoteMeta> {
+    // Body from the in-memory index (as rename/duplicate/retitle do), falling
+    // back to disk for a note the index hasn't seen.
+    let (root, generation, recorded) = {
+        let g = state.notebook.lock().unwrap();
+        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
+        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
+        (root, generation, body)
+    };
+    let disk_root = root.clone();
+    let rel = path.clone();
+    let (changed, meta, new_body) = blocking(move || {
+        let abs = notebook::safe_note_path(&disk_root, &rel)
+            .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+        let body = match recorded {
+            Some(b) => b,
+            None => std::fs::read_to_string(&abs)
+                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
+        };
+        let new_body = notebook::set_pinned(&body, pinned);
+        // Already in the requested state. Writing identical bytes would still
+        // bump mtime, which IS the sidebar's sort key — a redundant unpin would
+        // silently jump the note to the top of "recently updated".
+        if new_body == body {
+            let meta = notebook::parse_meta(rel, &body, notebook::mtime_millis(&abs));
+            return Ok((false, meta, body));
+        }
+        notebook::atomic_write(&abs, &new_body)?;
+        let meta = notebook::parse_meta(rel, &new_body, notebook::mtime_millis(&abs));
+        Ok((true, meta, new_body))
+    })
+    .await?;
+    let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
+    // Only a real write arms echo suppression — recording a write that never
+    // happened could swallow a genuine external event for this path.
+    if changed {
+        g.record_own_write(meta.clone(), new_body, Instant::now());
+    }
+    Ok(meta)
+}
+
 /// Reveal a note's file in the OS file manager (Finder / File Explorer / …).
 #[tauri::command]
 pub fn reveal_note(path: String, app: AppHandle, state: State<AppState>) -> Result<()> {

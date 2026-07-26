@@ -116,8 +116,27 @@ function metas(): NoteMeta[] {
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated - a.updated);
 }
 
+/** Byte offset where the body starts, past a leading `---` frontmatter block
+ *  (0 when there is none). Mirrors Rust `split_frontmatter`, which is tolerant:
+ *  an unclosed block counts as no frontmatter. */
+function bodyStart(text: string): number {
+  const open = /^---\r?\n/.exec(text);
+  if (!open) return 0;
+  let i = open[0].length;
+  while (i < text.length) {
+    const nl = text.indexOf("\n", i);
+    const end = nl < 0 ? text.length : nl + 1;
+    if (text.slice(i, end).trimEnd() === "---") return end;
+    if (nl < 0) break;
+    i = end;
+  }
+  return 0;
+}
+
 function titleFromBody(text: string): string | null {
-  for (const raw of text.split("\n")) {
+  // Frontmatter is metadata, not the title line — skip it the way parse_meta does
+  // (the demo seeds have none, but a pinned note does).
+  for (const raw of text.slice(bodyStart(text)).split("\n")) {
     const t = raw
       .trim()
       .replace(/^#+\s*/, "")
@@ -125,6 +144,40 @@ function titleFromBody(text: string): string | null {
     if (t) return t;
   }
   return null;
+}
+
+/** Mirror of Rust `notebook::set_pinned`: pinning writes a frontmatter
+ *  `pinned: true` (opening a block if needed), unpinning removes the key and any
+ *  block it emptied — so pin→unpin restores the original text exactly. */
+export function setPinnedBody(text: string, pinned: boolean): string {
+  const start = bodyStart(text);
+  const nl = text.includes("\r\n") ? "\r\n" : "\n";
+  if (start === 0) {
+    return pinned ? `---${nl}pinned: true${nl}---${nl}${text}` : text;
+  }
+  const header = text.slice(0, start);
+  const lines = header.split(/(?<=\n)/); // keep terminators
+  const idx = lines.findIndex((l) =>
+    l
+      .replace(/\r?\n$/, "")
+      .trimStart()
+      .startsWith("pinned:"),
+  );
+  if (idx < 0) {
+    if (!pinned) return text;
+    return lines[0] + `pinned: true${nl}` + lines.slice(1).join("") + text.slice(start);
+  }
+  if (pinned) {
+    const content = lines[idx].replace(/\r?\n$/, "");
+    const indent = content.slice(0, content.length - content.trimStart().length);
+    lines[idx] = `${indent}pinned: true${lines[idx].slice(content.length)}`;
+    return lines.join("") + text.slice(start);
+  }
+  const stripped = lines.slice(0, idx).join("") + lines.slice(idx + 1).join("") + text.slice(start);
+  // The key was the block's only content — drop the empty `---\n---\n` husk.
+  const reStart = bodyStart(stripped);
+  const inner = reStart ? stripped.slice(0, reStart).split(/\r?\n/).slice(1, -2).join("") : "x";
+  return inner.trim() === "" ? stripped.slice(reStart) : stripped;
 }
 
 /** Rewrite the body so titleFromBody derives `newTitle` (mirrors Rust set_title,
@@ -450,6 +503,20 @@ export const mockBackend: Backend = {
   },
   async revealNote() {
     // No OS file manager in the browser demo — a no-op (native only).
+  },
+  async setPinned(path, pinned) {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    const body = setPinnedBody(r.body, pinned);
+    // Already in the requested state — Rust skips the write, so `updated` must
+    // not move here either (it is the sidebar's sort key).
+    if (body === r.body) return r.meta;
+    // The title is deliberately carried over, not re-derived: the block set_pinned
+    // writes never contains a `title:` key, so Rust's parse_meta still falls
+    // through to the same heading. Only mtime (→ updated) moves.
+    const meta: NoteMeta = { ...r.meta, pinned, updated: Date.now() };
+    recs.set(path, { meta, body });
+    return meta;
   },
   async deleteNote(path) {
     recs.delete(path);

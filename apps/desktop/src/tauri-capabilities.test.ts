@@ -21,6 +21,9 @@ describe("tauri capabilities", () => {
   // The note row's native right-click menu (native-menu.ts → Menu.new/popup)
   // needs this grant; without it the popup invoke is silently denied and
   // right-click does nothing — the same failure mode as the destroy gap above.
+  // The Pin row also calls MenuItem.new + setText per popup (to say Pin/Unpin);
+  // core:menu:default covers allow-new/allow-set-text, so no extra grant is
+  // needed — but narrowing this to individual permissions would break it.
   it("grants the menu permissions the native context menu needs", () => {
     expect(caps.permissions).toContain("core:menu:default");
   });
