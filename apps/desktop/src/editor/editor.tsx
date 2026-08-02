@@ -518,6 +518,7 @@ export function Editor(props: EditorProps) {
               type="button"
               className="av-dirty"
               title={`unsaved — click to save (${chordLabel("Mod-s")})`}
+              onMouseDown={(e) => e.preventDefault()} // keep the editor focused (Chromium focuses buttons on click)
               onClick={() => {
                 const v = viewRef.current;
                 if (v) props.onSave(v.state.doc.toString());
@@ -534,6 +535,7 @@ export function Editor(props: EditorProps) {
             className="av-statbtn"
             title={`live preview ${props.preview ? "on" : "off"} (${chordLabel("Mod-e")})`}
             aria-label="toggle live preview"
+            onMouseDown={(e) => e.preventDefault()} // keep the editor focused
             onClick={() => props.onCommand("togglePreview")}
           >
             {props.preview ? (

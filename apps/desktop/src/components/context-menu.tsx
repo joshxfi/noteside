@@ -59,6 +59,11 @@ export function ContextMenu({
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       e.preventDefault();
       step(-1);
+    } else if (e.key === "Tab") {
+      // trap Tab as selection movement — walking focus out past the scrim would
+      // leave a menu that no longer hears Esc (global chords are gated off)
+      e.preventDefault();
+      step(e.shiftKey ? -1 : 1);
     } else if (e.key === "Enter") {
       e.preventDefault();
       const it = items[sel];

@@ -10,6 +10,44 @@ export function subseq(q: string, text: string): boolean {
   return i === q.length;
 }
 
+// The last known global mouse position (capture-phase, so it updates before any
+// React handler sees the same event). Seeds pointerMoved() baselines so an
+// overlay MOUNTING under a stationary cursor can compare its first synthetic
+// hover event against where the mouse already was.
+let lastMouseX = -1;
+let lastMouseY = -1;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "mousemove",
+    (e) => {
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    },
+    { capture: true, passive: true },
+  );
+}
+
+/**
+ * A guard that tells REAL pointer movement apart from the synthetic hover
+ * events the browser re-dispatches under a STATIONARY cursor — after a
+ * programmatic scroll (keyboard nav shifts rows under the pointer) or when an
+ * overlay mounts beneath a parked cursor. Acting on those would steal the
+ * selection from the keyboard (or clobber an overlay's deliberate initial
+ * selection, e.g. the theme picker's open-on-current-theme). Returns true only
+ * when the coordinates actually changed; the baseline starts at the last known
+ * global mouse position so the mount-time synthetic event is ignored too.
+ */
+export function pointerMoved(): (e: { clientX: number; clientY: number }) => boolean {
+  let x = lastMouseX;
+  let y = lastMouseY;
+  return (e) => {
+    if (e.clientX === x && e.clientY === y) return false;
+    x = e.clientX;
+    y = e.clientY;
+    return true;
+  };
+}
+
 /**
  * Scroll `container` the minimum amount to bring its `index`-th child into view.
  *

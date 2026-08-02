@@ -216,16 +216,29 @@ const NoteRow = memo(function NoteRow({
   // A <div>, not a <button>: the hover-revealed action buttons live inside the
   // row, and interactive content is invalid inside a <button>. The reveal is
   // CSS-only (.av-item:hover) so pointer motion never re-renders the memo'd row.
+  // tabIndex=0 + the Enter/Space handler reimplement what the old <button> gave
+  // for free — rows stay tab- and screen-reader-reachable (inner action buttons
+  // are tabIndex=-1 so each note stays ONE tab stop).
   return (
     <div
       ref={measureRef}
       data-index={index}
       role="button"
-      tabIndex={-1}
+      tabIndex={0}
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
-      onDoubleClick={() => onRename(note.id, note.title)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick(note.id);
+        }
+      }}
+      onDoubleClick={(e) => {
+        // a double-click on the hover actions must not read as rename-the-row
+        if ((e.target as Element).closest(".av-item-actions")) return;
+        onRename(note.id, note.title);
+      }}
       onContextMenu={(e) => {
         e.preventDefault(); // suppress the WebView's menu; ours pops instead
         onContext(note.id, note.title, note.pinned, e.clientX, e.clientY);
@@ -438,21 +451,33 @@ const Sidebar = memo(function Sidebar({
   const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    const handle = e.currentTarget;
+    // Pointer capture keeps move/up flowing to the handle even outside the
+    // window, and pointercancel (OS gestures, Cmd-Tab) MUST end the drag —
+    // orphaned window listeners would leave the sidebar glued to a buttonless
+    // pointer until the next click.
+    handle.setPointerCapture(e.pointerId);
     const startX = e.clientX;
     const startW = width;
     setResizing(true);
+    // steady col-resize cursor while dragging, even when the pointer outruns
+    // the 5px handle
+    document.documentElement.style.cursor = "col-resize";
     const move = (ev: PointerEvent) => {
       const w = clampSidebarWidth(startW + ev.clientX - startX);
       document.documentElement.style.setProperty("--sidebar-w", w + "px");
     };
-    const up = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+    const finish = (ev: PointerEvent) => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", finish);
+      handle.removeEventListener("pointercancel", finish);
+      document.documentElement.style.cursor = "";
       setResizing(false);
       onResizeEnd(clampSidebarWidth(startW + ev.clientX - startX));
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
   };
   return (
     <aside
@@ -887,6 +912,12 @@ export function App() {
           theme: theme ?? c.theme,
           chords: sanitizeChordOverrides(stored.chords),
         }));
+      } else if (last) {
+        // A notebook but no stored config = a pre-onboarding install that never
+        // touched Settings. Those users lived on the old vim-on default — keep
+        // them there instead of silently de-vimming on upgrade (the vim-off
+        // default is for NEW users; this write persists on their next change).
+        setCfg((c) => ({ ...c, vimMode: true }));
       }
       configLoaded.current = true;
       // Automatic update check — native only (the web/demo never phones home) and
@@ -956,15 +987,21 @@ export function App() {
   };
 
   const openFinder = (mode: FinderMode) => setFinder({ mode });
-  const closeFinder = () => {
+  // Stable identities: the Finder derives its memo'd rows' onPick from onOpen,
+  // so a fresh closure here would re-render every visible result row whenever
+  // App re-renders with the finder open (e.g. a toast landing).
+  const closeFinder = useCallback(() => {
     setFinder(null);
     setRefocus((r) => r + 1);
-  };
-  const openFromFinder = async (path: string, line: number) => {
-    setFinder(null);
-    await session.open(path, line && line > 0 ? line : 0);
-    setRefocus((r) => r + 1);
-  };
+  }, []);
+  const openFromFinder = useCallback(
+    async (path: string, line: number) => {
+      setFinder(null);
+      await session.open(path, line && line > 0 ? line : 0);
+      setRefocus((r) => r + 1);
+    },
+    [session],
+  );
 
   // open an external URL under the cursor (gx / :follow / Mod-click)
   const onOpenUrl = (url: string) => {
@@ -1236,14 +1273,36 @@ export function App() {
 
   // Stable handles for the memoized sidebar (so autosaves/toasts re-render rows,
   // not the whole tree).
-  const openNote = useCallback((id: string) => void session.open(id), [session]);
+  // Clicking the row of the ALREADY-open note must not re-open it: open() never
+  // short-circuits (it bumps navSeq → editor remount → caret reset, and records
+  // frecency), so a same-id click — including the two clicks that precede a
+  // double-click-rename — just hands focus back to the editor instead.
+  const activeIdRef = useRef(s.activeId);
+  useEffect(() => {
+    activeIdRef.current = s.activeId;
+  });
+  const openNote = useCallback(
+    (id: string) => {
+      if (id === activeIdRef.current) {
+        setRefocus((r) => r + 1);
+        return;
+      }
+      void session.open(id);
+    },
+    [session],
+  );
   const onNewNote = useCallback(() => void createNote(), [createNote]);
-  // Row hover pin toggle. setNotePinned closes over fresh notes/session state
-  // each render, so the stable callback reads it through a ref — the memo'd rows
-  // keep one identity while the handler never goes stale.
+  // setNotePinned/duplicateNote close over fresh notes/session state each
+  // render, but their consumers (the memo'd rows' pin toggle AND the
+  // once-created native context menu) need ONE stable identity — so both are
+  // read through latest-refs. Without this the native menu ran first-render
+  // closures: `wasActive` was always false, so pinning the open note skipped
+  // the flush+reopen and the next autosave silently wrote the pin away.
   const setNotePinnedRef = useRef(setNotePinned);
+  const duplicateNoteRef = useRef(duplicateNote);
   useEffect(() => {
     setNotePinnedRef.current = setNotePinned;
+    duplicateNoteRef.current = duplicateNote;
   });
   const onTogglePin = useCallback(
     (id: string, pinned: boolean) => void setNotePinnedRef.current(id, !pinned),
@@ -1262,18 +1321,21 @@ export function App() {
       void showNoteContextMenu(id, title, pinned, {
         onOpen: openNote,
         onReveal: revealNote,
-        onDuplicate: (nid) => void duplicateNote(nid),
+        onDuplicate: (nid) => void duplicateNoteRef.current(nid),
         onRename: requestRename,
-        onTogglePin: (nid, next) => void setNotePinned(nid, next),
+        onTogglePin: (nid, next) => void setNotePinnedRef.current(nid, next),
         onDelete: requestDelete,
       });
     },
-    // duplicateNote/revealNote are stable closures recreated each render; the menu
-    // is rebuilt per right-click, so a fresh identity here is fine (not memo-critical).
+    // revealNote only captures the stable `flash`; the state-reading handlers go
+    // through the latest-refs above, so this memo can never serve stale closures.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openNote, requestRename, requestDelete],
   );
-  const closeNoteMenu = useCallback(() => setNoteMenu(null), []);
+  const closeNoteMenu = useCallback(() => {
+    setNoteMenu(null);
+    setRefocus((r) => r + 1); // like every other overlay closer — don't strand focus on <body>
+  }, []);
   // Commit a sidebar drag (or a handle double-click reset) into config — the
   // live drag already wrote the CSS var, so this just persists + re-renders once.
   const onSidebarResize = useCallback(
@@ -1460,6 +1522,9 @@ export function App() {
                 aria-live="polite"
                 title="dismiss"
                 onClick={() => {
+                  // selecting toast text (to copy an error) must not dismiss it
+                  const sel = window.getSelection();
+                  if (sel && !sel.isCollapsed) return;
                   if (toastTimer.current !== null) {
                     window.clearTimeout(toastTimer.current);
                     toastTimer.current = null;

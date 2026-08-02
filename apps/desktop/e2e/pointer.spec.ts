@@ -105,6 +105,29 @@ test.describe("pointer ergonomics", () => {
     await expect(page.locator(".av-item")).toHaveCount(before); // nothing deleted
   });
 
+  test("sidebar rows are keyboard-activatable (focus + Enter)", async ({ page }) => {
+    await boot(page);
+    // Direct focus (portable across Safari's "Tab skips buttons" OS setting) —
+    // the row div carries tabIndex=0 + Enter/Space activation like the old <button>.
+    const target = page.locator(".av-item").nth(2);
+    const title = await target.locator(".av-item-titletext").innerText();
+    await target.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".av-file")).toContainText(title);
+  });
+
+  test("the notebook create form has a clickable submit", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-titlebar").getByRole("button", { name: "switch notebook" }).click();
+    await page.locator(".nb-list .fnd-row").filter({ hasText: "New notebook" }).click();
+    const create = page.locator(".nb-createactions .cfm-btn");
+    await expect(create).toBeDisabled(); // no name typed yet
+    await page.keyboard.type("Clicked Notebook");
+    await expect(create).toBeEnabled();
+    await create.click();
+    await expect(page.locator(".av-item")).toHaveCount(0); // brand-new notebook is empty
+  });
+
   test("a link inside a rendered table follows on plain click", async ({ page }) => {
     await boot(page, { vimMode: false });
     // outside Tauri, open-external falls back to window.open — stub it

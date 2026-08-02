@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, FolderPlus } from "lucide-react";
 import { backend, type NotebookRef } from "../backend";
-import { scrollRowIntoView, subseq } from "./list-nav";
+import { pointerMoved, scrollRowIntoView, subseq } from "./list-nav";
 
 function ago(ms: number, now: number): string {
   if (!ms) return "";
@@ -57,7 +57,9 @@ export function NotebookSwitcher({
   // Pointer-driven selection must not auto-scroll (see finder.tsx: scrolling
   // under a stationary cursor re-fires the hover — a feedback loop).
   const selByPointer = useRef(false);
-  const hoverSel = (i: number) => {
+  const moved = useRef(pointerMoved());
+  const hoverSel = (i: number, e: { clientX: number; clientY: number }) => {
+    if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     selByPointer.current = true;
     setSel(i);
   };
@@ -210,6 +212,20 @@ export function NotebookSwitcher({
               </button>
             </div>
             {!parent && <div className="nb-createhint">pick a location before creating.</div>}
+            {/* Enter's pointer twin — without it a mouse user reaches this form
+                and has no way to actually create */}
+            <div className="nb-createactions">
+              <button
+                type="button"
+                className="cfm-btn primary"
+                tabIndex={-1}
+                disabled={!name.trim() || !parent}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={submitCreate}
+              >
+                Create notebook
+              </button>
+            </div>
           </div>
         ) : (
           <div className="nb-list" ref={listRef}>
@@ -217,8 +233,8 @@ export function NotebookSwitcher({
               <div
                 key={nb.path}
                 className={"fnd-row" + (i === sel ? " is-sel" : "")}
-                onMouseEnter={() => i !== sel && hoverSel(i)}
-                onMouseMove={() => i !== sel && hoverSel(i)}
+                onMouseEnter={(e) => i !== sel && hoverSel(i, e)}
+                onMouseMove={(e) => i !== sel && hoverSel(i, e)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => run(i)}
               >
@@ -231,8 +247,8 @@ export function NotebookSwitcher({
             ))}
             <div
               className={"fnd-row nb-open" + (sel === newIndex ? " is-sel" : "")}
-              onMouseEnter={() => sel !== newIndex && hoverSel(newIndex)}
-              onMouseMove={() => sel !== newIndex && hoverSel(newIndex)}
+              onMouseEnter={(e) => sel !== newIndex && hoverSel(newIndex, e)}
+              onMouseMove={(e) => sel !== newIndex && hoverSel(newIndex, e)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(newIndex)}
             >
@@ -241,8 +257,8 @@ export function NotebookSwitcher({
             </div>
             <div
               className={"fnd-row nb-open" + (sel === openIndex ? " is-sel" : "")}
-              onMouseEnter={() => sel !== openIndex && hoverSel(openIndex)}
-              onMouseMove={() => sel !== openIndex && hoverSel(openIndex)}
+              onMouseEnter={(e) => sel !== openIndex && hoverSel(openIndex, e)}
+              onMouseMove={(e) => sel !== openIndex && hoverSel(openIndex, e)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(openIndex)}
             >
