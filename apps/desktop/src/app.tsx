@@ -464,7 +464,7 @@ const Sidebar = memo(function Sidebar({
             Noteside
             <span className="av-brandcur" />
           </div>
-          <div className="av-brandsub">notes for keyboard people</div>
+          <div className="av-brandsub">fast, minimalist notes</div>
         </div>
         {notes.length <= VIRTUAL_THRESHOLD ? (
           <PlainNoteList
