@@ -56,7 +56,7 @@ export function SiteFooter() {
           <div className="flex flex-col gap-1 font-serif text-2xl font-semibold">
             <Wordmark />
             <span className="font-mono text-[11px] font-normal tracking-[0.03em] text-ink-faint">
-              notes for keyboard people
+              fast, minimalist notes
             </span>
           </div>
           <div className="flex gap-[30px] font-mono text-[13px] text-ink-soft">

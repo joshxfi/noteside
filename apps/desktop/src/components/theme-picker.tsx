@@ -1,4 +1,4 @@
-// theme-picker.tsx — the keyboard-first theme switcher. Opened with <Space>t or
+// theme-picker.tsx — the theme switcher. Opened with <Space>t, :theme, or
 // :theme. Two columns (dark · light), LIVE-PREVIEWS the highlighted theme by
 // applying its tokens straight to <html> (Enter commits, Esc reverts), and opens
 // on the CURRENT theme. Reuses the finder (fnd-*) row styling.

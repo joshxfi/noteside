@@ -87,7 +87,11 @@ test.describe("pin note", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-toast")).toContainText("note pinned");
 
-    // the pre-pin edit was flushed, not lost
+    // the pre-pin edit was flushed, not lost. The reopened buffer parks the
+    // caret at the top; the sentinel is on the LAST line, which CodeMirror may
+    // not render yet — jump there first.
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("G");
     await expect(page.locator(".cm-content")).toContainText("UNSAVED_PIN_SENTINEL");
     // the reopened buffer carries the frontmatter the backend wrote, hidden by
     // preview rather than shown as YAML (see markdown-preview.spec)

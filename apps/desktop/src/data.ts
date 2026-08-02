@@ -16,22 +16,22 @@ export const NOTES: Note[] = [
     updated: "just now",
     git: null,
     frecency: 96,
-    body: `Noteside is a notebook for keyboard people.
+    body: `Noteside is a fast, minimalist notebook.
 
-No mouse required, nothing in your way — just a warm page and a
-blinking block cursor. Your hands stay on home row; the writing stays
-in front of you.
+Nothing in your way — just a warm page and a blinking cursor. Click
+anywhere and start typing, or keep your hands on the keyboard: both
+are first-class here.
 
-It opens in NORMAL mode, the same as vim. Press i to start typing,
-Esc to step back out. Move with h j k l. When you want to do something
-to the whole document — save it, jump to a line, search — press : or /
-and a quiet command line appears at the foot of the page.
+Notes autosave as you write. ⌘P finds anything, ⌘⇧P lists every
+command, and the sidebar clicks — pin, rename, and duplicate live on
+a right-click. Prefer vim? Flip it on in Settings for real modes,
+motions, and a quiet : command line.
 
 Everything lives on this machine. Nothing leaves it. Close the lid and
 your words are still here, exactly where the cursor left them.
 
-Press j to read on, or run :find (⌘P) to jump to the Keymap note
-for the full set of motions. Everything is a keystroke away.`,
+Open the Keymap note — or press ⌘P — for the full reference.
+Everything is a keystroke away, and everything clicks.`,
   },
   {
     id: "keymap",

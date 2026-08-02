@@ -30,6 +30,8 @@ Block elements get richer treatment:
 - **Tables** (GFM pipe syntax) render as real tables, with column alignment. Move your
   cursor into one — or click a cell — and it snaps back to the raw pipe source at exactly
   that cell, so editing is always on the literal text; move away and it re-renders.
+  Links inside a rendered table open on a **plain click** (a rendered table is display
+  content — in raw source, click places the caret and `⌘`-click follows).
 - **Fenced code blocks** get a shaded block with the language labelled, syntax
   highlighting (loaded on demand per language, offline-safe), and a **copy** button.
 
@@ -39,6 +41,7 @@ Markdown, so there's never any guessing about where the real text is.
 ## Toggling it
 
 - `⌘E`, `:preview`, or `<Space> p`
+- the **eye button** in the status bar, or the **Live preview** switch in Settings
 
 You can also set the default in your config:
 

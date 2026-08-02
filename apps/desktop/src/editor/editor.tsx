@@ -127,7 +127,7 @@ const insertIndentUnit = (view: EditorView): boolean => {
 
 // CodeMirror deliberately excludes Tab from defaultKeymap. Indent in plain text
 // mode and Vim insert mode, but consume it without editing in Vim normal/visual
-// mode so focus stays in the keyboard-first editor.
+// mode so focus cannot Tab out of the editor.
 const indentationKeys = keymap.of([
   {
     key: "Tab",

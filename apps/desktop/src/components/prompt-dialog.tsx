@@ -1,5 +1,5 @@
 // prompt-dialog.tsx — a themed single-input modal (used to rename a note). Shares
-// the ConfirmDialog scrim/panel styles; keyboard-first: the input auto-focuses
+// the ConfirmDialog scrim/panel styles; keyboard-ready: the input auto-focuses
 // (text pre-selected), Enter submits a non-empty value, Esc cancels.
 import { useEffect, useRef, useState } from "react";
 

@@ -1,5 +1,5 @@
 // confirm-dialog.tsx — a small themed confirmation modal (scrim + panel), used
-// for destructive actions like deleting a note. Keyboard-first: Enter confirms,
+// for destructive actions like deleting a note. Keyboard-ready: Enter confirms,
 // Esc cancels, and the panel owns focus on mount so both work without a click
 // (the buttons stay mouse-clickable). Matches the app's overlay design (like the
 // Settings scrim) so it themes with the palette — unlike a native OS dialog.
