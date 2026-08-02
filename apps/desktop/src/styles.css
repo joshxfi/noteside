@@ -207,6 +207,7 @@ body {
   z-index: 1;
 }
 .av-iconbtn {
+  position: relative; /* anchors the update dot when Settings lives up here */
   width: 26px;
   height: 26px;
   border-radius: 7px;
@@ -218,6 +219,16 @@ body {
   line-height: 1;
   display: grid;
   place-items: center;
+}
+/* the titlebar Settings button (shown when the sidebar is collapsed) reuses the
+   sidebar's update dot, pinned to the button corner instead of the row end */
+.av-iconbtn .av-update-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  margin: 0;
+  width: 5px;
+  height: 5px;
 }
 .av-iconbtn:hover {
   background: var(--paper-3);
@@ -371,6 +382,40 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* hover-revealed row actions (pin toggle, note menu). CSS-only reveal: the row
+   is memoized and pointer motion must never re-render it. pointer-events off at
+   rest so a click on the invisible cluster still opens the note. */
+.av-item-actions {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+.av-item:hover .av-item-actions,
+.av-item:focus-within .av-item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.av-item-act {
+  display: flex;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--ink-faint);
+}
+.av-item-act:hover {
+  background: color-mix(in oklab, var(--paper-2), var(--ink) 8%);
+  color: var(--ink);
+}
+.av-item-act svg {
+  display: block;
 }
 .av-sidefoot {
   padding: 10px 12px 12px;
@@ -739,6 +784,27 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* empty-state actions: one filled primary (.set-done) + quiet ghost buttons */
+.av-empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.av-emptybtn {
+  font-family: var(--mono);
+  font-size: calc(12.5px * var(--ui-scale));
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.av-emptybtn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
 
 /* first-launch onboarding — the one-time vim / plain-keyboard choice */
 .ob {
@@ -818,6 +884,7 @@ body {
   border-radius: 8px;
   box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
   animation: av-toast-in 0.18s ease-out;
+  cursor: pointer; /* click dismisses */
 }
 @keyframes av-toast-in {
   from {
@@ -1037,6 +1104,12 @@ body {
   background: var(--paper-3);
   color: var(--ink);
 }
+.set-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: var(--paper);
+  color: var(--ink-soft);
+}
 .set-stepper span {
   min-width: 56px;
   text-align: center;
@@ -1246,6 +1319,11 @@ body {
   border: 1px solid var(--accent);
   border-radius: 6px;
   padding: 2px 7px;
+  background: transparent; /* it's a button now — click cycles the mode */
+  cursor: pointer;
+}
+.fnd-grepmode:hover {
+  background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);
 }
 .fnd-tabs {
   flex: none;
@@ -1808,6 +1886,18 @@ html.tauri.macos .av-titlebar {
   border-radius: 4px;
   padding: 0 5px;
   color: var(--ink-soft);
+}
+/* the confirm rows reuse the dialog buttons; unpad the dialog-only top margin */
+.pal-confirm .cfm-actions {
+  margin-top: 0;
+}
+.fnd-empty .cfm-actions {
+  justify-content: center;
+  margin-top: 14px;
+}
+.fnd-empty .cfm-btn b {
+  color: inherit;
+  font-weight: 600;
 }
 .pal-foot {
   display: flex;

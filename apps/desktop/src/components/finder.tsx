@@ -372,9 +372,18 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
             onKeyDown={onKeyDown}
           />
           {mode === "content" && (
-            <span className="fnd-grepmode" title="Shift-Tab to cycle">
+            <button
+              type="button"
+              className="fnd-grepmode"
+              tabIndex={-1}
+              title="cycle grep mode (Shift-Tab)"
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep the query input focused
+                setGrepMode((g) => GREP_MODES[(GREP_MODES.indexOf(g) + 1) % GREP_MODES.length]);
+              }}
+            >
               {grepMode}
-            </span>
+            </button>
           )}
           <div className="fnd-tabs">
             {MODES.map((m) => (

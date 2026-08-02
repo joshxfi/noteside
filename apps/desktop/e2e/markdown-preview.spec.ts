@@ -9,7 +9,7 @@ test.describe("markdown preview", () => {
     page,
   }) => {
     await boot(page, { vimMode: false });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     await content.click();
 
@@ -36,7 +36,7 @@ test.describe("markdown preview", () => {
 
   test("vim normal-mode k/j steps into and out of a collapsed table", async ({ page }) => {
     await boot(page, { vimMode: true });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     await content.click();
 
@@ -59,7 +59,7 @@ test.describe("markdown preview", () => {
 
   test("task checkboxes toggle the source, bullets and rules render", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     await content.click();
 
@@ -105,7 +105,7 @@ test.describe("markdown preview", () => {
 
   test("a bare --- outside frontmatter still renders as a horizontal rule", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     await content.click();
 
@@ -119,7 +119,7 @@ test.describe("markdown preview", () => {
     browserName,
   }) => {
     await boot(page, { vimMode: false });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     await content.click();
 
