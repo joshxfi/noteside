@@ -4,7 +4,7 @@
 // on the CURRENT theme. Reuses the finder (fnd-*) row styling.
 import { useEffect, useRef, useState } from "react";
 import { applyThemeVars, previewGradient, type Theme, THEMES, themeById } from "../themes";
-import { scrollRowIntoView, subseq } from "./list-nav";
+import { pointerMoved, scrollRowIntoView, subseq } from "./list-nav";
 
 type Col = "dark" | "light";
 
@@ -48,6 +48,7 @@ export function ThemePicker({
   // Pointer-driven highlight must not auto-scroll (see finder.tsx: scrolling
   // under a stationary cursor re-fires the hover — a feedback loop).
   const selByPointer = useRef(false);
+  const moved = useRef(pointerMoved());
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -94,8 +95,9 @@ export function ThemePicker({
       scrollRowIntoView((col === "dark" ? darkRef : lightRef).current, clampedIdx);
   }, [col, clampedIdx]);
 
-  const hoverSel = (name: Col, i: number) => {
+  const hoverSel = (name: Col, i: number, e: { clientX: number; clientY: number }) => {
     if (col === name && clampedIdx === i) return;
+    if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     selByPointer.current = true;
     setCol(name);
     setIdx(i);
@@ -156,8 +158,8 @@ export function ThemePicker({
                 (name === col && i === clampedIdx ? " is-sel" : "") +
                 (t.id === currentId ? " is-current" : "")
               }
-              onMouseEnter={() => hoverSel(name, i)}
-              onMouseMove={() => hoverSel(name, i)}
+              onMouseEnter={(e) => hoverSel(name, i, e)}
+              onMouseMove={(e) => hoverSel(name, i, e)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => commit(t)}
             >

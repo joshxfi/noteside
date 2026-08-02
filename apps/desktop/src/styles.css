@@ -1748,6 +1748,12 @@ mark.fnd-hl {
   font-size: calc(11px * var(--ui-scale));
   color: var(--ink-faint);
 }
+/* the create form's clickable submit (Enter's pointer twin) */
+.nb-createactions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 
 /* ── embedded (?embed) — fill the frame edge-to-edge, no desktop backdrop ── */
 html.embed,

@@ -5,7 +5,7 @@
 import { createElement, memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { backend, type ContentHit, type FileHit, type GrepMode } from "../backend";
-import { scrollRowIntoView } from "./list-nav";
+import { pointerMoved, scrollRowIntoView } from "./list-nav";
 
 const GREP_MODES: GrepMode[] = ["plain", "regex", "fuzzy"];
 
@@ -95,7 +95,7 @@ const ResultRow = memo(function ResultRow({
   item: FileHit | ContentHit;
   index: number;
   selected: boolean;
-  onHover: (index: number) => void;
+  onHover: (index: number, e: { clientX: number; clientY: number }) => void;
   onPick: (item: FileHit | ContentHit) => void;
 }) {
   return (
@@ -106,8 +106,8 @@ const ResultRow = memo(function ResultRow({
       className={"fnd-row" + (selected ? " is-sel" : "")}
       // enter + move: a stationary pointer over a row that changed underneath it
       // (keyboard nav, re-filter) re-syncs on entry, not only on jiggle
-      onMouseEnter={() => !selected && onHover(index)}
-      onMouseMove={() => !selected && onHover(index)}
+      onMouseEnter={(e) => !selected && onHover(index, e)}
+      onMouseMove={(e) => !selected && onHover(index, e)}
       // preventDefault keeps the query input focused; committing on click (not
       // mousedown) restores the press-then-drag-away cancel gesture
       onMouseDown={(e) => e.preventDefault()}
@@ -233,6 +233,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   // only chase keyboard-driven selection — scrolling under a hovering pointer
   // would move a new row under the cursor and re-fire the hover (a feedback loop).
   const selByPointer = useRef(false);
+  const moved = useRef(pointerMoved());
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -280,7 +281,8 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     if (!selByPointer.current) scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
 
-  const hoverSel = useCallback((i: number) => {
+  const hoverSel = useCallback((i: number, e: { clientX: number; clientY: number }) => {
+    if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     selByPointer.current = true;
     setSel(i);
   }, []);

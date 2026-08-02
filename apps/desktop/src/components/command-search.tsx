@@ -4,7 +4,7 @@
 // ask for confirmation. Reuses the finder (fnd-*) markup. Esc closes.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { chordLabel, type Command } from "../editor/commands";
-import { scrollRowIntoView, subseq } from "./list-nav";
+import { pointerMoved, scrollRowIntoView, subseq } from "./list-nav";
 
 export function CommandSearch({
   commands,
@@ -23,6 +23,7 @@ export function CommandSearch({
   // Pointer-driven selection must not auto-scroll (see finder.tsx: the scroll
   // would move a new row under the stationary cursor and re-fire the hover).
   const selByPointer = useRef(false);
+  const moved = useRef(pointerMoved());
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -43,7 +44,8 @@ export function CommandSearch({
     if (!selByPointer.current) scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
 
-  const hoverSel = (i: number) => {
+  const hoverSel = (i: number, e: { clientX: number; clientY: number }) => {
+    if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     selByPointer.current = true;
     setSel(i);
   };
@@ -145,8 +147,8 @@ export function CommandSearch({
                 <div
                   key={c.id}
                   className={"fnd-row" + (i === sel ? " is-sel" : "") + (c.danger ? " danger" : "")}
-                  onMouseEnter={() => i !== sel && hoverSel(i)}
-                  onMouseMove={() => i !== sel && hoverSel(i)}
+                  onMouseEnter={(e) => i !== sel && hoverSel(i, e)}
+                  onMouseMove={(e) => i !== sel && hoverSel(i, e)}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => choose(c)}
                 >

@@ -17,7 +17,7 @@ import {
   eventChord,
 } from "../editor/commands";
 import { isSafeChord } from "../shortcut";
-import { subseq } from "./list-nav";
+import { pointerMoved, subseq } from "./list-nav";
 
 const GROUP_ORDER: Command["group"][] = ["Find", "Note", "View", "Settings", "Help"];
 // Lone modifier keydowns are ignored while recording so the user can hold them.
@@ -78,7 +78,9 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
   // Pointer-driven focus must not auto-scroll (see finder.tsx: scrolling under
   // a stationary cursor re-fires the hover — a feedback loop).
   const focusByPointer = useRef(false);
-  const hoverFocus = (i: number) => {
+  const moved = useRef(pointerMoved());
+  const hoverFocus = (i: number, e: { clientX: number; clientY: number }) => {
+    if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     focusByPointer.current = true;
     setFocus(i);
   };
@@ -247,8 +249,8 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       role="listitem"
                       aria-label={ariaLabel}
                       className={"cheat-row" + (i === focus ? " is-focus" : "")}
-                      onMouseEnter={() => i !== focus && !recording && hoverFocus(i)}
-                      onMouseMove={() => i !== focus && !recording && hoverFocus(i)}
+                      onMouseEnter={(e) => i !== focus && !recording && hoverFocus(i, e)}
+                      onMouseMove={(e) => i !== focus && !recording && hoverFocus(i, e)}
                       onClick={() => {
                         setFocus(i);
                         setUnsafeChord(null);
