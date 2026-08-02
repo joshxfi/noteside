@@ -32,6 +32,7 @@ import { CommandPalette } from "./components/command-palette";
 import { CommandSearch } from "./components/command-search";
 import { Cheatsheet } from "./components/cheatsheet";
 import { ConfirmDialog } from "./components/confirm-dialog";
+import { ContextMenu } from "./components/context-menu";
 import { PromptDialog } from "./components/prompt-dialog";
 import { NotebookSwitcher } from "./components/notebook-switcher";
 import { Onboarding } from "./components/onboarding";
@@ -45,6 +46,7 @@ import {
   withChordOverrides,
 } from "./editor/commands";
 import {
+  clampSidebarWidth,
   CONFIG_DEFAULTS,
   type Config,
   fontStack,
@@ -194,6 +196,7 @@ const NoteRow = memo(function NoteRow({
   onPick,
   onContext,
   onTogglePin,
+  onRename,
   now,
   top,
   index,
@@ -202,8 +205,9 @@ const NoteRow = memo(function NoteRow({
   note: NoteMeta;
   active: boolean;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, pinned: boolean) => void;
+  onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onRename: (id: string, title: string) => void;
   now: number;
   top?: number;
   index?: number;
@@ -221,10 +225,10 @@ const NoteRow = memo(function NoteRow({
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
+      onDoubleClick={() => onRename(note.id, note.title)}
       onContextMenu={(e) => {
-        if (!isTauri()) return; // web/demo: no native menu to pop — leave the browser's
-        e.preventDefault(); // suppress the WebView's native menu; ours pops instead
-        onContext(note.id, note.title, note.pinned);
+        e.preventDefault(); // suppress the WebView's menu; ours pops instead
+        onContext(note.id, note.title, note.pinned, e.clientX, e.clientY);
       }}
       style={
         top === undefined
@@ -267,21 +271,20 @@ const NoteRow = memo(function NoteRow({
             <Pin size={13} aria-hidden="true" />
           )}
         </button>
-        {isTauri() && (
-          <button
-            type="button"
-            tabIndex={-1}
-            className="av-item-act"
-            title="note actions"
-            aria-label="note actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              onContext(note.id, note.title, note.pinned);
-            }}
-          >
-            <Ellipsis size={13} aria-hidden="true" />
-          </button>
-        )}
+        <button
+          type="button"
+          tabIndex={-1}
+          className="av-item-act"
+          title="note actions"
+          aria-label="note actions"
+          onClick={(e) => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            onContext(note.id, note.title, note.pinned, r.left, r.bottom + 4);
+          }}
+        >
+          <Ellipsis size={13} aria-hidden="true" />
+        </button>
       </span>
     </div>
   );
@@ -296,13 +299,15 @@ function PlainNoteList({
   onPick,
   onContext,
   onTogglePin,
+  onRename,
   now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, pinned: boolean) => void;
+  onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onRename: (id: string, title: string) => void;
   now: number;
 }) {
   const listRef = useRef<HTMLElement>(null);
@@ -321,6 +326,7 @@ function PlainNoteList({
           onPick={onPick}
           onContext={onContext}
           onTogglePin={onTogglePin}
+          onRename={onRename}
           now={now}
         />
       ))}
@@ -336,13 +342,15 @@ function VirtualNoteList({
   onPick,
   onContext,
   onTogglePin,
+  onRename,
   now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, pinned: boolean) => void;
+  onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onRename: (id: string, title: string) => void;
   now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -376,6 +384,7 @@ function VirtualNoteList({
               onPick={onPick}
               onContext={onContext}
               onTogglePin={onTogglePin}
+              onRename={onRename}
               now={now}
               top={item.start}
             />
@@ -393,20 +402,27 @@ const Sidebar = memo(function Sidebar({
   onPick,
   onContext,
   onTogglePin,
+  onRename,
   onNew,
   onSettings,
   updateAvailable,
+  width,
+  onResizeEnd,
 }: {
   open: boolean;
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
-  onContext: (id: string, title: string, pinned: boolean) => void;
+  onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onRename: (id: string, title: string) => void;
   onNew: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
   updateAvailable: boolean;
+  /** Committed width (cfg.sidebarWidth). Live drag writes --sidebar-w directly. */
+  width: number;
+  onResizeEnd: (width: number) => void;
 }) {
   // Minute tick so memoized rows still refresh their "5m ago" labels (they used
   // to piggyback on unrelated App re-renders).
@@ -415,8 +431,33 @@ const Sidebar = memo(function Sidebar({
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(t);
   }, []);
+  // Drag-to-resize. The live drag writes the --sidebar-w var imperatively (no
+  // React re-render per pointer move — the perf rule for pointer affordances);
+  // React state only commits once, on pointer-up, through onResizeEnd.
+  const [resizing, setResizing] = useState(false);
+  const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    setResizing(true);
+    const move = (ev: PointerEvent) => {
+      const w = clampSidebarWidth(startW + ev.clientX - startX);
+      document.documentElement.style.setProperty("--sidebar-w", w + "px");
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setResizing(false);
+      onResizeEnd(clampSidebarWidth(startW + ev.clientX - startX));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   return (
-    <aside className={"av-sidebar" + (open ? "" : " is-collapsed")}>
+    <aside
+      className={"av-sidebar" + (open ? "" : " is-collapsed") + (resizing ? " is-resizing" : "")}
+    >
       <div className="av-sidebar-inner">
         <div className="av-brand">
           <div className="av-brandmark">
@@ -432,6 +473,7 @@ const Sidebar = memo(function Sidebar({
             onPick={onPick}
             onContext={onContext}
             onTogglePin={onTogglePin}
+            onRename={onRename}
             now={now}
           />
         ) : (
@@ -441,6 +483,7 @@ const Sidebar = memo(function Sidebar({
             onPick={onPick}
             onContext={onContext}
             onTogglePin={onTogglePin}
+            onRename={onRename}
             now={now}
           />
         )}
@@ -462,6 +505,12 @@ const Sidebar = memo(function Sidebar({
           </button>
         </div>
       </div>
+      <div
+        className="av-sidebar-resize"
+        title="drag to resize — double-click to reset"
+        onPointerDown={onHandleDown}
+        onDoubleClick={() => onResizeEnd(CONFIG_DEFAULTS.sidebarWidth)}
+      />
     </aside>
   );
 });
@@ -609,6 +658,14 @@ export function App() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   // Note being renamed (the rename input modal is open); null when closed.
   const [pendingRename, setPendingRename] = useState<{ id: string; title: string } | null>(null);
+  // Open in-app note context menu (web/demo only — Tauri pops the native one).
+  const [noteMenu, setNoteMenu] = useState<{
+    id: string;
+    title: string;
+    pinned: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
   // first-launch vim / plain-keyboard choice; cleared (and persisted) once picked
   const [onboarding, setOnboarding] = useState(false);
 
@@ -688,7 +745,8 @@ export function App() {
     r.style.setProperty("--editor-size", cfg.fontSize + "px");
     r.style.setProperty("--editor-lh", String(cfg.lineHeight));
     r.style.setProperty("--ui-scale", String(cfg.uiScale));
-  }, [cfg.editorFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale]);
+    r.style.setProperty("--sidebar-w", cfg.sidebarWidth + "px");
+  }, [cfg.editorFont, cfg.fontSize, cfg.lineHeight, cfg.uiScale, cfg.sidebarWidth]);
 
   // persist config, debounced: held settings steppers fire per key-repeat, and
   // each store.set is an IPC (a sync localStorage write in the demo). The tail
@@ -1169,7 +1227,8 @@ export function App() {
       themePickerOpen ||
       notebookSwitcherOpen ||
       pendingDelete ||
-      pendingRename
+      pendingRename ||
+      noteMenu
     ),
     overrides: cfg.chords,
     run: onCommand,
@@ -1190,10 +1249,16 @@ export function App() {
     (id: string, pinned: boolean) => void setNotePinnedRef.current(id, !pinned),
     [],
   );
-  // Right-click a note row → the native OS context menu (Tauri only; a no-op in
-  // the browser demo). "Delete" routes through the same confirm modal as :rm.
+  // Right-click a note row (or its ⋯ kebab) → a context menu. Native OS menu in
+  // Tauri; the themed in-app ContextMenu in the web/demo build. Both are thin
+  // dispatchers over the SAME handlers; "Delete" routes through the confirm
+  // modal exactly like :rm.
   const openNoteMenu = useCallback(
-    (id: string, title: string, pinned: boolean) =>
+    (id: string, title: string, pinned: boolean, x: number, y: number) => {
+      if (!isTauri()) {
+        setNoteMenu({ id, title, pinned, x, y });
+        return;
+      }
       void showNoteContextMenu(id, title, pinned, {
         onOpen: openNote,
         onReveal: revealNote,
@@ -1201,11 +1266,19 @@ export function App() {
         onRename: requestRename,
         onTogglePin: (nid, next) => void setNotePinned(nid, next),
         onDelete: requestDelete,
-      }),
+      });
+    },
     // duplicateNote/revealNote are stable closures recreated each render; the menu
     // is rebuilt per right-click, so a fresh identity here is fine (not memo-critical).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openNote, requestRename, requestDelete],
+  );
+  const closeNoteMenu = useCallback(() => setNoteMenu(null), []);
+  // Commit a sidebar drag (or a handle double-click reset) into config — the
+  // live drag already wrote the CSS var, so this just persists + re-renders once.
+  const onSidebarResize = useCallback(
+    (w: number) => setCfg((c) => ({ ...c, sidebarWidth: clampSidebarWidth(w) })),
+    [],
   );
 
   // Pinned state of the open note — drives which of Pin/Unpin the palette offers.
@@ -1321,9 +1394,12 @@ export function App() {
               onPick={openNote}
               onContext={openNoteMenu}
               onTogglePin={onTogglePin}
+              onRename={requestRename}
               onNew={onNewNote}
               onSettings={openSettings}
               updateAvailable={update?.kind === "available"}
+              width={cfg.sidebarWidth}
+              onResizeEnd={onSidebarResize}
             />
           )}
           <main className="av-main">
@@ -1460,6 +1536,28 @@ export function App() {
             overrides={cfg.chords}
             onSetOverrides={(chords) => setCfgPatch({ chords })}
             onClose={closeCheatsheet}
+          />
+        )}
+        {noteMenu && (
+          <ContextMenu
+            x={noteMenu.x}
+            y={noteMenu.y}
+            onClose={closeNoteMenu}
+            items={[
+              { label: "Open", run: () => openNote(noteMenu.id) },
+              {
+                label: noteMenu.pinned ? "Unpin" : "Pin",
+                run: () => void setNotePinned(noteMenu.id, !noteMenu.pinned),
+              },
+              { label: "Duplicate", run: () => void duplicateNote(noteMenu.id) },
+              { label: "Rename…", run: () => requestRename(noteMenu.id, noteMenu.title) },
+              "sep",
+              {
+                label: "Delete",
+                danger: true,
+                run: () => requestDelete(noteMenu.id, noteMenu.title),
+              },
+            ]}
           />
         )}
         {pendingDelete && (
