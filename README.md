@@ -5,7 +5,7 @@
 <h1 align="center">Noteside</h1>
 
 <p align="center">
-  An offline notebook you drive entirely from the keyboard — vim keybindings, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
+  A fast, minimalist offline notebook. Point and click, or drive everything from the keyboard — full vim, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
 </p>
 
 <p align="center">

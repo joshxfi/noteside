@@ -135,9 +135,9 @@ function useKeycast() {
 
 const FEATURES = [
   {
-    k: "keyboard, first-class",
-    h: "Vim or ⌘-shortcuts — your call",
-    p: "Full modal vim if you want it — real modes, motions, operators, a command line. Don't want vim? Turn it off and run everything from ⌘-shortcuts, a searchable command palette, and ⌘F find. Rebind any chord right from the cheatsheet (⌘/). Either way, the mouse stays parked.",
+    k: "mouse & keyboard, first-class",
+    h: "Point, click — or never leave home row",
+    p: "Everything clicks: the sidebar, the palettes, pins, renames, a right-click menu. And everything has a keystroke: full modal vim if you want it, or ⌘-shortcuts, a searchable command palette, and ⌘F find — rebind any chord right from the cheatsheet (⌘/). Your hands choose; the app keeps up.",
   },
   {
     k: "fast & lightweight",
@@ -161,7 +161,7 @@ const sectionH2 =
   "font-serif font-medium text-[clamp(1.9rem,4vw,2.9rem)] tracking-[-0.02em] max-w-[20ch] mx-auto leading-[1.08] text-balance";
 
 export function App() {
-  useHead("Noteside — notes for keyboard people", "https://noteside.app/");
+  useHead("Noteside — fast, minimalist notes", "https://noteside.app/");
   const step = useKeycast();
   const dl = useDownloads();
   useScrollReveal();
@@ -179,8 +179,8 @@ export function App() {
             A quiet page that keeps up with your hands.
           </h1>
           <p className="mx-auto mt-6 max-w-[39rem] text-[clamp(1.05rem,2.2vw,1.32rem)] leading-[1.55] text-ink-soft text-pretty">
-            Noteside is an offline notebook built for the keyboard — drive it with full vim, or the
-            everyday shortcuts you already know.
+            Noteside is a fast, minimalist offline notebook. Point and click, or drive everything
+            from the keyboard — full vim, or the everyday shortcuts you already know.
           </p>
           <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
             <a className="btn btn-primary" href={dl.primary.href} {...linkProps(dl.primary)}>
@@ -246,16 +246,16 @@ export function App() {
             />
           </div>
           <p className="mt-[22px] text-center font-mono text-[13px] text-ink-faint">
-            The real app, running right here. Press <b className="text-accent">i</b> to write,{" "}
-            <b className="text-accent">:</b> for commands, and <b className="text-accent">:find</b>{" "}
-            to jump anywhere.
+            The real app, running right here. Click around — or press{" "}
+            <b className="text-accent">⌘⇧P</b> for every command and{" "}
+            <b className="text-accent">⌘P</b> to jump anywhere.
           </p>
         </section>
 
         <section className="wrap border-t border-rule-soft pt-[30px] pb-24" id="features">
           <div className="reveal mb-[46px] text-center">
             <p className={eyebrow}>Why Noteside</p>
-            <h2 className={sectionH2}>Built for people who would rather not touch the mouse.</h2>
+            <h2 className={sectionH2}>Fast, focused, and out of your way.</h2>
           </div>
           <div className="reveal grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-rule-soft bg-rule-soft max-sm:grid-cols-1">
             {FEATURES.map((f) => (

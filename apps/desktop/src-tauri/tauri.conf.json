@@ -35,7 +35,7 @@
     "active": true,
     "targets": "all",
     "category": "Productivity",
-    "shortDescription": "Notes for keyboard people.",
+    "shortDescription": "Fast, minimalist notes.",
     "longDescription": "Noteside is an offline, local-first notebook with first-class vim keybindings. Your notes are plain Markdown files on your disk.",
     "icon": [
       "icons/32x32.png",

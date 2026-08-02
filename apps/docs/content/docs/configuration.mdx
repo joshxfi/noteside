@@ -20,6 +20,7 @@ set editor-font  = Newsreader
 set font-size    = 19
 set line-height  = 1.75
 set ui-scale     = 100%
+set sidebar-width = 250
 
 " cursor
 set cursor       = block
@@ -47,6 +48,7 @@ bind Ctrl-j find
 | `font-size`        | `16`–`28`                                                                     |
 | `line-height`      | `1.4`–`2.1`                                                                   |
 | `ui-scale`         | `90%`–`130%`                                                                  |
+| `sidebar-width`    | `200`–`420` (px — or just drag the sidebar's edge; double-click resets)       |
 | `cursor`           | `block` · `bar` · `underline`                                                 |
 | `cursor-blink`     | `on` · `off`                                                                  |
 | `live-preview`     | `on` · `off`                                                                  |
@@ -71,6 +73,8 @@ bind Ctrl-j find
   interface is always **Geist Mono** — there's no separate interface-font setting.
 - **Interface size** — `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
   independently of the editor `font-size`.
+- **Sidebar width** — `sidebar-width` (200–420 px). Dragging the sidebar's right edge
+  writes the same setting; double-clicking the edge resets it.
 - **Line numbers** — `relative-numbers` shows a vim-style relative gutter; off (the
   default) shows absolute numbers.
 - **Updates** — `auto-update` (on by default) checks GitHub for a newer release on
