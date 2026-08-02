@@ -12,7 +12,17 @@ import {
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Library, PanelLeft, Pin, Plus, Search, SlidersHorizontal } from "lucide-react";
+import {
+  Ellipsis,
+  Library,
+  PanelLeft,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  SquareChevronRight,
+} from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/commands";
 import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
@@ -183,6 +193,7 @@ const NoteRow = memo(function NoteRow({
   active,
   onPick,
   onContext,
+  onTogglePin,
   now,
   top,
   index,
@@ -192,19 +203,26 @@ const NoteRow = memo(function NoteRow({
   active: boolean;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   now: number;
   top?: number;
   index?: number;
   measureRef?: (el: HTMLElement | null) => void;
 }) {
+  // A <div>, not a <button>: the hover-revealed action buttons live inside the
+  // row, and interactive content is invalid inside a <button>. The reveal is
+  // CSS-only (.av-item:hover) so pointer motion never re-renders the memo'd row.
   return (
-    <button
+    <div
       ref={measureRef}
       data-index={index}
+      role="button"
+      tabIndex={-1}
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
       onContextMenu={(e) => {
+        if (!isTauri()) return; // web/demo: no native menu to pop — leave the browser's
         e.preventDefault(); // suppress the WebView's native menu; ours pops instead
         onContext(note.id, note.title, note.pinned);
       }}
@@ -231,7 +249,41 @@ const NoteRow = memo(function NoteRow({
           {relTime(note.updated, now)}
         </span>
       </span>
-    </button>
+      <span className="av-item-actions">
+        <button
+          type="button"
+          tabIndex={-1}
+          className="av-item-act"
+          title={note.pinned ? "unpin" : "pin"}
+          aria-label={note.pinned ? "unpin note" : "pin note"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(note.id, note.pinned);
+          }}
+        >
+          {note.pinned ? (
+            <PinOff size={13} aria-hidden="true" />
+          ) : (
+            <Pin size={13} aria-hidden="true" />
+          )}
+        </button>
+        {isTauri() && (
+          <button
+            type="button"
+            tabIndex={-1}
+            className="av-item-act"
+            title="note actions"
+            aria-label="note actions"
+            onClick={(e) => {
+              e.stopPropagation();
+              onContext(note.id, note.title, note.pinned);
+            }}
+          >
+            <Ellipsis size={13} aria-hidden="true" />
+          </button>
+        )}
+      </span>
+    </div>
   );
 });
 
@@ -243,12 +295,14 @@ function PlainNoteList({
   activeId,
   onPick,
   onContext,
+  onTogglePin,
   now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   now: number;
 }) {
   const listRef = useRef<HTMLElement>(null);
@@ -266,6 +320,7 @@ function PlainNoteList({
           active={n.id === activeId}
           onPick={onPick}
           onContext={onContext}
+          onTogglePin={onTogglePin}
           now={now}
         />
       ))}
@@ -280,12 +335,14 @@ function VirtualNoteList({
   activeId,
   onPick,
   onContext,
+  onTogglePin,
   now,
 }: {
   notes: NoteMeta[];
   activeId: string | null;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   now: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -318,6 +375,7 @@ function VirtualNoteList({
               active={n.id === activeId}
               onPick={onPick}
               onContext={onContext}
+              onTogglePin={onTogglePin}
               now={now}
               top={item.start}
             />
@@ -334,6 +392,7 @@ const Sidebar = memo(function Sidebar({
   activeId,
   onPick,
   onContext,
+  onTogglePin,
   onNew,
   onSettings,
   updateAvailable,
@@ -343,6 +402,7 @@ const Sidebar = memo(function Sidebar({
   activeId: string | null;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
   onNew: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
@@ -371,6 +431,7 @@ const Sidebar = memo(function Sidebar({
             activeId={activeId}
             onPick={onPick}
             onContext={onContext}
+            onTogglePin={onTogglePin}
             now={now}
           />
         ) : (
@@ -379,6 +440,7 @@ const Sidebar = memo(function Sidebar({
             activeId={activeId}
             onPick={onPick}
             onContext={onContext}
+            onTogglePin={onTogglePin}
             now={now}
           />
         )}
@@ -454,7 +516,19 @@ function NotebookPicker({ onPick }: { onPick: () => void }) {
   );
 }
 
-function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: boolean }) {
+function EmptyState({
+  onReopen,
+  hasClosed,
+  onNew,
+  onFind,
+  onCommands,
+}: {
+  onReopen: () => void;
+  hasClosed: boolean;
+  onNew: () => void;
+  onFind: () => void;
+  onCommands: () => void;
+}) {
   return (
     <div className="av-empty">
       <div className="av-mark" aria-label="Noteside">
@@ -475,6 +549,17 @@ function EmptyState({ onReopen, hasClosed }: { onReopen: () => void; hasClosed: 
           </>
         )}
         .
+      </div>
+      <div className="av-empty-actions">
+        <button type="button" className="set-done" onClick={onNew}>
+          New note
+        </button>
+        <button type="button" className="av-emptybtn" onClick={onFind}>
+          Find a note
+        </button>
+        <button type="button" className="av-emptybtn" onClick={onCommands}>
+          All commands
+        </button>
       </div>
       <div className="av-empty-keys">
         <kbd>{chordLabel("Mod-p")}</kbd> find a note · <kbd>{chordLabel("Mod-n")}</kbd> new note ·{" "}
@@ -1094,6 +1179,17 @@ export function App() {
   // not the whole tree).
   const openNote = useCallback((id: string) => void session.open(id), [session]);
   const onNewNote = useCallback(() => void createNote(), [createNote]);
+  // Row hover pin toggle. setNotePinned closes over fresh notes/session state
+  // each render, so the stable callback reads it through a ref — the memo'd rows
+  // keep one identity while the handler never goes stale.
+  const setNotePinnedRef = useRef(setNotePinned);
+  useEffect(() => {
+    setNotePinnedRef.current = setNotePinned;
+  });
+  const onTogglePin = useCallback(
+    (id: string, pinned: boolean) => void setNotePinnedRef.current(id, !pinned),
+    [],
+  );
   // Right-click a note row → the native OS context menu (Tauri only; a no-op in
   // the browser demo). "Delete" routes through the same confirm modal as :rm.
   const openNoteMenu = useCallback(
@@ -1169,6 +1265,39 @@ export function App() {
           >
             <Library size={15} aria-hidden="true" />
           </button>
+          <button
+            className="av-iconbtn"
+            onClick={() => setCmdSearchOpen(true)}
+            title={`commands (${chordLabel("Mod-Shift-P")})`}
+            aria-label="commands"
+          >
+            <SquareChevronRight size={15} aria-hidden="true" />
+          </button>
+          {status === "ready" && (
+            <button
+              className="av-iconbtn"
+              onClick={onNewNote}
+              title={`new note (${chordLabel("Mod-n")})`}
+              aria-label="new note"
+            >
+              <Plus size={15} aria-hidden="true" />
+            </button>
+          )}
+          {(!navOpen || status !== "ready") && (
+            // The sidebar (with its Settings button) is collapsed or not rendered —
+            // keep a pointer path to Settings alive up here.
+            <button
+              className="av-iconbtn"
+              onClick={openSettings}
+              title="settings"
+              aria-label="settings"
+            >
+              <SlidersHorizontal size={15} aria-hidden="true" />
+              {update?.kind === "available" && (
+                <span className="av-update-dot" title="Update available" />
+              )}
+            </button>
+          )}
           {!isTauri() && (
             <div className="av-title" data-tauri-drag-region>
               {titleText ? (
@@ -1191,6 +1320,7 @@ export function App() {
               activeId={s.activeId}
               onPick={openNote}
               onContext={openNoteMenu}
+              onTogglePin={onTogglePin}
               onNew={onNewNote}
               onSettings={openSettings}
               updateAvailable={update?.kind === "available"}
@@ -1239,13 +1369,27 @@ export function App() {
                 </Suspense>
               </EditorBoundary>
             ) : (
-              <EmptyState hasClosed={!!s.lastNoteId} onReopen={() => session.reopenLast()} />
+              <EmptyState
+                hasClosed={!!s.lastNoteId}
+                onReopen={() => session.reopenLast()}
+                onNew={onNewNote}
+                onFind={() => openFinder("all")}
+                onCommands={() => setCmdSearchOpen(true)}
+              />
             )}
             {toast && (
               <div
                 className={"av-toast" + (toast.kind === "error" ? " is-error" : "")}
                 role="status"
                 aria-live="polite"
+                title="dismiss"
+                onClick={() => {
+                  if (toastTimer.current !== null) {
+                    window.clearTimeout(toastTimer.current);
+                    toastTimer.current = null;
+                  }
+                  setToast(null);
+                }}
               >
                 {toast.msg}
               </div>

@@ -20,7 +20,7 @@ test.describe("vim mode", () => {
 
   test("Tab indents without moving focus in insert mode", async ({ page }) => {
     await boot(page, { vimMode: true });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
 
     await page.keyboard.press("i");
@@ -38,7 +38,7 @@ test.describe("vim mode", () => {
   // the line start, where indentMore and insertTab agree, which is how this hid.
   test("Tab inserts at the cursor, not at the start of the line", async ({ page }) => {
     await boot(page, { vimMode: true });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
 
     await page.keyboard.press("i");
@@ -54,7 +54,7 @@ test.describe("vim mode", () => {
 
   test("Tab does not indent in normal mode", async ({ page }) => {
     await boot(page, { vimMode: true });
-    await page.getByRole("button", { name: "New note" }).click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
     const content = page.locator(".cm-content");
     const before = await content.textContent();
 

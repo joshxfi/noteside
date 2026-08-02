@@ -74,8 +74,27 @@ export function CommandPalette({
         {confirm ? (
           <div className="pal-confirm">
             <span>{confirm.label}?</span>
-            <span className="pal-keys">
-              <kbd>y</kbd> yes · <kbd>n</kbd> no
+            {/* mousedown-preventDefault keeps focus on the panel so y/n/Esc keep working */}
+            <span className="cfm-actions">
+              <button
+                type="button"
+                className="cfm-btn danger"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  confirm.run();
+                  onClose();
+                }}
+              >
+                Yes <kbd>y</kbd>
+              </button>
+              <button
+                type="button"
+                className="cfm-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setConfirm(null)}
+              >
+                No <kbd>n</kbd>
+              </button>
             </span>
           </div>
         ) : (

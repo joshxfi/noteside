@@ -91,7 +91,29 @@ export function CommandSearch({
           <div className="fnd-list" ref={listRef}>
             {confirm ? (
               <div className="fnd-empty">
-                {confirm.title}? &nbsp;<b>↵</b> yes · <b>n</b> no · <b>Esc</b> cancel
+                {confirm.title}?
+                {/* mousedown-preventDefault keeps the input focused so ↵/n/Esc keep working */}
+                <span className="cfm-actions">
+                  <button
+                    type="button"
+                    className="cfm-btn danger"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onRun(confirm);
+                      onClose();
+                    }}
+                  >
+                    Yes <b>↵</b>
+                  </button>
+                  <button
+                    type="button"
+                    className="cfm-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setConfirm(null)}
+                  >
+                    No <b>n</b>
+                  </button>
+                </span>
               </div>
             ) : items.length === 0 ? (
               <div className="fnd-empty">no commands</div>
