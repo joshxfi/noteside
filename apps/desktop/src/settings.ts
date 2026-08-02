@@ -22,6 +22,8 @@ export interface Config {
   tabWidth: number;
   /** Interface-size multiplier — scales the UI chrome (not the editor). */
   uiScale: number;
+  /** Sidebar width in px (drag the sidebar edge; double-click resets). */
+  sidebarWidth: number;
   /** Show relative line numbers in the gutter (off = absolute). */
   relativeNumbers: boolean;
   cursor: "block" | "bar" | "underline";
@@ -80,6 +82,7 @@ export const CONFIG_DEFAULTS: Config = {
   lineHeight: 1.75,
   tabWidth: 2, // CodeMirror's own default indentUnit — unchanged for existing users
   uiScale: 1,
+  sidebarWidth: 250,
   relativeNumbers: false,
   cursor: "block",
   cursorBlink: true,
@@ -97,6 +100,11 @@ export const CONFIG_DEFAULTS: Config = {
 
 export const TAB_WIDTH_MIN = 1;
 export const TAB_WIDTH_MAX = 8;
+
+export const SIDEBAR_MIN = 200;
+export const SIDEBAR_MAX = 420;
+export const clampSidebarWidth = (w: number): number =>
+  Math.round(Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w)));
 
 // The comment lines serializeConfig writes. Held as constants so parseConfig can
 // tell OUR boilerplate (regenerated every serialize) from a comment the user
@@ -132,6 +140,7 @@ export function serializeConfig(c: Config): string {
   L.push("");
   L.push(C.appearance);
   L.push(`set theme        = ${c.theme}`);
+  L.push(`set sidebar-width = ${c.sidebarWidth}`);
   L.push("");
   L.push(C.typography);
   L.push(`set editor-font  = ${eLabel}`);
@@ -230,6 +239,9 @@ export function parseConfig(text: string, base: Config): Config {
       } else if (["tab-width", "tabwidth", "tabstop", "ts", "shiftwidth", "sw"].includes(key)) {
         const v = parseInt(val, 10);
         if (!isNaN(v)) c.tabWidth = Math.max(TAB_WIDTH_MIN, Math.min(TAB_WIDTH_MAX, v));
+      } else if (key === "sidebar-width" || key === "sidebarwidth") {
+        const v = parseInt(val, 10);
+        if (!isNaN(v)) c.sidebarWidth = clampSidebarWidth(v);
       } else if (key === "ui-scale" || key === "interface-size") {
         const v = parseFloat(val); // accepts "110%", "110", or "1.1"
         if (!isNaN(v)) {
