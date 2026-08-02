@@ -1,3 +1,21 @@
+## [1.7.0](https://github.com/joshxfi/noteside/compare/v1.6.0...v1.7.0) (2026-08-02)
+
+### Features
+
+* in-app context menu for web, drag-resizable sidebar, double-click rename ([02302b4](https://github.com/joshxfi/noteside/commit/02302b4c72b4f018375342c1f8a0789261196959))
+* pointer ergonomics — hover selection, click commits, overlay close buttons, plain-click table links, status bar actions ([39cc453](https://github.com/joshxfi/noteside/commit/39cc4532b8d6d99b9af1496ace08b5daa926ac28))
+* pointer parity quick wins — titlebar commands/new-note/settings buttons, row hover actions, clickable confirms ([b746452](https://github.com/joshxfi/noteside/commit/b74645297eb09f9f89821a2ec61b4f1b30aea3e2))
+* reposition for pointer parity — vim off by default, onboarding reframe ([60aee4a](https://github.com/joshxfi/noteside/commit/60aee4a712bfda6b4d1d8c567c20728064b24dd8))
+
+### Bug Fixes
+
+* harden the pointer layer — stale native-menu closures, row keyboard access, hover guards, drag capture ([69b67c1](https://github.com/joshxfi/noteside/commit/69b67c1941e790c897b15877481a0590bb2173af))
+
+### Polish
+
+* finish the copy sweep — footer tagline, demo welcome note, docs pointer paths ([79a891e](https://github.com/joshxfi/noteside/commit/79a891e5c4cb5f3e3f2cde59473f2afbdb67c2a2))
+* reposition messaging — fast, minimalist notes; mouse and keyboard both first-class ([d72ea52](https://github.com/joshxfi/noteside/commit/d72ea5213f80b102a340e214856e3d7b08f4b11c))
+
 ## [1.6.0](https://github.com/joshxfi/noteside/compare/v1.5.2...v1.6.0) (2026-07-26)
 
 ### Features
