@@ -4,7 +4,7 @@ Guidance for any coding agent working in this repository — the single, tool-ag
 
 ## What this is
 
-Noteside — an offline & **keyboard-first** notes desktop app (full vim _and_ conventional shortcuts, both first-class), plus its marketing site. Turborepo + pnpm monorepo:
+Noteside — an offline, **performant, minimalist notes desktop app for everyone**: mouse and keyboard are BOTH first-class (full vim, conventional shortcuts, and pointer-driven UX — pick any, mix freely), plus its marketing site. This is a deliberate repositioning away from the original "keyboard-first" identity (2026-08): every command must be reachable by mouse AND by keyboard. When adding UI, hold the parity rule in both directions: a new button gets a command-table entry (keyboard/palette path), a new command gets a visible pointer affordance — and pointer affordances must be CSS-driven where they can be (hover reveals never add per-row React state; the perf invariants below are not negotiable). Turborepo + pnpm monorepo:
 
 - `apps/desktop` — Tauri 2 + React 19 + Vite + TypeScript (the app)
 - `apps/landing` — Vite + React 19 + TypeScript + Tailwind v4 (the site)

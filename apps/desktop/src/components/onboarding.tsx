@@ -6,9 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import { chordLabel } from "../editor/commands";
 
 export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
-  // Vim is Noteside's identity, so it's the default keyboard highlight. `sel` is a
-  // keyboard-only cursor (arrows/h/l); a mouse click picks its card directly.
-  const [sel, setSel] = useState<0 | 1>(0); // 0 = vim, 1 = plain keyboard
+  // Plain keyboard is the default highlight (pointer-parity reposition: vim is
+  // an equal door, not the identity). `sel` moves via arrows/h/l AND hover; a
+  // mouse click picks its card directly.
+  const [sel, setSel] = useState<0 | 1>(1); // 0 = vim, 1 = plain keyboard
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.focus();
@@ -42,8 +43,8 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
       </div>
       <div className="av-empty-title">How do you want to edit?</div>
       <div className="av-empty-sub">
-        Noteside is keyboard-first either way. Pick what feels like home — you can change this
-        anytime in Settings.
+        Both are first-class, and the mouse works everywhere either way. Pick what feels like home —
+        you can change this anytime in Settings.
       </div>
       <div className="ob-cards" role="radiogroup" aria-label="Editing mode">
         <button
@@ -52,6 +53,7 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
           tabIndex={-1}
           aria-checked={sel === 0}
           className={"ob-card" + (sel === 0 ? " is-sel" : "")}
+          onMouseEnter={() => setSel(0)}
           onClick={() => onChoose(true)}
         >
           <span className="ob-card-name">Vim</span>
@@ -72,6 +74,7 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
           tabIndex={-1}
           aria-checked={sel === 1}
           className={"ob-card" + (sel === 1 ? " is-sel" : "")}
+          onMouseEnter={() => setSel(1)}
           onClick={() => onChoose(false)}
         >
           <span className="ob-card-name">Plain keyboard</span>
