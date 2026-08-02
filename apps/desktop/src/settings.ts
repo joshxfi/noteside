@@ -85,7 +85,10 @@ export const CONFIG_DEFAULTS: Config = {
   cursorBlink: true,
   livePreview: true,
   autoUpdateCheck: true,
-  vimMode: true,
+  // Default OFF (2026-08 pointer-parity reposition): a raw default must not
+  // drop a new user into NORMAL mode. Onboarding still offers vim as an equal
+  // door, and a stored config always wins over this default.
+  vimMode: false,
   escMap: "",
   keymaps: [],
   chords: {},
