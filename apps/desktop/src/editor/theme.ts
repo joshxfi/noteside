@@ -61,16 +61,23 @@ export const nsTheme = EditorView.theme({
   ".cm-searchMatch-selected": {
     backgroundColor: "color-mix(in oklab, var(--accent), transparent 35%)",
   },
-  // rendered-table URL links (block-preview.ts)
+  // rendered-table URL links (block-preview.ts). Rendered tables are display
+  // content, so a PLAIN click follows the link — the pointer affordance is
+  // always on (unlike raw source text, where click places the caret and only
+  // Mod-click follows).
   ".cm-mdlink": {
     color: "var(--accent)",
     textDecoration: "underline",
     textDecorationColor: "color-mix(in oklab, var(--accent), transparent 55%)",
     textUnderlineOffset: "3px",
+    cursor: "pointer",
   },
-  // The "clickable" affordance is only true while Mod is held (Mod-click opens),
-  // so surface the pointer cursor + brighter underline only then.
-  "&.cm-mod-active .cm-mdlink": {
+  ".cm-mdlink:hover": {
+    textDecorationColor: "var(--accent)",
+  },
+  // Source-text links: plain click must place the caret, so follow stays on
+  // Mod-click — but while Mod is held the pointer affordance turns honest.
+  "&.cm-mod-active .cm-src-link, &.cm-mod-active .cm-src-url": {
     cursor: "pointer",
     textDecorationColor: "var(--accent)",
   },
@@ -268,6 +275,10 @@ export const noteHighlight = HighlightStyle.define([
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--accent)", textDecoration: "underline" },
   { tag: t.url, color: "var(--ink-faint)" },
+  // Stable class hooks for source-text links (hashed style classes can't be
+  // targeted from nsTheme) — the cm-mod-active rule below keys off these.
+  { tag: t.link, class: "cm-src-link" },
+  { tag: t.url, class: "cm-src-url" },
   { tag: [t.monospace], fontFamily: "var(--mono)", color: "var(--ink-soft)" },
   { tag: t.quote, color: "var(--ink-soft)", fontStyle: "italic" },
   { tag: t.list, color: "var(--ink-soft)" },

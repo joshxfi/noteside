@@ -20,7 +20,6 @@ import {
   scanBlocks,
   type TableBlock,
 } from "../markdown";
-import { modActive } from "./platform";
 
 /** App-level URL opener, provided by the Editor component so table-cell links
  *  stay Mod-clickable while rendered. */
@@ -60,6 +59,7 @@ function renderInline(nodes: Inline[], parent: HTMLElement): void {
         const el = document.createElement("span");
         el.className = "cm-mdlink";
         el.dataset.url = n.url;
+        el.title = n.url; // hover shows the destination — the click affordance is honest
         el.textContent = n.text || n.url;
         parent.appendChild(el);
         break;
@@ -142,8 +142,11 @@ class TableWidget extends WidgetType {
       e.preventDefault();
       e.stopPropagation();
       const target = e.target as HTMLElement;
+      // A rendered table is display content, not editable text — a PLAIN click on
+      // a link follows it (no Mod needed, unlike raw source where click must
+      // place the caret). Clicking anywhere else in the cell still edits it.
       const link = target.closest<HTMLElement>("[data-url]");
-      if (link?.dataset.url && modActive(e)) {
+      if (link?.dataset.url) {
         const h = view.state.facet(linkHandlers);
         if (h) {
           h.openUrl(link.dataset.url);

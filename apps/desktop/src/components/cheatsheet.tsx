@@ -75,8 +75,15 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     setFocus((f) => (f >= flat.length ? Math.max(0, flat.length - 1) : f));
   }, [flat.length]);
 
+  // Pointer-driven focus must not auto-scroll (see finder.tsx: scrolling under
+  // a stationary cursor re-fires the hover — a feedback loop).
+  const focusByPointer = useRef(false);
+  const hoverFocus = (i: number) => {
+    focusByPointer.current = true;
+    setFocus(i);
+  };
   useEffect(() => {
-    rowRefs.current[focus]?.scrollIntoView({ block: "nearest" });
+    if (!focusByPointer.current) rowRefs.current[focus]?.scrollIntoView({ block: "nearest" });
   }, [focus]);
 
   // Apply one chord into a base overrides object. Reset (null), capturing the
@@ -123,6 +130,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    focusByPointer.current = false;
     if (conflict) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -239,7 +247,8 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       role="listitem"
                       aria-label={ariaLabel}
                       className={"cheat-row" + (i === focus ? " is-focus" : "")}
-                      onMouseMove={() => i !== focus && !recording && setFocus(i)}
+                      onMouseEnter={() => i !== focus && !recording && hoverFocus(i)}
+                      onMouseMove={() => i !== focus && !recording && hoverFocus(i)}
                       onClick={() => {
                         setFocus(i);
                         setUnsafeChord(null);
