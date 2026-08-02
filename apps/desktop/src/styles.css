@@ -86,23 +86,25 @@ button:focus-visible,
    ::-webkit pseudo-elements cover the app's webview. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--ink-faint), transparent 45%) transparent;
+  scrollbar-color: color-mix(in oklab, var(--ink-faint), transparent 35%) transparent;
 }
+/* 10px track − 2px transparent inset ⇒ a ~6px thumb: still quiet, but an
+   actual drag target (the old 7−2·2=3px thumb was too thin to grab) */
 ::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: color-mix(in oklab, var(--ink-faint), transparent 45%);
+  background: color-mix(in oklab, var(--ink-faint), transparent 35%);
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklab, var(--ink-faint), transparent 18%);
+  background: color-mix(in oklab, var(--ink-faint), transparent 10%);
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-corner {
@@ -708,6 +710,30 @@ body {
 .av-dirty {
   color: var(--accent);
   font-weight: 600;
+  /* a real button: click saves */
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.av-statbtn {
+  display: flex;
+  align-items: center;
+  padding: 0 11px;
+  border: none;
+  border-left: 1px solid var(--rule-soft);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.av-statbtn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.av-statbtn svg {
+  display: block;
 }
 .av-spacer {
   flex: 1;
@@ -1325,6 +1351,26 @@ body {
 .fnd-grepmode:hover {
   background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);
 }
+/* quiet close button shared by the finder-chrome overlays (finder, command
+   search, theme picker, notebook switcher) — Esc's pointer twin */
+.fnd-x {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--ink-faint);
+  font-size: calc(16px * var(--ui-scale));
+  line-height: 1;
+  cursor: pointer;
+}
+.fnd-x:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
 .fnd-tabs {
   flex: none;
   display: flex;
@@ -1373,7 +1419,12 @@ body {
   overflow: hidden;
   position: relative;
 }
-.fnd-row.is-sel {
+/* resting hover feedback, independent of the hover-sets-selection handler */
+.fnd-row:hover {
+  background: color-mix(in oklab, var(--paper-2), var(--ink) 4%);
+}
+.fnd-row.is-sel,
+.fnd-row.is-sel:hover {
   background: color-mix(in oklab, var(--paper), var(--accent) 12%);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent), transparent 60%);
 }
@@ -1818,6 +1869,10 @@ html.tauri.macos .av-titlebar {
   display: flex;
   flex-direction: column;
   padding: 6px;
+  /* the leader list is small today, but it must degrade to scroll, not overflow
+     off-screen, if commands grow */
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
 }
 .pal-row {
   display: flex;

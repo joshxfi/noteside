@@ -20,6 +20,9 @@ export function CommandSearch({
   const [confirm, setConfirm] = useState<Command | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Pointer-driven selection must not auto-scroll (see finder.tsx: the scroll
+  // would move a new row under the stationary cursor and re-fire the hover).
+  const selByPointer = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -30,12 +33,20 @@ export function CommandSearch({
     () => commands.filter((c) => subseq(q, c.title) || subseq(q, c.group)),
     [commands, q],
   );
-  useEffect(() => setSel(0), [q]);
-
-  // keep the selection in view
   useEffect(() => {
-    scrollRowIntoView(listRef.current, sel);
+    selByPointer.current = false;
+    setSel(0);
+  }, [q]);
+
+  // keep the selection in view (keyboard moves only)
+  useEffect(() => {
+    if (!selByPointer.current) scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
+
+  const hoverSel = (i: number) => {
+    selByPointer.current = true;
+    setSel(i);
+  };
 
   const choose = (cmd: Command | undefined) => {
     if (!cmd) return;
@@ -47,6 +58,7 @@ export function CommandSearch({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    selByPointer.current = false;
     if (e.key === "Escape") {
       e.preventDefault();
       if (confirm) setConfirm(null);
@@ -85,6 +97,17 @@ export function CommandSearch({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
           />
+          <button
+            type="button"
+            className="fnd-x"
+            tabIndex={-1}
+            aria-label="close"
+            title="close (Esc)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
 
         <div className="fnd-body">
@@ -122,11 +145,10 @@ export function CommandSearch({
                 <div
                   key={c.id}
                   className={"fnd-row" + (i === sel ? " is-sel" : "") + (c.danger ? " danger" : "")}
-                  onMouseMove={() => i !== sel && setSel(i)}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    choose(c);
-                  }}
+                  onMouseEnter={() => i !== sel && hoverSel(i)}
+                  onMouseMove={() => i !== sel && hoverSel(i)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => choose(c)}
                 >
                   <span className="fnd-name">{c.title}</span>
                   {c.chord && <span className="fnd-frec">{chordLabel(c.chord)}</span>}

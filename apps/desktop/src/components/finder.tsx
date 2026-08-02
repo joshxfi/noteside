@@ -104,11 +104,14 @@ const ResultRow = memo(function ResultRow({
       role="option"
       aria-selected={selected}
       className={"fnd-row" + (selected ? " is-sel" : "")}
+      // enter + move: a stationary pointer over a row that changed underneath it
+      // (keyboard nav, re-filter) re-syncs on entry, not only on jiggle
+      onMouseEnter={() => !selected && onHover(index)}
       onMouseMove={() => !selected && onHover(index)}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onPick(item);
-      }}
+      // preventDefault keeps the query input focused; committing on click (not
+      // mousedown) restores the press-then-drag-away cancel gesture
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onPick(item)}
     >
       {"lineNumber" in item ? <GrepRow item={item} /> : <FileRow item={item} />}
     </div>
@@ -226,6 +229,10 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const previewCacheRef = useRef(new Map<string, string[]>());
+  // True while the selection was last moved by the pointer. Auto-scroll must
+  // only chase keyboard-driven selection — scrolling under a hovering pointer
+  // would move a new row under the cursor and re-fire the hover (a feedback loop).
+  const selByPointer = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -252,6 +259,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
         }
         if (alive) {
           setItems(result);
+          selByPointer.current = false; // programmatic reset — scrolling may resync
           setSel(0);
         }
       } catch {
@@ -267,10 +275,15 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   const selItem = items[sel];
   const selPath = selItem?.path ?? null;
 
-  // keep selection in view
+  // keep selection in view (keyboard moves only — see selByPointer)
   useEffect(() => {
-    scrollRowIntoView(listRef.current, sel);
+    if (!selByPointer.current) scrollRowIntoView(listRef.current, sel);
   }, [sel, items]);
+
+  const hoverSel = useCallback((i: number) => {
+    selByPointer.current = true;
+    setSel(i);
+  }, []);
 
   // Lazily load preview text from the backend's cached path, then memoize it for
   // this overlay session so moving across many hits in the same file stays cheap.
@@ -315,6 +328,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    selByPointer.current = false; // any key = keyboard intent; auto-scroll resumes
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
@@ -377,10 +391,10 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
               className="fnd-grepmode"
               tabIndex={-1}
               title="cycle grep mode (Shift-Tab)"
-              onMouseDown={(e) => {
-                e.preventDefault(); // keep the query input focused
-                setGrepMode((g) => GREP_MODES[(GREP_MODES.indexOf(g) + 1) % GREP_MODES.length]);
-              }}
+              onMouseDown={(e) => e.preventDefault()} // keep the query input focused
+              onClick={() =>
+                setGrepMode((g) => GREP_MODES[(GREP_MODES.indexOf(g) + 1) % GREP_MODES.length])
+              }
             >
               {grepMode}
             </button>
@@ -391,15 +405,24 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
                 key={m}
                 className={"fnd-tab" + (mode === m ? " is-on" : "")}
                 tabIndex={-1}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setMode(m);
-                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setMode(m)}
               >
                 {m === "all" ? "All" : m === "files" ? "Files" : "Content"}
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="fnd-x"
+            tabIndex={-1}
+            aria-label="close"
+            title="close (Esc)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
 
         <div className="fnd-body">
@@ -421,7 +444,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
                   item={item}
                   index={i}
                   selected={i === sel}
-                  onHover={setSel}
+                  onHover={hoverSel}
                   onPick={pick}
                 />
               ))

@@ -45,6 +45,9 @@ export function ThemePicker({
   const darkRef = useRef<HTMLDivElement>(null);
   const lightRef = useRef<HTMLDivElement>(null);
   const committed = useRef(false);
+  // Pointer-driven highlight must not auto-scroll (see finder.tsx: scrolling
+  // under a stationary cursor re-fires the hover — a feedback loop).
+  const selByPointer = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -74,6 +77,7 @@ export function ThemePicker({
     if (nq === q) return;
     const darkLen = filterCol("dark", nq).length;
     const lightLen = filterCol("light", nq).length;
+    selByPointer.current = false;
     setIdx(0);
     setCol((c) => ((c === "dark" ? darkLen : lightLen) > 0 ? c : darkLen ? "dark" : "light"));
   };
@@ -84,10 +88,18 @@ export function ThemePicker({
     if (selected) previewTheme(selected);
   }, [selected]);
 
-  // Keep the highlighted row scrolled into view within its column.
+  // Keep the highlighted row scrolled into view within its column (keyboard only).
   useEffect(() => {
-    scrollRowIntoView((col === "dark" ? darkRef : lightRef).current, clampedIdx);
+    if (!selByPointer.current)
+      scrollRowIntoView((col === "dark" ? darkRef : lightRef).current, clampedIdx);
   }, [col, clampedIdx]);
+
+  const hoverSel = (name: Col, i: number) => {
+    if (col === name && clampedIdx === i) return;
+    selByPointer.current = true;
+    setCol(name);
+    setIdx(i);
+  };
 
   const commit = (t: Theme | undefined) => {
     if (!t) return;
@@ -104,6 +116,7 @@ export function ThemePicker({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    selByPointer.current = false;
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
@@ -143,16 +156,10 @@ export function ThemePicker({
                 (name === col && i === clampedIdx ? " is-sel" : "") +
                 (t.id === currentId ? " is-current" : "")
               }
-              onMouseMove={() => {
-                if (col !== name || clampedIdx !== i) {
-                  setCol(name);
-                  setIdx(i);
-                }
-              }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                commit(t);
-              }}
+              onMouseEnter={() => hoverSel(name, i)}
+              onMouseMove={() => hoverSel(name, i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => commit(t)}
             >
               <span
                 className="thm-chip"
@@ -182,6 +189,17 @@ export function ThemePicker({
             onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={onKeyDown}
           />
+          <button
+            type="button"
+            className="fnd-x"
+            tabIndex={-1}
+            aria-label="close"
+            title="cancel (Esc)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
 
         <div className="thm-cols">

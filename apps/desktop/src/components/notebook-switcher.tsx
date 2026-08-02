@@ -54,6 +54,13 @@ export function NotebookSwitcher({
   const [parent, setParent] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Pointer-driven selection must not auto-scroll (see finder.tsx: scrolling
+  // under a stationary cursor re-fires the hover — a feedback loop).
+  const selByPointer = useRef(false);
+  const hoverSel = (i: number) => {
+    selByPointer.current = true;
+    setSel(i);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +83,7 @@ export function NotebookSwitcher({
   // filtering → the top match. (Skipped in create mode.)
   useEffect(() => {
     if (creating) return;
+    selByPointer.current = false;
     if (q) {
       setSel(0);
       return;
@@ -90,7 +98,7 @@ export function NotebookSwitcher({
   }, [creating]);
 
   useEffect(() => {
-    if (!creating) scrollRowIntoView(listRef.current, sel);
+    if (!creating && !selByPointer.current) scrollRowIntoView(listRef.current, sel);
   }, [sel, filtered, creating]);
 
   // Action rows live just past the notebook rows: [notebooks…, New, Open folder].
@@ -133,6 +141,7 @@ export function NotebookSwitcher({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    selByPointer.current = false;
     if (creating) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -172,6 +181,17 @@ export function NotebookSwitcher({
             onChange={(e) => (creating ? setName(e.target.value) : setQuery(e.target.value))}
             onKeyDown={onKeyDown}
           />
+          <button
+            type="button"
+            className="fnd-x"
+            tabIndex={-1}
+            aria-label="close"
+            title="close (Esc)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
 
         {creating ? (
@@ -183,10 +203,8 @@ export function NotebookSwitcher({
                 type="button"
                 className="nb-change"
                 tabIndex={-1}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  void pickParent();
-                }}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void pickParent()}
               >
                 change
               </button>
@@ -199,11 +217,10 @@ export function NotebookSwitcher({
               <div
                 key={nb.path}
                 className={"fnd-row" + (i === sel ? " is-sel" : "")}
-                onMouseMove={() => i !== sel && setSel(i)}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  run(i);
-                }}
+                onMouseEnter={() => i !== sel && hoverSel(i)}
+                onMouseMove={() => i !== sel && hoverSel(i)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => run(i)}
               >
                 <span className="fnd-name">{nb.name}</span>
                 <span className="fnd-path">{nb.path}</span>
@@ -214,22 +231,20 @@ export function NotebookSwitcher({
             ))}
             <div
               className={"fnd-row nb-open" + (sel === newIndex ? " is-sel" : "")}
-              onMouseMove={() => sel !== newIndex && setSel(newIndex)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                run(newIndex);
-              }}
+              onMouseEnter={() => sel !== newIndex && hoverSel(newIndex)}
+              onMouseMove={() => sel !== newIndex && hoverSel(newIndex)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => run(newIndex)}
             >
               <FolderPlus className="nb-openicon" size={15} aria-hidden="true" />
               <span className="fnd-name">New notebook…</span>
             </div>
             <div
               className={"fnd-row nb-open" + (sel === openIndex ? " is-sel" : "")}
-              onMouseMove={() => sel !== openIndex && setSel(openIndex)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                run(openIndex);
-              }}
+              onMouseEnter={() => sel !== openIndex && hoverSel(openIndex)}
+              onMouseMove={() => sel !== openIndex && hoverSel(openIndex)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => run(openIndex)}
             >
               <FolderOpen className="nb-openicon" size={15} aria-hidden="true" />
               <span className="fnd-name">Open folder…</span>

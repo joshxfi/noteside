@@ -26,9 +26,10 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { getCM, vim } from "@replit/codemirror-vim";
+import { Eye, EyeOff } from "lucide-react";
 import type { AppCommand } from "./commands";
 import { defineExCommands, setActiveHandlers } from "./ex-commands";
-import { type ChordOverrides, type Command, commandChordKeymap } from "./commands";
+import { type ChordOverrides, chordLabel, type Command, commandChordKeymap } from "./commands";
 import { activeLineHighlight } from "./active-line";
 import { livePreview } from "./live-preview";
 import { blockPreview, bodyStart, linkHandlers } from "./block-preview";
@@ -317,8 +318,8 @@ export function Editor(props: EditorProps) {
       markdownExt,
       noteSyntax,
       previewComp.of(previewExts(preview)),
-      // rendered-table cells route their Mod-clicked URLs through the same app
-      // handler as gx / Mod-click on raw text
+      // rendered-table cells route their clicked URLs through the same app
+      // handler as gx / Mod-click on raw text (plain click follows in a table)
       linkHandlers.of({
         openUrl: (u) => propsRef.current.onOpenUrl(u),
       }),
@@ -513,12 +514,35 @@ export function Editor(props: EditorProps) {
         <div className="av-file">
           {props.fileLabel}
           {stat.dirty && (
-            <span className="av-dirty" title="unsaved">
+            <button
+              type="button"
+              className="av-dirty"
+              title={`unsaved — click to save (${chordLabel("Mod-s")})`}
+              onClick={() => {
+                const v = viewRef.current;
+                if (v) props.onSave(v.state.doc.toString());
+              }}
+            >
               [+]
-            </span>
+            </button>
           )}
         </div>
         <div className="av-spacer" />
+        {props.notePath !== "config" && (
+          <button
+            type="button"
+            className="av-statbtn"
+            title={`live preview ${props.preview ? "on" : "off"} (${chordLabel("Mod-e")})`}
+            aria-label="toggle live preview"
+            onClick={() => props.onCommand("togglePreview")}
+          >
+            {props.preview ? (
+              <Eye size={13} aria-hidden="true" />
+            ) : (
+              <EyeOff size={13} aria-hidden="true" />
+            )}
+          </button>
+        )}
         <div className="av-stat">{stat.words} words</div>
         <div className="av-stat">
           {stat.line}:{stat.col}
