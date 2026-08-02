@@ -246,4 +246,45 @@ describe("command table", () => {
     expect(ids).toContain("find");
     expect(ids).toContain("new");
   });
+
+  // The pointer-parity invariant (AGENTS.md §What this is): every command must
+  // be reachable by mouse AND by keyboard. The mouse guarantee is transitive —
+  // the searchable palette has a titlebar button and clickable rows, so being
+  // in paletteCommands IS a pointer path. Guard both directions.
+  describe("pointer-parity invariants", () => {
+    it("every command keeps a keyboard path", () => {
+      // A chord, an ex-command, or a leader key is a direct path; the searchable
+      // palette also counts (it opens on a chord and runs on Enter) — that's the
+      // only path uiReset has, deliberately (Shift+0 is layout-dependent).
+      for (const c of COMMANDS) {
+        expect(
+          Boolean(c.chord || c.ex?.length || c.leader || c.inPalette !== false),
+          `command "${c.id}" has no keyboard path`,
+        ).toBe(true);
+      }
+    });
+
+    it("palette exclusions are a conscious set, each with its own pointer story", () => {
+      // save → the status bar's [+] chip; follow → plain click in rendered
+      // tables / Mod-click in source; search* → the CM panel's own buttons once
+      // open; commands/palette → the titlebar button IS the pointer path;
+      // saveQuit → keyboard-only composite of two pointer-reachable actions.
+      // Adding an id here means consciously answering "what's its mouse path?".
+      const excluded = COMMANDS.filter((c) => c.inPalette === false)
+        .map((c) => c.id)
+        .sort();
+      expect(excluded).toEqual(
+        [
+          "commands",
+          "follow",
+          "palette",
+          "save",
+          "saveQuit",
+          "search",
+          "searchNext",
+          "searchPrev",
+        ].sort(),
+      );
+    });
+  });
 });

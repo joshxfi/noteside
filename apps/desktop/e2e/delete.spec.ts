@@ -1,9 +1,9 @@
 import { boot, expect, test } from "./fixtures";
 
-// Every delete now routes through the confirm modal (ConfirmDialog). The note
-// context menu itself is a native OS menu (Tauri only), so it isn't reachable in
-// the web build under test — these drive the delete via :rm / the toolbar, which
-// share the same modal. (Manually verify the native right-click menu in the app.)
+// Every delete routes through the confirm modal (ConfirmDialog). These drive it
+// via :rm; the pointer path (right-click → the in-app context menu in the web
+// build) is covered by context-menu.spec.ts and shares the same modal. (The
+// Tauri-native menu still needs a manual check in `pnpm dev:desktop`.)
 test.describe("delete note", () => {
   test(":rm opens the confirm modal; confirming deletes and opens another", async ({ page }) => {
     await boot(page, { vimMode: true });
