@@ -40,6 +40,10 @@ test.describe("duplicate note", () => {
     await page.keyboard.press("Enter");
 
     await expect(page.locator(".av-toast")).toContainText("note duplicated");
+    // The duplicate opens with the caret at the top; the sentinel sits on the
+    // LAST line, which CodeMirror may not render yet — jump there first.
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("G");
     await expect(page.locator(".cm-content")).toContainText("UNSAVED_DUPLICATE_SENTINEL");
   });
 });
