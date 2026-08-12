@@ -1,6 +1,6 @@
 {
   "name": "noteside",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "description": "Noteside — fast, minimalist, offline notes. Plain Markdown files; mouse and keyboard both first-class (full vim optional).",
   "license": "MIT",

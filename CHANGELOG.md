@@ -1,3 +1,22 @@
+## [1.7.1](https://github.com/joshxfi/noteside/compare/v1.7.0...v1.7.1) (2026-08-12)
+
+### Bug Fixes
+
+* app handlers — pause autosave across pin/rename rewrites, fence overlapping notebook switches, delete updates the list functionally ([3dc89ca](https://github.com/joshxfi/noteside/commit/3dc89ca832ad5542cb68ffed82144ba5fc689d91))
+* arm the table-entry step flag on every key delivery path WebKitGTK uses ([b03d745](https://github.com/joshxfi/noteside/commit/b03d74563f7ac8b94f173731a7c665dd54b0c61a))
+* block preview — table entry redirects only on vertical-step keys, per-line decoration specs hoisted ([dce847c](https://github.com/joshxfi/noteside/commit/dce847c25251a41c432c88de2b2e37ef6897d2ce))
+* chord safety — unknown modifier tokens rejected outright, lowercase spellings normalize, cheatsheet conflicts bind the recorded row ([ef6d36d](https://github.com/joshxfi/noteside/commit/ef6d36df169d35c02388be1a32b83afa8f3f8253))
+* config parser keeps and reports recognized keys whose value does not resolve ([94c12c1](https://github.com/joshxfi/noteside/commit/94c12c1be3abd8da2e6a789afacdb643f9e1f810))
+* editing session — autosaves under the config overlay update the note baseline, :w captures its edit sequence at issue time ([6a6f186](https://github.com/joshxfi/noteside/commit/6a6f1867b750e002119a0d730c5c6e41033628af))
+* keep disk authoritative — rewrite commands read fresh bodies, echo suppression verifies mtime, targeted updates skip symlinks, frecency saves serialize ([23170ea](https://github.com/joshxfi/noteside/commit/23170ea005a378d98ed5a8e2aa60b500a6cc6cd8))
+* mock parity — frontmatter-aware setTitle, pinned duplicates stay pinned, stem title fallback, authoritative title: key ([00afb73](https://github.com/joshxfi/noteside/commit/00afb7364fd2fbaf249950f6e828951f6fc8c920))
+* overlay inputs ignore IME composition keydowns ([e5aef51](https://github.com/joshxfi/noteside/commit/e5aef514a5a2d44250030e69774bbc50eb233186))
+* ship search highlight offsets as UTF-16 code units, sorted and deduped ([906dd39](https://github.com/joshxfi/noteside/commit/906dd394e264fd606fa139c9d8aaf02d74255ce5))
+
+### Documentation
+
+* sync AGENTS.md with the stability-pass behavior changes ([eff0681](https://github.com/joshxfi/noteside/commit/eff06812ee2fcc9d09a51ad7486b97d1fe924719))
+
 ## [1.7.0](https://github.com/joshxfi/noteside/compare/v1.6.0...v1.7.0) (2026-08-02)
 
 ### Features
