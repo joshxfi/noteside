@@ -647,6 +647,13 @@ export function App() {
   const [cfg, setCfg] = useState<Config>(bootConfig);
   const [status, setStatus] = useState<Status>("boot");
   const [notes, setNotes] = useState<NoteMeta[]>([]);
+  // Fresh mirror of `notes` for async handlers: an awaited IPC can outlive the
+  // closed-over array (an autosave's onNoteSaved patches a row mid-flight), so
+  // post-await reads go through the ref, never the stale closure.
+  const notesRef = useRef(notes);
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
@@ -848,8 +855,21 @@ export function App() {
     setUserKeymaps(cfg.keymaps);
   }, [cfg.keymaps]);
 
-  const openNotebook = async (path: string) => {
-    const metas = await backend.openNotebook(path);
+  // Monotonic notebook-load token: overlapping opens/switches resolve to the
+  // LATEST user pick (mirrors the Rust side's own latest-request-wins fence), so
+  // a slow older open can't land its notes/path/state after a newer one.
+  const notebookLoad = useRef(0);
+  const openNotebook = async (path: string, token = ++notebookLoad.current) => {
+    let metas: NoteMeta[];
+    try {
+      metas = await backend.openNotebook(path);
+    } catch (e) {
+      // Superseded opens fail quietly (the newer open owns the UI — a late
+      // rejection must not knock boot/switch recovery into the wrong state).
+      if (token !== notebookLoad.current) return;
+      throw e;
+    }
+    if (token !== notebookLoad.current) return; // a newer open owns the UI
     setNotes(metas);
     void backend.setLastNotebook(path);
     void backend.rememberNotebook(path); // feed the switcher's recents (MRU)
@@ -862,6 +882,10 @@ export function App() {
   // Switch to another notebook (from the switcher). A no-op when it's already open.
   const switchNotebook = async (path: string) => {
     if (path === notebookPath) return;
+    // Claim the token at user-action time, not at openNotebook time — two
+    // overlapping switches must resolve to the later PICK even if the earlier
+    // one's flush finishes last.
+    const token = ++notebookLoad.current;
     // Deactivate the outgoing buffer FIRST, synchronously (before any await): once
     // activeId is null, session.change() no-ops, so a keystroke landing in the
     // async window below — the overlay's onClose refocuses the old editor — can't
@@ -871,9 +895,13 @@ export function App() {
     // unchanged until openNotebook).
     session.close();
     await session.flush();
+    if (token !== notebookLoad.current) return; // a newer switch superseded us
     try {
-      await openNotebook(path);
+      await openNotebook(path, token);
     } catch (e) {
+      // Superseded (incl. the Rust side rejecting an out-of-date open): the
+      // newer switch owns the UI and the folder isn't at fault — do nothing.
+      if (token !== notebookLoad.current) return;
       void backend.removeRecentNotebook(path); // a folder that's gone shouldn't linger in recents
       session.reopenLast(); // the old backend context remains authoritative when open fails
       flash(`couldn't open notebook: ${e}`, "error");
@@ -1061,9 +1089,11 @@ export function App() {
       if (wasActive) await session.cancelAutosave();
       await backend.deleteNote(id);
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
-      const remaining = notes.filter((n) => n.id !== id).sort(metaOrder);
-      setNotes(remaining);
+      // Functional + ref-based: a row patched during the delete IPC (autosave
+      // meta, rename swap) must not be reverted by a pre-await snapshot.
+      setNotes((ns) => ns.filter((n) => n.id !== id).sort(metaOrder));
       if (wasActive) {
+        const remaining = notesRef.current.filter((n) => n.id !== id).sort(metaOrder);
         const next = remaining[0]?.id ?? null;
         if (next) await session.open(next);
         else session.close();
@@ -1114,12 +1144,20 @@ export function App() {
   const renameNote = async (id: string, newTitle: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
     try {
-      if (wasActive) await session.flush();
+      if (wasActive) {
+        await session.flush();
+        // Pause autosave across the rewrite (same machinery as delete): a
+        // keystroke landing during the retitle IPC would queue a save pinned to
+        // the OLD path, which would fire after the reopen and resurrect the
+        // renamed-away file on disk.
+        await session.cancelAutosave();
+      }
       const meta = await backend.retitleNote(id, newTitle);
       setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
       if (wasActive) await session.open(meta.id);
       flash("note renamed");
     } catch (e) {
+      if (wasActive) session.resumeAutosave();
       flash(`rename failed: ${e}`, "error");
     }
   };
@@ -1139,12 +1177,20 @@ export function App() {
     }
     const wasActive = s.status === "note" && s.activeId === id;
     try {
-      if (wasActive) await session.flush();
+      if (wasActive) {
+        await session.flush();
+        // Pause autosave across the rewrite (same machinery as delete): a
+        // keystroke landing during the setPinned IPC would queue pre-pin text
+        // that fires after the reopen and silently unpins the file on disk
+        // while the sidebar still shows it pinned.
+        await session.cancelAutosave();
+      }
       const meta = await backend.setPinned(id, pinned);
       setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
       if (wasActive) await session.open(meta.id);
       flash(pinned ? "note pinned" : "note unpinned");
     } catch (e) {
+      if (wasActive) session.resumeAutosave();
       flash(`${pinned ? "pin" : "unpin"} failed: ${e}`, "error");
     }
   };
