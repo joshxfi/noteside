@@ -330,6 +330,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return; // IME composition owns Enter/arrows
     selByPointer.current = false; // any key = keyboard intent; auto-scroll resumes
     if (e.key === "Escape") {
       e.preventDefault();
