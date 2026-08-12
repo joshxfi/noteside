@@ -183,6 +183,27 @@ describe("command table", () => {
       expect(isSafeChord("ArrowLeft")).toBe(false);
     });
 
+    // REGRESSION (stability pass): an unknown modifier token must fail validation
+    // outright — CM's key normalization THROWS on it while building the keymap on
+    // keydown, killing ALL keyboard handling until the bind line is fixed.
+    it("rejects chords with unrecognized modifier tokens", () => {
+      expect(isSafeChord("Mod-Sift-p")).toBe(false); // typo'd Shift
+      expect(isSafeChord("Cmdd-p")).toBe(false);
+      expect(isSafeChord("Mod-Hyper-k")).toBe(false);
+      expect(isSafeChord("c-p")).toBe(false); // single-letter CM aliases: one spelling rules
+      expect(isSafeChord("ctrl-shift-p")).toBe(true); // lowercase spellings are fine
+    });
+
+    // REGRESSION (stability pass): a lowercase modifier spelling must normalize
+    // like the canonical one — dropping it registered `bind ctrl-p` as bare `p`
+    // in the document-level map, hijacking plain typing in the no-note state.
+    it("the global fallback normalizes lowercase modifier spellings", () => {
+      const map = makeGlobalChordMap({ find: "ctrl-p" });
+      const ctx = { enabled: true, editingTarget: false };
+      expect(resolveGlobalChord(ev("p", { ctrl: true }), ctx, map)).toBe("find");
+      expect(resolveGlobalChord(ev("p"), ctx, map)).toBe(null); // bare p stays typing
+    });
+
     it("effectiveChord applies a rebind, an unbind, and the default", () => {
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "Mod-g" })).toBe("Mod-g");
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "" })).toBeUndefined();
