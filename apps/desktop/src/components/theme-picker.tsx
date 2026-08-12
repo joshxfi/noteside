@@ -118,6 +118,7 @@ export function ThemePicker({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return; // IME composition owns Enter/arrows
     selByPointer.current = false;
     if (e.key === "Escape") {
       e.preventDefault();

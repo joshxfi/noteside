@@ -35,6 +35,9 @@ export function PromptDialog({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // The Enter that commits an IME composition must not submit a half-typed
+    // value (a rename writes files) — composition owns Enter/arrows.
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Escape") {
       e.preventDefault();
       onCancel();
