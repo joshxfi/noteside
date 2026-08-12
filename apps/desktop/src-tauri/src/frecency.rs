@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -62,10 +63,16 @@ pub fn load(file: &Path, root: &str) -> HashMap<String, FrecencyEntry> {
     read_store(file).remove(root).unwrap_or_default()
 }
 
+/// Serializes the read-modify-write cycle below across callers: `record_open`
+/// racing a rename's migration persist (each on its own blocking thread) could
+/// otherwise clobber the other's just-written entries with a stale snapshot.
+static SAVE_LOCK: Mutex<()> = Mutex::new(());
+
 /// Persist one notebook's map into the shared store file (other notebooks'
 /// maps are preserved), pruned to the MAX_SAVED highest effective scores.
 /// Best-effort: I/O errors are ignored.
 pub fn save(file: &Path, root: &str, map: &HashMap<String, FrecencyEntry>, now_ms: u64) {
+    let _guard = SAVE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut store = read_store(file);
     store.insert(root.to_string(), prune(map, now_ms));
     if let Ok(json) = serde_json::to_string(&store) {
