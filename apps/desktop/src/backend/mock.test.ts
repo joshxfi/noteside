@@ -108,6 +108,59 @@ describe("mock backend", () => {
     await mockBackend.setPinned(note.path, false); // restore
   });
 
+  // REGRESSION (stability pass): setTitle used to scan from byte 0, so retitling
+  // a PINNED note prepended the new heading ABOVE the frontmatter block —
+  // corrupting the note (the raw `---` rendered as text and unpin broke forever).
+  it("retitling a pinned note edits past its frontmatter, never above it", async () => {
+    const a = await mockBackend.createNote("Pinned Then Renamed");
+    await mockBackend.setPinned(a.path, true);
+    const meta = await mockBackend.retitleNote(a.path, "Still Pinned");
+    const body = (await mockBackend.readNote(meta.path)).body;
+    expect(body.startsWith("---\npinned: true\n---\n")).toBe(true); // block intact at byte 0
+    expect(body).toContain("# Still Pinned");
+    expect(meta.pinned).toBe(true);
+    // unpin still round-trips the block away
+    await mockBackend.setPinned(meta.path, false);
+    expect((await mockBackend.readNote(meta.path)).body).not.toContain("pinned:");
+    await mockBackend.deleteNote(meta.path);
+  });
+
+  it("duplicating a pinned note yields a pinned copy (parity with Rust)", async () => {
+    const a = await mockBackend.createNote("Pinned Original");
+    await mockBackend.setPinned(a.path, true);
+    const copy = await mockBackend.duplicateNote(a.path);
+    expect(copy.pinned).toBe(true);
+    const body = (await mockBackend.readNote(copy.path)).body;
+    expect(body.startsWith("---\npinned: true\n---\n")).toBe(true);
+    expect(body).toContain("# Pinned Original copy");
+    await mockBackend.deleteNote(a.path);
+    await mockBackend.deleteNote(copy.path);
+  });
+
+  it("a frontmatter title: is authoritative and setTitle replaces it in place", async () => {
+    const meta = await mockBackend.saveNote(
+      "fm-titled.md",
+      "---\ntitle: Official Name\n---\n# Some Heading\nbody",
+    );
+    expect(meta.title).toBe("Official Name"); // parse_meta precedence: frontmatter first
+    const renamed = await mockBackend.retitleNote("fm-titled.md", "New Official");
+    const body = (await mockBackend.readNote(renamed.path)).body;
+    expect(body).toContain("title: New Official");
+    expect(body).toContain("# Some Heading"); // the body heading is left alone
+    await mockBackend.deleteNote(renamed.path);
+  });
+
+  it("saveNote falls back to the filename stem, never the full path", async () => {
+    // A first non-blank prose line still titles the note (Rust heading_title)…
+    const meta = await mockBackend.saveNote("journal/no-heading.md", "just prose, no heading");
+    expect(meta.title).toBe("just prose, no heading");
+    // …the stem fallback only applies when the body yields nothing.
+    const empty = await mockBackend.saveNote("journal/blank-note.md", "");
+    expect(empty.title).toBe("blank note"); // '-' opened to space, not "journal/blank-note.md"
+    await mockBackend.deleteNote("journal/no-heading.md");
+    await mockBackend.deleteNote("journal/blank-note.md");
+  });
+
   it("deleteNote removes the note from listing and search", async () => {
     const a = await mockBackend.createNote("Alpha To Delete");
     await mockBackend.recordOpen(a.path); // give it frecency so it'd rank in recents

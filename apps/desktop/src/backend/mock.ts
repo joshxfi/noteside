@@ -134,9 +134,24 @@ function bodyStart(text: string): number {
 }
 
 function titleFromBody(text: string): string | null {
-  // Frontmatter is metadata, not the title line — skip it the way parse_meta does
-  // (the demo seeds have none, but a pinned note does).
-  for (const raw of text.slice(bodyStart(text)).split("\n")) {
+  // Mirror parse_meta's title precedence: an explicit frontmatter `title:` is
+  // authoritative (last one wins; an empty value falls through), then the first
+  // non-blank body line sans `#`s.
+  const start = bodyStart(text);
+  if (start > 0) {
+    let fmTitle: string | null = null;
+    for (const raw of text.slice(0, start).split("\n")) {
+      const line = raw.trim();
+      if (line.startsWith("title:")) {
+        fmTitle = line
+          .slice("title:".length)
+          .trim()
+          .replace(/^["']+|["']+$/g, "");
+      }
+    }
+    if (fmTitle) return fmTitle;
+  }
+  for (const raw of text.slice(start).split("\n")) {
     const t = raw
       .trim()
       .replace(/^#+\s*/, "")
@@ -144,6 +159,15 @@ function titleFromBody(text: string): string | null {
     if (t) return t;
   }
   return null;
+}
+
+/** Mirror of Rust `filename_title`: the stem with -/_ opened to spaces —
+ *  the title of last resort for a note with no frontmatter title or heading. */
+function filenameTitle(path: string): string {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const stem = name.replace(/\.md$/, "");
+  const s = stem.replace(/[-_]/g, " ");
+  return s.trim() === "" ? "Untitled" : s;
 }
 
 /** Mirror of Rust `notebook::set_pinned`: pinning writes a frontmatter
@@ -180,20 +204,51 @@ export function setPinnedBody(text: string, pinned: boolean): string {
   return inner.trim() === "" ? stripped.slice(reStart) : stripped;
 }
 
-/** Rewrite the body so titleFromBody derives `newTitle` (mirrors Rust set_title,
- *  minus frontmatter — the demo notes use `# heading`): replace a leading heading,
- *  else prepend one. */
-function setTitle(body: string, newTitle: string): string {
-  const lines = body.split("\n");
+/** Replace the first non-blank line's `# heading` with `newTitle`, or null when
+ *  the text doesn't open with a heading (mirrors Rust retitle_leading_heading). */
+function retitleLeadingHeading(text: string, newTitle: string): string | null {
+  const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim() === "") continue;
     const hashes = lines[i].match(/^\s*(#+)/);
-    if (hashes) {
-      lines[i] = `${hashes[1]} ${newTitle}`;
-      return lines.join("\n");
-    }
-    break; // first non-blank line isn't a heading → prepend
+    if (!hashes) return null; // first non-blank line isn't a heading
+    lines[i] = `${hashes[1]} ${newTitle}`;
+    return lines.join("\n");
   }
+  return null;
+}
+
+/** Rewrite the body so titleFromBody derives `newTitle` (mirrors Rust set_title
+ *  INCLUDING frontmatter — retitling a pinned note must edit past its `---`
+ *  block, never prepend a heading above it): an explicit frontmatter `title:` is
+ *  replaced in place; else the body's leading heading is retitled; else, with
+ *  frontmatter but no title anywhere, `title:` is inserted after the opening
+ *  `---`; with no frontmatter, replace/prepend a `# heading`. */
+function setTitle(body: string, newTitle: string): string {
+  const start = bodyStart(body);
+  if (start > 0) {
+    const header = body.slice(0, start);
+    const rest = body.slice(start);
+    const lines = header.split(/(?<=\n)/); // keep terminators
+    const idx = lines.findIndex((l) =>
+      l
+        .replace(/\r?\n$/, "")
+        .trimStart()
+        .startsWith("title:"),
+    );
+    if (idx >= 0) {
+      const content = lines[idx].replace(/\r?\n$/, "");
+      const indent = content.slice(0, content.length - content.trimStart().length);
+      lines[idx] = `${indent}title: ${newTitle}${lines[idx].slice(content.length)}`;
+      return lines.join("") + rest;
+    }
+    const retitled = retitleLeadingHeading(rest, newTitle);
+    if (retitled !== null) return header + retitled;
+    const nl = header.includes("\r\n") ? "\r\n" : "\n";
+    return lines[0] + `title: ${newTitle}${nl}` + lines.slice(1).join("") + rest;
+  }
+  const retitled = retitleLeadingHeading(body, newTitle);
+  if (retitled !== null) return retitled;
   return `# ${newTitle}\n\n${body}`;
 }
 
@@ -396,7 +451,9 @@ export const mockBackend: Backend = {
   },
   async saveNote(path, body) {
     const existing = recs.get(path);
-    const title = titleFromBody(body) ?? path;
+    // Same last-resort as Rust parse_meta: the filename STEM, never the full
+    // path (a headingless nested note titles as "x", not "journal/x.md").
+    const title = titleFromBody(body) ?? filenameTitle(path);
     const meta: NoteMeta = existing
       ? { ...existing.meta, title, updated: Date.now() }
       : { id: path, path, title, tags: [], created: null, updated: Date.now(), pinned: false };
@@ -463,7 +520,9 @@ export const mockBackend: Backend = {
       tags: [...r.meta.tags],
       created: null,
       updated: Date.now(),
-      pinned: false,
+      // Rust re-parses the copied body, whose frontmatter keeps `pinned: true` —
+      // duplicating a pinned note yields a pinned copy in both backends.
+      pinned: r.meta.pinned,
     };
     recs.set(newPath, { meta, body });
     return meta;
