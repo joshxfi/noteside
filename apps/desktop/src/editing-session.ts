@@ -184,7 +184,12 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     try {
       const meta = await backend.saveNote(id, text);
       onNoteSaved(meta);
-      if (activeId === id) {
+      // The buffer this save belongs to is "current" while it's on screen OR
+      // while it sits under the config overlay (activeId === CONFIG_ID but the
+      // note buffer is preserved for :q). Skipping the overlay case would leave
+      // the baseline stale, so :q would reseed the editor from pre-edit text and
+      // the next autosave would overwrite the newer disk content.
+      if (activeId === id || (activeId === CONFIG_ID && lastNoteId === id)) {
         noteSaved = text;
         // Keep the mount seed in lockstep with the baseline: a later remount
         // (vim toggle) must reseed from the last-saved text, not open-time text.
@@ -326,10 +331,15 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       commit();
     } else if (activeId) {
       const id = activeId;
+      // Capture the edit sequence NOW: the queued operation may run after a
+      // further keystroke, and reading editSeq at run time would make persistNote
+      // compare the sequence against itself — wrongly clearing `dirty` while the
+      // working text is newer than what this save is writing.
+      const seq = editSeq;
       // Rename only after the write LANDED — a failed save must not trigger a
       // rename derived from the stale on-disk content.
       void queueNoteOperation(async () => {
-        const meta = await persistNote(id, text, editSeq);
+        const meta = await persistNote(id, text, seq);
         if (meta) await maybeRename(id, meta.title);
       });
     }

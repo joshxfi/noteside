@@ -246,6 +246,23 @@ describe("editingSession", () => {
     expect(session.getSnapshot().dirty).toBe(false);
   });
 
+  // REGRESSION (stability pass): save() must capture the edit sequence when :w
+  // is issued — reading it when the queued operation runs compares the sequence
+  // against itself, wrongly clearing dirty after a mid-queue keystroke.
+  it("a keystroke right after :w keeps the buffer dirty until its own save lands", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.change("# A\nv2");
+    session.save("# A\nv2"); // :w — runs on a microtask, after the next change()
+    session.change("# A\nv3"); // keystroke lands before the queued save runs
+    await vi.advanceTimersByTimeAsync(0); // the :w save runs + lands
+    expect(bodies.get("a.md")).toBe("# A\nv2");
+    expect(session.getSnapshot().dirty).toBe(true); // v3 is still unsaved
+    await vi.advanceTimersByTimeAsync(800); // v3's autosave lands
+    expect(bodies.get("a.md")).toBe("# A\nv3");
+    expect(session.getSnapshot().dirty).toBe(false);
+  });
+
   it("out-of-order open(): a slow earlier open does not clobber the latest", async () => {
     // a.md reads slower than b.md, so a.md resolves AFTER b.md despite being opened first.
     const { session } = makeSession({ "a.md": "A", "b.md": "B" }, {}, { "a.md": 50, "b.md": 10 });
@@ -475,6 +492,25 @@ describe("editingSession", () => {
     expect(s.status).toBe("note");
     expect(s.activeId).toBe("a.md");
     expect(s.initialText).toBe("A body"); // the note buffer underneath was preserved
+  });
+
+  // REGRESSION (stability pass): an autosave landing while the config buffer
+  // overlays the note must still advance the note's baseline — otherwise :q
+  // reseeds the editor from pre-edit text and the next autosave overwrites the
+  // newer disk content with it.
+  it("an autosave landing under the config overlay updates the note baseline", async () => {
+    const { session, bodies } = makeSession({ "a.md": "old" });
+    await session.open("a.md");
+    session.change("new text"); // autosave scheduled
+    session.openConfig("theme dark"); // overlay — the note buffer is preserved
+    await vi.advanceTimersByTimeAsync(800); // autosave fires while config is open
+    expect(bodies.get("a.md")).toBe("new text");
+    session.quit(); // back to the note
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("a.md");
+    expect(s.initialText).toBe("new text"); // NOT the stale open-time seed
+    expect(s.savedText).toBe("new text");
+    expect(s.dirty).toBe(false);
   });
 
   it("quit() from a note goes empty; reopenLast() reopens it", async () => {
