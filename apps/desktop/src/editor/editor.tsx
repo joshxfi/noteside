@@ -74,6 +74,9 @@ const lineNumbersExt = (relative: boolean): Extension =>
 
 // Static extension values, hoisted so a remount doesn't rebuild them — CM
 // extensions are immutable configs; per-editor state lives in the EditorState.
+// NOTE: relFmt's relative numbers refresh on cursor-line moves ONLY because
+// this gutterLineClass compute forces CM's gutter sync — removing
+// gutterHighlight from the extension list would silently freeze them.
 const gutterHighlight = highlightActiveLineGutter();
 const historyExt = history();
 // in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
