@@ -383,36 +383,51 @@ const blockField = StateField.define<BlockValue>({
 //
 // The signature alone is ambiguous: gg/G, paragraph motions, and search jumps
 // that happen to travel between those two lines look identical at the
-// transaction level. So a keydown OBSERVER (highest precedence, always passes
-// the event on — never a key binding, vim's keys stay out of keymap reach)
-// records whether the current event turn is a bare vertical step; the keymap
-// handlers dispatch synchronously in that same turn, so the filter reads the
-// flag before any other event can overwrite it. An update listener clears it,
-// keeping stale flags away from later programmatic selection jumps.
+// transaction level. So an OBSERVER (highest precedence, always passes the
+// event on — never a key binding, vim's keys stay out of keymap reach) records
+// whether the current keypress is a bare vertical step; the handlers dispatch
+// synchronously within that keypress, so the filter reads the flag before any
+// other event can overwrite it. The flag lives for exactly one keypress —
+// keyup disarms it, so an inert j/k (caret already at a doc edge) can't leave
+// it armed for a later programmatic jump. There is deliberately NO
+// update-based clearing: one keypress may dispatch bookkeeping transactions
+// before the motion, and clearing on the first would drop the redirect.
 let verticalStepKey = false;
+// Every delivery path for the four step keys must arm the flag: modern e.key
+// names, legacy WebKit "Up"/"Down", and the keyCode fallback CM's own keymap
+// leans on when synthesized events carry unhelpful key names — WebKitGTK does
+// exactly that (the same platform quirk behind the Shift-= glyph aliases in
+// commands.ts), which is what the webkit e2e project exercises.
+function isVerticalStepKey(e: KeyboardEvent): boolean {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return false;
+  const k = e.key;
+  if (k === "j" || k === "k" || k === "ArrowDown" || k === "ArrowUp" || k === "Down" || k === "Up")
+    return true;
+  const c = e.keyCode;
+  return c === 38 || c === 40 || c === 74 || c === 75; // ↑ ↓ J K
+}
 const verticalStepWatcher = [
   Prec.highest(
     EditorView.domEventHandlers({
       keydown(e) {
-        verticalStepKey =
-          !e.metaKey &&
-          !e.ctrlKey &&
-          !e.altKey &&
-          !e.shiftKey &&
-          (e.key === "j" || e.key === "k" || e.key === "ArrowDown" || e.key === "ArrowUp");
+        verticalStepKey = isVerticalStepKey(e);
         return false; // observe only — the key continues to vim/keymaps
       },
-      // A j/k that produced no transaction (caret already at the doc edge)
-      // must not leave the flag armed for a later programmatic jump.
       keyup() {
         verticalStepKey = false;
         return false;
       },
     }),
   ),
-  EditorView.updateListener.of(() => {
-    verticalStepKey = false;
-  }),
+  // WebKitGTK can also deliver plain letters as TEXT input (keydown arrives as
+  // "Unidentified"/"Process" and codemirror-vim falls back to handling the key
+  // from CM's inputHandler). Observe — never consume — the same j/k there.
+  Prec.highest(
+    EditorView.inputHandler.of((_view, _from, _to, text) => {
+      if (text === "j" || text === "k") verticalStepKey = true;
+      return false;
+    }),
+  ),
 ];
 
 const tableEntry = EditorState.transactionFilter.of((tr) => {
