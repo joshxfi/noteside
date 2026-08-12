@@ -148,6 +148,36 @@ describe("config serialize/parse round-trip", () => {
       expect(parsed.tabWidth).toBe(4);
       expect(parsed.extraLines).toEqual([]);
     });
+
+    // REGRESSION (stability pass): a RECOGNIZED key with a value that fails to
+    // resolve used to be consumed anyway — the line vanished on the next open
+    // with no report, the exact silent-eat contract issue #24 forbids.
+    it("keeps and reports recognized keys whose value does not resolve", () => {
+      const text = [
+        "set theme = catpuccin-mocha", // typo'd id, not dark/light-ish
+        "set editor-font = Comic Sans",
+        "set font-size = huge",
+        "set cursor = wedge",
+        "set vim = onn", // boolean typo — must not silently mean "off"
+      ].join("\n");
+      const parsed = parseConfig(text, CONFIG_DEFAULTS);
+      expect(parsed.theme).toBe(CONFIG_DEFAULTS.theme);
+      expect(parsed.editorFont).toBe(CONFIG_DEFAULTS.editorFont);
+      expect(parsed.fontSize).toBe(CONFIG_DEFAULTS.fontSize);
+      expect(parsed.cursor).toBe(CONFIG_DEFAULTS.cursor);
+      expect(parsed.vimMode).toBe(CONFIG_DEFAULTS.vimMode);
+      expect(parsed.extraLines).toEqual(text.split("\n"));
+      expect(unrecognizedDirectives(parsed)).toEqual(text.split("\n"));
+      // ...and they survive a reopen verbatim.
+      const reopened = serializeConfig(parsed);
+      for (const line of text.split("\n")) expect(reopened).toContain(line);
+    });
+
+    it("still applies both boolean spellings", () => {
+      expect(parseConfig("set vim = on", CONFIG_DEFAULTS).vimMode).toBe(true);
+      expect(parseConfig("set vim = off", CONFIG_DEFAULTS).vimMode).toBe(false);
+      expect(parseConfig("set cursor-blink = false", CONFIG_DEFAULTS).cursorBlink).toBe(false);
+    });
   });
 
   // ISSUE #23/#24: someone reaching for indent width types vim's spelling.

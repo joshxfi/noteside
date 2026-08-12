@@ -192,6 +192,10 @@ export function parseConfig(text: string, base: Config): Config {
     const f = list.find((x) => norm(x.label) === n || x.id === n);
     return f ? f.id : null;
   };
+  // Both spellings recognized explicitly, so a typo ("set vim = onn") is a
+  // parse FAILURE (line preserved + reported), never a silent false.
+  const parseBool = (v: string): boolean | null =>
+    /^(on|true|yes|1)$/i.test(v) ? true : /^(off|false|no|0)$/i.test(v) ? false : null;
   for (const raw of String(text).split("\n")) {
     const line = raw.trim();
     if (!line) continue;
@@ -216,6 +220,10 @@ export function parseConfig(text: string, base: Config): Config {
     if ((m = line.match(/^set\s+([\w-]+)\s*=?\s*(.+?)\s*$/i))) {
       const key = m[1].toLowerCase(),
         val = m[2].trim();
+      // A recognized key whose VALUE fails to resolve is not consumed either:
+      // claiming the line would delete it from the buffer on the next open while
+      // the toast said "config applied" — the same silent-eat issue #24 fixed
+      // for unknown keys. It falls through to extraLines and the error toast.
       let known = true;
       if (key === "theme") {
         // Accept a theme id, an alias (light/dark), or a label. Dark/light-ish
@@ -225,41 +233,60 @@ export function parseConfig(text: string, base: Config): Config {
         if (id) c.theme = id;
         else if (/dark/i.test(val)) c.theme = "noteside-dark";
         else if (/light/i.test(val)) c.theme = "noteside-light";
+        else known = false;
       } else if (key === "editor-font") {
         const id = matchFont(EDITOR_FONTS, val);
         if (id) c.editorFont = id;
+        else known = false;
       } else if (key === "font-size") {
         const v = parseInt(val, 10);
         if (!isNaN(v)) c.fontSize = Math.max(16, Math.min(28, v));
+        else known = false;
       } else if (key === "line-height") {
         const v = parseFloat(val);
         if (!isNaN(v)) c.lineHeight = Math.max(1.4, Math.min(2.1, Math.round(v * 100) / 100));
+        else known = false;
         // vim's own spellings are accepted: someone reaching for indent width
         // types `set tabstop=4` long before they read our key list (issue #24).
       } else if (["tab-width", "tabwidth", "tabstop", "ts", "shiftwidth", "sw"].includes(key)) {
         const v = parseInt(val, 10);
         if (!isNaN(v)) c.tabWidth = Math.max(TAB_WIDTH_MIN, Math.min(TAB_WIDTH_MAX, v));
+        else known = false;
       } else if (key === "sidebar-width" || key === "sidebarwidth") {
         const v = parseInt(val, 10);
         if (!isNaN(v)) c.sidebarWidth = clampSidebarWidth(v);
+        else known = false;
       } else if (key === "ui-scale" || key === "interface-size") {
         const v = parseFloat(val); // accepts "110%", "110", or "1.1"
         if (!isNaN(v)) {
           const frac = v > 3 ? v / 100 : v;
           c.uiScale = Math.max(0.9, Math.min(1.3, Math.round(frac * 20) / 20));
-        }
+        } else known = false;
       } else if (key === "cursor") {
         const nv = norm(val);
         if (nv === "block" || nv === "bar" || nv === "underline") c.cursor = nv;
-      } else if (key === "cursor-blink") c.cursorBlink = /^(on|true|yes|1)$/i.test(val);
-      else if (key === "live-preview" || key === "preview")
-        c.livePreview = /^(on|true|yes|1)$/i.test(val);
-      else if (key === "auto-update" || key === "auto-updates" || key === "update-check")
-        c.autoUpdateCheck = /^(on|true|yes|1)$/i.test(val);
-      else if (key === "relative-numbers" || key === "relativenumber" || key === "rnu")
-        c.relativeNumbers = /^(on|true|yes|1)$/i.test(val);
-      else if (key === "vim" || key === "vim-mode") c.vimMode = /^(on|true|yes|1)$/i.test(val);
-      else known = false;
+        else known = false;
+      } else if (key === "cursor-blink") {
+        const b = parseBool(val);
+        if (b !== null) c.cursorBlink = b;
+        else known = false;
+      } else if (key === "live-preview" || key === "preview") {
+        const b = parseBool(val);
+        if (b !== null) c.livePreview = b;
+        else known = false;
+      } else if (key === "auto-update" || key === "auto-updates" || key === "update-check") {
+        const b = parseBool(val);
+        if (b !== null) c.autoUpdateCheck = b;
+        else known = false;
+      } else if (key === "relative-numbers" || key === "relativenumber" || key === "rnu") {
+        const b = parseBool(val);
+        if (b !== null) c.relativeNumbers = b;
+        else known = false;
+      } else if (key === "vim" || key === "vim-mode") {
+        const b = parseBool(val);
+        if (b !== null) c.vimMode = b;
+        else known = false;
+      } else known = false;
       if (known) continue;
     }
     // No rule claimed this line — keep it exactly as written (indentation and
