@@ -51,6 +51,74 @@ fn fuzzy_match(
         .map(|score| (score, indices.clone()))
 }
 
+// ── offset encoding for the IPC boundary ────────────────────────────────────
+// The finder renders hits by slicing JS strings, which index by UTF-16 code
+// units. Rust-side matchers naturally produce byte offsets (content ranges)
+// and nucleo produces char indices (fuzzy positions) — both silently misalign
+// highlights on any non-ASCII line/title if shipped raw. Everything crossing
+// the boundary is converted here, so "offsets are UTF-16 units" is the one
+// contract both backends (the mock is JS-native, so it already complies) obey.
+
+/// Convert ascending, non-overlapping byte ranges on char boundaries of `s`
+/// (what every matcher below produces) into UTF-16 code-unit ranges.
+fn byte_ranges_to_utf16(s: &str, ranges: Vec<[u32; 2]>) -> Vec<[u32; 2]> {
+    if s.is_ascii() || ranges.is_empty() {
+        return ranges; // ASCII: bytes, chars, and UTF-16 units all coincide
+    }
+    fn advance(target: usize, byte: &mut usize, units: &mut u32, chars: &mut std::str::Chars) {
+        while *byte < target {
+            match chars.next() {
+                Some(c) => {
+                    *byte += c.len_utf8();
+                    *units += c.len_utf16() as u32;
+                }
+                None => break,
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(ranges.len());
+    let mut byte = 0usize;
+    let mut units = 0u32;
+    let mut chars = s.chars();
+    for [bs, be] in ranges {
+        advance(bs as usize, &mut byte, &mut units, &mut chars);
+        let s16 = units;
+        advance(be as usize, &mut byte, &mut units, &mut chars);
+        out.push([s16, units]);
+    }
+    out
+}
+
+/// Convert nucleo match positions (CHAR indices into the Utf32 haystack —
+/// and, for multi-atom patterns, possibly unsorted with duplicates) into
+/// sorted, deduped UTF-16 code-unit offsets. An astral char maps to the offset
+/// of its first unit — a matched surrogate pair still highlights, just one
+/// unit wide, which only a query containing that emoji can even produce.
+fn char_positions_to_utf16(s: &str, mut positions: Vec<u32>) -> Vec<u32> {
+    positions.sort_unstable();
+    positions.dedup();
+    if s.is_ascii() || positions.is_empty() {
+        return positions;
+    }
+    let mut out = Vec::with_capacity(positions.len());
+    let mut ci = 0u32;
+    let mut units = 0u32;
+    let mut chars = s.chars();
+    for p in positions {
+        while ci < p {
+            match chars.next() {
+                Some(c) => {
+                    units += c.len_utf16() as u32;
+                    ci += 1;
+                }
+                None => break,
+            }
+        }
+        out.push(units);
+    }
+    out
+}
+
 /// Partial sort: keep only the `limit` smallest elements per `key`, in order.
 /// The key must be a total order (tie-break on a unique index) so this returns
 /// exactly what a stable full sort + truncate would have.
@@ -150,10 +218,10 @@ pub fn fuzzy_files(
                 let r = &records[i];
                 let positions =
                     fuzzy_match(&pattern, matcher, &r.meta.path, &mut buf, &mut indices)
-                        .map_or_else(Vec::new, |m| m.1);
+                        .map_or_else(Vec::new, |m| char_positions_to_utf16(&r.meta.path, m.1));
                 let title_positions =
                     fuzzy_match(&pattern, matcher, &r.meta.title, &mut buf, &mut indices)
-                        .map_or_else(Vec::new, |m| m.1);
+                        .map_or_else(Vec::new, |m| char_positions_to_utf16(&r.meta.title, m.1));
                 file_hit(r, score, positions, title_positions)
             })
             .collect()
@@ -161,8 +229,9 @@ pub fn fuzzy_files(
 }
 
 /// Line-level content search over the cached note bodies. Modes mirror the
-/// finder UI: `plain` substring, `regex`, and `fuzzy` subsequence. Byte offsets
-/// in `ranges` are fine for ASCII; multi-byte alignment is a known v1 limitation.
+/// finder UI: `plain` substring, `regex`, and `fuzzy` subsequence. Offsets in
+/// `ranges` are UTF-16 code units indexing the shipped `line` exactly as the
+/// JS renderer slices it (see the offset-encoding block above).
 pub fn content_search(
     records: &[Arc<NoteRecord>],
     query: &str,
@@ -220,7 +289,7 @@ pub fn content_search(
                     title: r.meta.title.clone(),
                     line_number: (i + 1) as u32,
                     line: line.to_string(),
-                    ranges,
+                    ranges: byte_ranges_to_utf16(line, ranges),
                 });
                 if hits.len() >= limit {
                     break 'outer;
@@ -579,23 +648,23 @@ mod tests {
         assert_eq!(&hits[0].line[s as usize..e as usize], "Kettle");
     }
 
+    /// Slice `s` the way the JS renderer does: by UTF-16 code units.
+    fn utf16_slice(s: &str, from: u32, to: u32) -> String {
+        let units: Vec<u16> = s.encode_utf16().collect();
+        String::from_utf16(&units[from as usize..to as usize]).unwrap()
+    }
+
     #[test]
-    fn content_plain_nonascii_ranges_stay_valid_on_the_original_line() {
+    fn content_plain_nonascii_ranges_index_the_line_as_js_slices_it() {
         // 'ẞ' (U+1E9E, 3 bytes) lowercases to 'ß' (2 bytes): searching a shorter
         // lowercased copy shifted offsets so they could land mid-char in `line`.
+        // Shipped offsets are UTF-16 units — 'ẞ' is ONE unit at index 1.
         let recs = vec![rec("a.md", "xẞy", false, 0)];
         let hits = content_search(&recs, "ß", "plain", 10).unwrap();
         assert_eq!(hits.len(), 1);
-        for [s, e] in hits[0].ranges.iter().copied() {
-            // Offsets must be valid char-boundary slices of the SHIPPED line.
-            assert!(
-                hits[0].line.get(s as usize..e as usize).is_some(),
-                "range [{s},{e}] is not a valid slice of {:?}",
-                hits[0].line
-            );
-        }
         let [s, e] = hits[0].ranges[0];
-        assert_eq!(&hits[0].line[s as usize..e as usize], "ẞ"); // covers the source char
+        assert_eq!((s, e), (1, 2));
+        assert_eq!(utf16_slice(&hits[0].line, s, e), "ẞ"); // covers the source char
     }
 
     #[test]
@@ -608,7 +677,32 @@ mod tests {
         assert_eq!(hits.len(), 1);
         let [s, e] = hits[0].ranges[0];
         assert!(e > s, "range must not be zero-width, got [{s},{e}]");
-        assert_eq!(&hits[0].line[s as usize..e as usize], "İ");
+        assert_eq!(utf16_slice(&hits[0].line, s, e), "İ");
+    }
+
+    // REGRESSION (stability pass): ranges shipped raw byte offsets, which the
+    // finder used to slice JS strings — every non-ASCII char earlier in the
+    // line shifted the highlight (é: 2 bytes vs 1 unit; 🚀: 4 bytes vs 2 units).
+    #[test]
+    fn content_ranges_are_utf16_units_for_the_js_renderer() {
+        let recs = vec![rec("a.md", "🚀 café kettle", false, 0)];
+        let hits = content_search(&recs, "kettle", "plain", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        let [s, e] = hits[0].ranges[0];
+        assert_eq!((s, e), (8, 14)); // 🚀(2) + ' ' + café(4) + ' ' = 8 units (11 bytes)
+        assert_eq!(utf16_slice(&hits[0].line, s, e), "kettle");
+    }
+
+    // REGRESSION (stability pass): nucleo positions are CHAR indices — an
+    // astral char (one char, two UTF-16 units) before the match shifted every
+    // highlight cell in the finder row.
+    #[test]
+    fn fuzzy_title_positions_are_utf16_units() {
+        let recs = vec![rec_with_title("a.md", "🚀 Launch Plan", "", false, 0)];
+        let hits = fuzzy_files(&recs, "launch", 10, &HashMap::new(), 0);
+        assert_eq!(hits.len(), 1);
+        // 'L' is char 2 but UTF-16 unit 3.
+        assert_eq!(hits[0].title_positions.first().copied(), Some(3));
     }
 
     #[test]
@@ -814,7 +908,7 @@ mod tests {
         let recs = pad(vec![rec("t.md", "İstanbul", false, 0)]);
         let hits = content_search(&recs, "İstanbul", "fuzzy", 10).unwrap();
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].ranges[0], [0, 2]); // the two-byte 'İ', emitted once
+        assert_eq!(hits[0].ranges[0], [0, 1]); // 'İ' emitted once — one UTF-16 unit
 
         // the multi-consume walk leaves ASCII output byte-identical
         assert_eq!(
