@@ -282,6 +282,9 @@ pub async fn rename_note(
 ) -> Result<NoteMeta> {
     // The body comes from the in-memory index (save_note just recorded it) — no
     // disk re-read on the hot save path; fall back to disk for an unindexed note.
+    // Index-first is safe HERE because rename moves the inode and never writes
+    // body bytes: a stale body can only mis-derive the slug, not lose content.
+    // The body-REWRITING commands (retitle/pin/duplicate) read disk instead.
     let (root, generation, recorded) = {
         let g = state.notebook.lock().unwrap();
         let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
@@ -356,22 +359,19 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
 /// new note's meta (the caller inserts it and opens it).
 #[tauri::command]
 pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<NoteMeta> {
-    let (root, generation, recorded) = {
-        let g = state.notebook.lock().unwrap();
-        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
-        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, generation, body)
-    };
+    let (root, generation) = notebook_context(&state)?;
     let disk_root = root.clone();
     let rel = path.clone();
     let (meta, new_body) = blocking(move || {
         let src_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
-        let body = match recorded {
-            Some(b) => b,
-            None => std::fs::read_to_string(&src_abs)
-                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
-        };
+        // Disk is authoritative for the copy's content: the in-memory body can
+        // lag it (the watcher debounce, or an external write landing inside the
+        // own-write suppression window), and duplicating a stale body would
+        // silently drop the external edit from the copy. This command is
+        // human-paced, so the one extra read is free.
+        let body = std::fs::read_to_string(&src_abs)
+            .map_err(|e| AppError::Msg(format!("read failed: {e}")))?;
         let src_title = notebook::parse_meta(rel.clone(), &body, 0).title;
         let new_title = format!("{src_title} copy");
         let new_body = notebook::set_title(&body, &new_title);
@@ -399,12 +399,7 @@ pub async fn retitle_note(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
-    let (root, generation, recorded) = {
-        let g = state.notebook.lock().unwrap();
-        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
-        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, generation, body)
-    };
+    let (root, generation) = notebook_context(&state)?;
     let persist_root = root.clone();
     let disk_root = root.clone();
     let rel = path.clone();
@@ -415,11 +410,12 @@ pub async fn retitle_note(
     let (renamed, meta, new_body) = blocking(move || {
         let old_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
-        let body = match recorded {
-            Some(b) => b,
-            None => std::fs::read_to_string(&old_abs)
-                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
-        };
+        // Disk is authoritative for a rewrite: the in-memory body can lag it
+        // (watcher debounce, or an external write inside the own-write
+        // suppression window), and writing a stale body back would destroy the
+        // external edit. Human-paced command — the read is free.
+        let body = std::fs::read_to_string(&old_abs)
+            .map_err(|e| AppError::Msg(format!("read failed: {e}")))?;
         let new_body = notebook::set_title(&body, &new_title);
         let slug = notebook::slugify(&new_title);
         let stem = Path::new(&rel)
@@ -466,24 +462,16 @@ pub async fn set_note_pinned(
     pinned: bool,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
-    // Body from the in-memory index (as rename/duplicate/retitle do), falling
-    // back to disk for a note the index hasn't seen.
-    let (root, generation, recorded) = {
-        let g = state.notebook.lock().unwrap();
-        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
-        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
-        (root, generation, body)
-    };
+    let (root, generation) = notebook_context(&state)?;
     let disk_root = root.clone();
     let rel = path.clone();
     let (changed, meta, new_body) = blocking(move || {
         let abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
-        let body = match recorded {
-            Some(b) => b,
-            None => std::fs::read_to_string(&abs)
-                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
-        };
+        // Disk is authoritative for a rewrite (see retitle_note): pinning must
+        // rewrite the file's REAL current body, never a lagging index copy.
+        let body = std::fs::read_to_string(&abs)
+            .map_err(|e| AppError::Msg(format!("read failed: {e}")))?;
         let new_body = notebook::set_pinned(&body, pinned);
         // Already in the requested state. Writing identical bytes would still
         // bump mtime, which IS the sidebar's sort key — a redundant unpin would

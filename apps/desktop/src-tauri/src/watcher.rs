@@ -10,7 +10,7 @@ use notify_debouncer_full::{
 use tauri::{AppHandle, Emitter};
 
 use crate::notebook::{self, NoteRecord};
-use crate::state::NotebookState;
+use crate::state::{find_record, NotebookState};
 
 /// A per-path change a debounced batch unambiguously describes.
 enum PathChange {
@@ -168,10 +168,23 @@ fn targeted_updates(
         }
         let key = notebook::rel_path(root, abs);
         match c {
-            PathChange::Upsert(_) => match notebook::read_record(root, abs) {
-                Ok(rec) => out.push((key, Some(rec))),
-                Err(_) => return None,
-            },
+            PathChange::Upsert(_) => {
+                // The scanner never follows symlinks (WalkDir's file_type is
+                // not a file for them), so a targeted upsert must not index
+                // through one either — the record would flip in and out of the
+                // index depending on which refresh path ran. Any non-regular-
+                // file surprise (symlink, dir, vanished) falls back to the full
+                // rescan, which also drops a stale record if a real file was
+                // replaced by a symlink.
+                match std::fs::symlink_metadata(abs) {
+                    Ok(m) if m.is_file() => {}
+                    _ => return None,
+                }
+                match notebook::read_record(root, abs) {
+                    Ok(rec) => out.push((key, Some(rec))),
+                    Err(_) => return None,
+                }
+            }
             PathChange::Remove(_) => {
                 if abs.exists() {
                     return None; // removed and recreated within the debounce window
@@ -181,6 +194,25 @@ fn targeted_updates(
         }
     }
     Some(out)
+}
+
+/// Verify a suppressed "own write" echo against disk: for an indexed path the
+/// file's mtime must still be exactly what our write recorded (`meta.updated`
+/// is read right after the write lands); for an unindexed path (our own
+/// delete, or a rename's old path) the file must be gone. Any disagreement
+/// means an external change landed inside the suppression window — it must be
+/// refreshed, not swallowed, or the index (and every command reading it)
+/// diverges from disk until some unrelated future event. A same-mtime-tick
+/// external write remains invisible; this check shrinks the blind spot from
+/// the full 700ms window to one mtime tick.
+fn echo_matches_disk(root: &Path, rel: &str, indexed_mtime: Option<i64>) -> bool {
+    let abs = root.join(rel);
+    match indexed_mtime {
+        None => std::fs::symlink_metadata(&abs).is_err(),
+        // updated == 0 means the mtime read failed at write time — unverifiable,
+        // so treat it as a mismatch and refresh (the safe direction).
+        Some(updated) => updated != 0 && notebook::mtime_millis(&abs) == updated,
+    }
 }
 
 /// Watch the notebook folder for external changes (other editors, git, sync). On a
@@ -216,7 +248,7 @@ pub fn start_watcher(
             if paths.is_empty() {
                 return;
             }
-            {
+            let suppressed = {
                 let mut g = match notebook.lock() {
                     Ok(g) => g,
                     Err(_) => return,
@@ -224,9 +256,34 @@ pub fn start_watcher(
                 if !g.matches_context(&watched_root, generation) {
                     return;
                 }
-                if g.should_ignore_event(&paths, Instant::now()) {
-                    return; // echo of our own write
+                if !g.should_ignore_event(&paths, Instant::now()) {
+                    None
+                } else {
+                    // The time window alone can't tell our echo from an
+                    // external write that landed inside it. Snapshot what the
+                    // index believes about each suppressed path so the echo can
+                    // be verified against disk outside the lock.
+                    Some(
+                        paths
+                            .iter()
+                            .map(|p| {
+                                let updated =
+                                    find_record(&g.records, p).map(|i| g.records[i].meta.updated);
+                                (p.clone(), updated)
+                            })
+                            .collect::<Vec<_>>(),
+                    )
                 }
+            };
+            if let Some(expected) = suppressed {
+                if expected
+                    .iter()
+                    .all(|(rel, updated)| echo_matches_disk(&watched_root, rel, *updated))
+                {
+                    return; // verified echo of our own write
+                }
+                // Disk disagrees with the index: an external change slipped
+                // into the suppression window — fall through and refresh.
             }
             if refresh_current(&notebook, &watched_root, generation, Some(&events)) {
                 let _ = app.emit("notebook:changed", ());
@@ -346,6 +403,41 @@ mod tests {
         let hidden = targeted_updates(&dir, &[PathChange::Upsert(dir.join(".git/x.md"))]).unwrap();
         assert!(hidden.is_empty());
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn echo_verification_compares_disk_mtime_and_absence() {
+        let dir = std::env::temp_dir().join(format!("noteside-echo-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.md"), "# A").unwrap();
+        let mtime = notebook::mtime_millis(&dir.join("a.md"));
+
+        assert!(echo_matches_disk(&dir, "a.md", Some(mtime))); // our own write's echo
+        assert!(!echo_matches_disk(&dir, "a.md", Some(mtime + 1))); // disk moved on — external write
+        assert!(!echo_matches_disk(&dir, "a.md", Some(0))); // unverifiable index mtime → refresh
+        assert!(!echo_matches_disk(&dir, "a.md", None)); // own delete, but the file EXISTS → recreate
+        assert!(echo_matches_disk(&dir, "gone.md", None)); // own delete verified gone
+        assert!(!echo_matches_disk(&dir, "gone.md", Some(123))); // indexed but missing → external delete
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn targeted_upsert_of_a_symlink_falls_back_to_full_rescan() {
+        let dir =
+            std::env::temp_dir().join(format!("noteside-symlink-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("real.md"), "# Real").unwrap();
+        std::os::unix::fs::symlink(dir.join("real.md"), dir.join("link.md")).unwrap();
+        // The scanner skips symlinks, so the targeted path must not index one.
+        assert!(targeted_updates(&dir, &[PathChange::Upsert(dir.join("link.md"))]).is_none());
+        // ...while a regular file still upserts fine.
+        let ok = targeted_updates(&dir, &[PathChange::Upsert(dir.join("real.md"))]).unwrap();
+        assert_eq!(ok.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
