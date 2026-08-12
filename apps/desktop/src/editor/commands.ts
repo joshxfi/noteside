@@ -412,12 +412,24 @@ const MOD_ORDER = ["Mod", "Alt", "Shift"];
 // ["Mod", "-"]) — the same rule CM6's keymap uses.
 const CHORD_SPLIT = /-(?!$)/;
 
+// Case-insensitive (CM's own modifier parse is /i): a hand-written lowercase
+// `bind ctrl-p …` must normalize identically to `Ctrl-p` — a modifier dropped
+// here would register the chord as a BARE key in the document-level map,
+// hijacking plain typing in the no-note state.
+const MOD_NAMES: Record<string, string> = {
+  mod: "Mod",
+  cmd: "Mod",
+  meta: "Mod",
+  ctrl: "Mod",
+  control: "Mod",
+  alt: "Alt",
+  shift: "Shift",
+};
+
 function normChord(chord: string): string {
   const parts = chord.split(CHORD_SPLIT);
   const key = parts.pop() as string;
-  const mods = new Set(
-    parts.map((m) => (m === "Cmd" || m === "Meta" || m === "Ctrl" || m === "Control" ? "Mod" : m)),
-  );
+  const mods = new Set(parts.map((m) => MOD_NAMES[m.toLowerCase()] ?? m));
   const ordered = MOD_ORDER.filter((m) => mods.has(m));
   return [...ordered, key.length === 1 ? key.toLowerCase() : key].join("-");
 }

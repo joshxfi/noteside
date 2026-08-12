@@ -44,8 +44,13 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState(0);
   const [recording, setRecording] = useState(false);
+  // A pending conflict pins the TARGET command id at capture time: focus can
+  // move (hover is gated below, but the filter can still reflow rows), and
+  // resolving against "whatever row is focused now" bound the chord to the
+  // wrong command.
   const [conflict, setConflict] = useState<{
     chord: string;
+    targetId: string;
     otherId: string;
     otherTitle: string;
   } | null>(null);
@@ -110,15 +115,16 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     const other = chordConflict(overrides, chord, id);
     setRecording(false);
     setUnsafeChord(null);
-    if (other) setConflict({ chord, otherId: other.id, otherTitle: other.title });
+    if (other) setConflict({ chord, targetId: id, otherId: other.id, otherTitle: other.title });
     else setChord(id, chord);
   };
 
   const replaceConflict = () => {
     if (!conflict) return;
-    // Atomic: the displaced command becomes unbound, this one takes the chord.
+    // Atomic: the displaced command becomes unbound, the RECORDED one (pinned
+    // at capture time, never the currently-focused row) takes the chord.
     const next = applyChord(
-      flat[focus].id,
+      conflict.targetId,
       conflict.chord,
       applyChord(conflict.otherId, "", overrides),
     );
@@ -132,6 +138,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return; // IME composition owns Enter/arrows
     focusByPointer.current = false;
     if (conflict) {
       if (e.key === "Escape") {
@@ -229,7 +236,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                 const recordingThisRow = recording && i === focus;
                 const slot = recordingThisRow ? null : slotFor(c, overrides);
                 const overridden = c.id in overrides;
-                const rowConflict = conflict && i === focus ? conflict : null;
+                const rowConflict = conflict && c.id === conflict.targetId ? conflict : null;
                 const unsafeThisRow = unsafeChord && recordingThisRow ? unsafeChord : null;
                 const ariaLabel = unsafeThisRow
                   ? `${c.title}: ${chordLabel(unsafeThisRow)} would interfere with typing. Add Cmd/Ctrl, Alt, or a function key.`
@@ -249,9 +256,14 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
                       role="listitem"
                       aria-label={ariaLabel}
                       className={"cheat-row" + (i === focus ? " is-focus" : "")}
-                      onMouseEnter={(e) => i !== focus && !recording && hoverFocus(i, e)}
-                      onMouseMove={(e) => i !== focus && !recording && hoverFocus(i, e)}
+                      onMouseEnter={(e) =>
+                        i !== focus && !recording && !conflict && hoverFocus(i, e)
+                      }
+                      onMouseMove={(e) =>
+                        i !== focus && !recording && !conflict && hoverFocus(i, e)
+                      }
                       onClick={() => {
+                        if (conflict) return; // resolve the banner first (Enter/Esc)
                         setFocus(i);
                         setUnsafeChord(null);
                         setRecording(true);
