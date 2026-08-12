@@ -10,7 +10,7 @@
 // a selection move recomputes just the "which tables are revealed" key and
 // bails without touching decorations when it hasn't changed (the same
 // skip-on-no-change discipline as live-preview's activeLinesKey).
-import { EditorState, Facet, type Range, StateField, type Text } from "@codemirror/state";
+import { EditorState, Facet, Prec, type Range, StateField, type Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import {
   frontmatterEndLine,
@@ -280,6 +280,18 @@ function revealedBlocks(state: EditorState, blocks: MarkdownBlocks): Revealed {
   return { tables, frontmatter };
 }
 
+// Hoisted line-decoration specs: buildDeco runs on every doc change, so per-line
+// Decoration.line allocations would churn on large code-heavy notes. Same
+// discipline as live-preview's hoisted specs — only the Range objects are fresh.
+const codeblockLine = Decoration.line({ class: "cm-codeblock" });
+const codeblockFirst = Decoration.line({ class: "cm-codeblock cm-codeblock-first" });
+const codeblockLast = Decoration.line({ class: "cm-codeblock cm-codeblock-last" });
+const codeblockOnly = Decoration.line({
+  class: "cm-codeblock cm-codeblock-first cm-codeblock-last",
+});
+const blockquoteLine = Decoration.line({ class: "cm-blockquote" });
+const copyButton = Decoration.widget({ widget: copyWidget, side: 1 });
+
 function buildDeco(state: EditorState, blocks: MarkdownBlocks, revealed: Revealed): DecorationSet {
   const doc = state.doc;
   const ranges: Range<Decoration>[] = [];
@@ -299,18 +311,22 @@ function buildDeco(state: EditorState, blocks: MarkdownBlocks, revealed: Reveale
   }
   for (const f of blocks.fences) {
     for (let ln = f.fromLine; ln <= f.toLine; ln++) {
-      const line = doc.line(ln + 1);
-      let cls = "cm-codeblock";
-      if (ln === f.fromLine) cls += " cm-codeblock-first";
-      if (ln === f.toLine && f.closed) cls += " cm-codeblock-last";
-      ranges.push(Decoration.line({ class: cls }).range(line.from));
+      const first = ln === f.fromLine;
+      const last = ln === f.toLine && f.closed;
+      const deco =
+        first && last
+          ? codeblockOnly
+          : first
+            ? codeblockFirst
+            : last
+              ? codeblockLast
+              : codeblockLine;
+      ranges.push(deco.range(doc.line(ln + 1).from));
     }
-    ranges.push(
-      Decoration.widget({ widget: copyWidget, side: 1 }).range(doc.line(f.fromLine + 1).to),
-    );
+    ranges.push(copyButton.range(doc.line(f.fromLine + 1).to));
   }
   for (const ln of blocks.quotes) {
-    ranges.push(Decoration.line({ class: "cm-blockquote" }).range(doc.line(ln + 1).from));
+    ranges.push(blockquoteLine.range(doc.line(ln + 1).from));
   }
   return Decoration.set(ranges, true);
 }
@@ -364,8 +380,44 @@ const blockField = StateField.define<BlockValue>({
 // single selection-only step — and redirects the caret onto the table's edge
 // row instead. The field then reveals the source in the same transaction, so
 // the caret lands visibly in the raw table.
+//
+// The signature alone is ambiguous: gg/G, paragraph motions, and search jumps
+// that happen to travel between those two lines look identical at the
+// transaction level. So a keydown OBSERVER (highest precedence, always passes
+// the event on — never a key binding, vim's keys stay out of keymap reach)
+// records whether the current event turn is a bare vertical step; the keymap
+// handlers dispatch synchronously in that same turn, so the filter reads the
+// flag before any other event can overwrite it. An update listener clears it,
+// keeping stale flags away from later programmatic selection jumps.
+let verticalStepKey = false;
+const verticalStepWatcher = [
+  Prec.highest(
+    EditorView.domEventHandlers({
+      keydown(e) {
+        verticalStepKey =
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          !e.shiftKey &&
+          (e.key === "j" || e.key === "k" || e.key === "ArrowDown" || e.key === "ArrowUp");
+        return false; // observe only — the key continues to vim/keymaps
+      },
+      // A j/k that produced no transaction (caret already at the doc edge)
+      // must not leave the flag armed for a later programmatic jump.
+      keyup() {
+        verticalStepKey = false;
+        return false;
+      },
+    }),
+  ),
+  EditorView.updateListener.of(() => {
+    verticalStepKey = false;
+  }),
+];
+
 const tableEntry = EditorState.transactionFilter.of((tr) => {
   if (tr.docChanged || !tr.selection || tr.isUserEvent("select.pointer")) return tr;
+  if (!verticalStepKey) return tr; // only a vertical STEP may enter a table
   const field = tr.startState.field(blockField, false);
   if (!field || field.blocks.tables.length === 0) return tr;
   const prev = tr.startState.selection;
@@ -390,4 +442,4 @@ const tableEntry = EditorState.transactionFilter.of((tr) => {
   return tr;
 });
 
-export const blockPreview = [blockField, tableEntry];
+export const blockPreview = [blockField, tableEntry, verticalStepWatcher];
