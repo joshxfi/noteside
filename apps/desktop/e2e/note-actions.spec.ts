@@ -1,4 +1,4 @@
-import { boot, expect, test } from "./fixtures";
+import { caretToEnd, boot, expect, test } from "./fixtures";
 
 // Duplicate + Rename are native-menu items backed by real commands; the menu is
 // native (Tauri-only), so these drive the command-search path that the web
@@ -38,9 +38,7 @@ test.describe("duplicate note", () => {
   test("duplicate includes edits made immediately before duplication", async ({ page }) => {
     await boot(page);
     // Caret to the end of the doc, then type an unsaved sentinel.
-    await page.locator(".av-cm .tiptap").click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("ArrowRight");
+    await caretToEnd(page);
     await page.keyboard.type(" UNSAVED_DUPLICATE_SENTINEL");
 
     await runCommand(page, "duplicate");

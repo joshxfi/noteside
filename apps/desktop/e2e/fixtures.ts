@@ -34,4 +34,15 @@ export async function boot(page: Page, config: BootConfig = {}): Promise<void> {
   await page.locator(".av-editor").waitFor();
 }
 
+/** Collapse the caret to the very end of the document (non-vim path).
+ *  The waitForFunction matters: ArrowRight collapses the NATIVE selection
+ *  asynchronously, and a keypress racing that sync lands on the stale
+ *  selection (the flakiest bug this suite ever had). */
+export async function caretToEnd(page: Page): Promise<void> {
+  await page.locator(".av-cm .tiptap").click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => window.getSelection()?.isCollapsed === true);
+}
+
 export { base as test, expect };

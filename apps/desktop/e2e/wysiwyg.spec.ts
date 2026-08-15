@@ -1,4 +1,4 @@
-import { boot, expect, test } from "./fixtures";
+import { caretToEnd, boot, expect, test } from "./fixtures";
 
 // The WYSIWYG block layer: markdown parses into REAL blocks (tables, task
 // lists, KaTeX math, highlighted code, callouts) and edits serialize back to
@@ -78,9 +78,7 @@ test.describe("wysiwyg blocks", () => {
     const content = page.locator(".av-cm .tiptap");
     // A fresh note opens as an "# Untitled" h1 — continue on a new line below it.
     await expect(content.locator("h1")).toHaveText("Untitled");
-    await content.click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("ArrowRight");
+    await caretToEnd(page);
     await page.keyboard.press("Enter");
 
     await page.keyboard.type("## Section heading");

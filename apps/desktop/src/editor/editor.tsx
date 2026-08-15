@@ -24,8 +24,10 @@ import "katex/dist/katex.min.css";
 import { isTauri } from "../use-window-controls";
 import type { AppCommand, ChordOverrides, Command } from "./commands";
 import { buildExtensions } from "./extensions";
+import { ExBar } from "./ex-bar";
 import { FindBar } from "./find-bar";
-import { findNext, findPrev } from "./find";
+import { clearFind, findNext, findPrev } from "./find";
+import { blockStart } from "./vim/motions";
 import { posForBodyLine } from "./goto";
 import { joinNote, type NoteIO, splitNote } from "./markdown-io";
 import { docWordCount, transactionWordDelta } from "./pm-doc";
@@ -63,6 +65,8 @@ export interface EditorProps {
   onCommand: (c: AppCommand) => void;
   /** Open an external URL under the caret in the system browser. */
   onOpenUrl: (url: string) => void;
+  /** Editor-originated messages (unknown ex command, blocked paste). */
+  onNotify?: (msg: string) => void;
 }
 
 const MODE_LABEL: Record<string, string> = {
@@ -136,9 +140,10 @@ function RichEditor(props: EditorProps) {
   // can recognize "our save landed" and advance the baseline to that doc.
   const lastSerializedRef = useRef<{ text: string; doc: PMNode } | null>(null);
 
-  // Mode is owned by the vim layer once it mounts (P5); non-vim is fixed "text".
-  const [mode] = useState(props.vimMode ? "insert" : "text");
+  // Mode is owned by the vim layer via onModeChange; non-vim is fixed "text".
+  const [mode, setMode] = useState(props.vimMode ? "normal" : "text");
   const [findOpen, setFindOpen] = useState(false);
+  const [exOpen, setExOpen] = useState(false);
   const [stat, setStat] = useState<EditorStat>({
     words: 0,
     line: 1,
@@ -216,6 +221,24 @@ function RichEditor(props: EditorProps) {
       getTabWidth: () => propsRef.current.tabWidth,
       resolveImageSrc: (src) => resolveImageSrc(src, propsRef.current.notebookRoot),
       onOpenUrl: (url) => propsRef.current.onOpenUrl(url),
+      vim: props.vimMode
+        ? {
+            getEscMap: () => propsRef.current.escMap,
+            onModeChange: setMode,
+            hooks: {
+              palette: () => propsRef.current.onCommand("palette"),
+              exBar: () => setExOpen(true),
+              findBar: () => setFindOpen(true),
+              follow: () => {
+                const ed = editorRef.current;
+                if (!ed) return;
+                const url = urlAtCaret(ed);
+                if (url) propsRef.current.onOpenUrl(url);
+              },
+              notify: (msg) => propsRef.current.onNotify?.(msg),
+            },
+          }
+        : null,
     }),
     content: io.body,
     contentType: "markdown",
@@ -312,10 +335,38 @@ function RichEditor(props: EditorProps) {
   }, [props.savedText, props.dirty]);
 
   return (
-    <div className="av-editor" data-cursor={props.cursor}>
+    <div
+      className="av-editor"
+      data-cursor={props.cursor}
+      data-vim-mode={props.vimMode ? mode : undefined}
+    >
       <div className="av-cm">
         {findOpen && editor && <FindBar editor={editor} onClose={() => setFindOpen(false)} />}
         <EditorContent editor={editor} className="av-editor-scroll" />
+        {exOpen && editor && (
+          <ExBar
+            onRun={(cmd) => dispatchCommand(cmd)}
+            onGotoBlock={(n) => {
+              const ed = editorRef.current;
+              if (!ed) return;
+              const pos = blockStart(ed.state.doc, n);
+              ed.view.dispatch(
+                ed.state.tr
+                  .setSelection(Selection.near(ed.state.doc.resolve(pos)))
+                  .scrollIntoView(),
+              );
+            }}
+            onClearHighlights={() => {
+              const ed = editorRef.current;
+              if (ed) clearFind(ed);
+            }}
+            onNotify={(msg) => props.onNotify?.(msg)}
+            onClose={() => {
+              setExOpen(false);
+              editorRef.current?.view.focus();
+            }}
+          />
+        )}
       </div>
       <StatusBar
         modeClass={props.vimMode ? "mode-" + mode : "mode-text"}

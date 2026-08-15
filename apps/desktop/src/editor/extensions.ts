@@ -21,6 +21,7 @@ import { Find } from "./find";
 import { HoverHandle } from "./hover-handle";
 import { LinkClick } from "./link-click";
 import { SlashMenu } from "./slash-menu";
+import { Vim, type VimOptions } from "./vim";
 
 export interface ExtensionOpts {
   chords: ChordsOptions;
@@ -30,6 +31,9 @@ export interface ExtensionOpts {
   resolveImageSrc?: (src: string) => string;
   /** Mod-click / follow target — opens in the system browser. */
   onOpenUrl?: (url: string) => void;
+  /** The vim layer's options — present only when cfg.vimMode is on (the
+   *  parent remounts on a vim-mode change via the editorKey suffix). */
+  vim?: VimOptions | null;
 }
 
 /** The schema-bearing extension set — the exact configuration the round-trip
@@ -78,7 +82,13 @@ function tabKey(getTabWidth: () => number) {
         Tab: () =>
           this.editor.commands.first(({ commands }) => [
             () => commands.sinkListItem("listItem"),
-            () => commands.insertContent(" ".repeat(getTabWidth())),
+            // raw insertText — insertContent would route through the markdown
+            // parser, which eats a whitespace-only string entirely
+            () =>
+              commands.command(({ tr, dispatch }) => {
+                if (dispatch) tr.insertText(" ".repeat(getTabWidth()));
+                return true;
+              }),
           ]),
         "Shift-Tab": () =>
           this.editor.commands.first(({ commands }) => [
@@ -103,5 +113,6 @@ export function buildExtensions(opts: ExtensionOpts) {
     LinkClick.configure({ onOpenUrl: opts.onOpenUrl ?? (() => {}) }),
     Chords.configure(opts.chords),
     tabKey(opts.getTabWidth),
+    ...(opts.vim ? [Vim.configure(opts.vim)] : []),
   ];
 }

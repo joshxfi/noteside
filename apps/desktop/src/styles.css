@@ -2298,9 +2298,61 @@ html.tauri.macos .av-titlebar {
 }
 
 /* Caret rendering: the native caret carries insert/non-vim mode (caret-color
-   set on .tiptap above). The vim layer's block/underline decoration caret
-   (.av-caret, keyed off .av-editor[data-cursor] + data-blink) ships with the
-   vim module. */
+   set on .tiptap above). Vim normal/visual hide it and draw the block caret
+   as a one-char decoration (vim/index.ts caretPlugin) — the .cm-fat-cursor
+   spec reborn. */
+.av-editor[data-vim-mode="normal"] .tiptap,
+.av-editor[data-vim-mode="visual"] .tiptap {
+  caret-color: transparent;
+}
+.av-cm .tiptap .av-vim-caret {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 1px;
+}
+.av-cm .tiptap .av-vim-caret-blank {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  border-radius: 1px;
+}
+/* the block caret disappears while the editor is blurred (finder/palette open) */
+.av-cm .tiptap:not(:focus) .av-vim-caret {
+  background: transparent;
+  color: inherit;
+}
+.av-cm .tiptap:not(:focus) .av-vim-caret-blank {
+  background: transparent;
+}
+
+/* The vim `:` command line — bottom-docked above the status bar, the old
+   .cm-vim-panel spec on our own markup. */
+.av-exbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 18px;
+  height: calc(30px * var(--ui-scale));
+  border-top: 1px solid var(--rule-soft);
+  background: var(--paper-2);
+  font-family: var(--mono);
+  font-size: calc(12.5px * var(--ui-scale));
+  color: var(--ink);
+}
+.av-exbar-prompt {
+  color: var(--ink-faint);
+}
+.av-exbar-input {
+  font-family: var(--mono);
+  font-size: calc(12.5px * var(--ui-scale));
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 100%;
+}
 
 /* ── legibility: bump the smallest UI fonts (settings panel, status, meta) ── */
 .set-head p {

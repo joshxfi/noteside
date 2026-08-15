@@ -1,13 +1,11 @@
-import { boot, expect, test } from "./fixtures";
+import { caretToEnd, boot, expect, test } from "./fixtures";
 
 // The `/` block-insertion menu (editor/slash-menu.ts): opens at the start of
 // an empty line, filters with the shared fuzzy, inserts on Enter or click.
 test.describe("slash menu", () => {
   const freshLine = async (page: import("@playwright/test").Page) => {
     await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
-    await page.locator(".av-cm .tiptap").click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("ArrowRight");
+    await caretToEnd(page);
     await page.keyboard.press("Enter");
   };
 
