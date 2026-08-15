@@ -15,17 +15,21 @@ test.describe("open URL under cursor", () => {
     await boot(page, { vimMode: false });
 
     await page.locator(".av-cm .tiptap").click();
-    await page.keyboard.press("End");
+    // Deterministic: end of the DOC (End+Enter mid-paragraph would glue the
+    // rest of the split text onto the typed URL).
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
     await page.keyboard.type("https://noteside.app");
+    await expect(page.locator(".av-cm .tiptap")).toContainText("https://noteside.app");
     // Land INSIDE the URL — "Home" doesn't move the caret on WebKit/macOS, and
     // urlAt's end boundary is half-open, so line-end wouldn't match either.
     for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+    await expect(page.locator(".av-cm .tiptap")).toBeFocused();
     await page.keyboard.press("Alt+Enter");
 
-    const opened = await page.evaluate(
-      () => (window as Window & { __opened?: string[] }).__opened ?? [],
-    );
-    expect(opened).toContain("https://noteside.app");
+    await expect
+      .poll(() => page.evaluate(() => (window as Window & { __opened?: string[] }).__opened ?? []))
+      .toContain("https://noteside.app");
   });
 });
