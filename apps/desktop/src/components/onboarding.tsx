@@ -59,7 +59,7 @@ export function Onboarding({ onChoose }: { onChoose: (vim: boolean) => void }) {
           <span className="ob-card-name">Vim</span>
           <span className="ob-card-desc">
             Modal editing — opens in NORMAL mode. <kbd>i</kbd> to insert, <kbd>:w</kbd> to save,{" "}
-            <kbd>hjkl</kbd> to move. Full vim, built in.
+            <kbd>hjkl</kbd> to move. Vim essentials, built in.
           </span>
           <span className="ob-card-keys">
             <kbd>h</kbd>

@@ -738,6 +738,12 @@ export function App() {
       // them, or the user is left believing a setting took effect (issue #24).
       const ignored = unrecognizedDirectives(next);
       if (!ignored.length) {
+        // vim :map lines still parse + round-trip, but the vim subset doesn't
+        // apply them — be honest rather than silently inert.
+        if (next.keymaps.length > 0) {
+          flash("config applied — vim :map lines aren't applied by this editor", "error");
+          return;
+        }
         flash("config applied");
         return;
       }
@@ -1531,6 +1537,7 @@ export function App() {
                     onQuit={() => session.quit()}
                     onCommand={onCommand}
                     onOpenUrl={onOpenUrl}
+                    onNotify={(msg) => flash(msg, "error")}
                   />
                 </Suspense>
               </EditorBoundary>

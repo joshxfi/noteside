@@ -1,53 +1,33 @@
 import { boot, expect, test } from "./fixtures";
 
-// Regression guard for the cursor style/blink bug: style was never wired to the
-// caret, and blink only applied at mount. Both must now apply live.
-test.describe("cursor settings", () => {
-  test("style is wired to the caret and applies live", async ({ page }) => {
-    await boot(page, { vimMode: false, cursor: "block" });
-    const editor = page.locator(".av-editor");
-    await expect(editor).toHaveAttribute("data-cursor", "block");
-
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.locator(".set-panel").waitFor();
-
-    // The cursor "Style" pills — changing them updates the editor live.
-    await page.getByRole("button", { name: "Bar", exact: true }).click();
-    await expect(editor).toHaveAttribute("data-cursor", "bar");
-    await page.getByRole("button", { name: "Underline", exact: true }).click();
-    await expect(editor).toHaveAttribute("data-cursor", "underline");
-
-    // Close settings + focus the editor so the caret renders, then confirm the
-    // CSS actually reshapes it (underline = bottom border, no left border).
-    await page.keyboard.press("Escape");
-    await page.locator(".cm-content").click();
-    const caret = page.locator(".cm-cursor:not(.cm-fat-cursor)").first();
-    await expect(caret).toHaveCSS("border-bottom-width", "2px");
-    await expect(caret).toHaveCSS("border-left-width", "0px");
+// Caret rendering: non-vim uses the native caret (data-cursor still carries
+// the configured shape for CSS); vim normal/visual draw the one-char block
+// decoration (.av-vim-caret) and hide it again in insert mode.
+test.describe("caret", () => {
+  test("the configured cursor shape rides data-cursor", async ({ page }) => {
+    await boot(page, { vimMode: false, cursor: "bar" });
+    await expect(page.locator(".av-editor")).toHaveAttribute("data-cursor", "bar");
   });
 
-  test("blink toggles the caret animation live", async ({ page }) => {
-    await boot(page, { vimMode: false, cursorBlink: true });
-    await page.locator(".cm-content").click();
+  test("vim normal mode draws the block caret; insert hides it", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    await page.locator(".av-cm .tiptap").click();
+    await expect(page.locator(".av-editor")).toHaveAttribute("data-vim-mode", "normal");
+    await expect(page.locator(".av-vim-caret, .av-vim-caret-blank").first()).toBeVisible();
 
-    const blinkRate = () =>
-      page.evaluate(
-        () =>
-          (document.querySelector(".cm-cursorLayer") as HTMLElement | null)?.style
-            .animationDuration ?? "",
-      );
-    await expect.poll(blinkRate).toBe("1200ms");
+    await page.keyboard.press("i");
+    await expect(page.locator(".av-editor")).toHaveAttribute("data-vim-mode", "insert");
+    await expect(page.locator(".av-vim-caret, .av-vim-caret-blank")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.locator(".set-panel").waitFor();
-    const blinkSwitch = page
-      .locator(".set-row")
-      .filter({ has: page.locator(".set-rowlabel", { hasText: /^Blink$/ }) })
-      .locator("button");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".av-vim-caret, .av-vim-caret-blank").first()).toBeVisible();
+  });
 
-    await blinkSwitch.click();
-    await expect.poll(blinkRate).toBe("0ms");
-    await blinkSwitch.click();
-    await expect.poll(blinkRate).toBe("1200ms");
+  test("non-vim editors render no vim caret and no vim mode attr", async ({ page }) => {
+    await boot(page, { vimMode: false });
+    await page.locator(".av-cm .tiptap").click();
+    await expect(page.locator(".av-editor")).not.toHaveAttribute("data-vim-mode");
+    await expect(page.locator(".av-vim-caret, .av-vim-caret-blank")).toHaveCount(0);
+    await expect(page.locator(".av-mode")).toHaveText("TEXT");
   });
 });

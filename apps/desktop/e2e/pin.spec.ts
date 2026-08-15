@@ -1,4 +1,4 @@
-import { boot, expect, test } from "./fixtures";
+import { caretToEnd, boot, expect, test } from "./fixtures";
 
 // Pin is a native-menu item backed by a real command, so — like duplicate/rename
 // — these drive the command-search path the web build can exercise. The native
@@ -74,9 +74,7 @@ test.describe("pin note", () => {
   // write it back, silently unpinning the note.
   test("pinning the open note keeps unsaved edits and survives later typing", async ({ page }) => {
     await boot(page);
-    await page.locator(".av-cm .tiptap").click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("ArrowRight");
+    await caretToEnd(page);
     await page.keyboard.type(" UNSAVED_PIN_SENTINEL");
 
     await runCommand(page, "pin note");
@@ -90,9 +88,7 @@ test.describe("pin note", () => {
 
     // typing afterwards autosaves the reloaded buffer (held frontmatter
     // re-attached on serialize), so the pin sticks instead of being written away
-    await page.locator(".av-cm .tiptap").click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("ArrowRight");
+    await caretToEnd(page);
     await page.keyboard.type(" AFTER_PIN");
     await page.waitForTimeout(1200); // past the 800ms autosave debounce
 
