@@ -67,6 +67,13 @@ export interface EditorProps {
   onOpenUrl: (url: string) => void;
   /** Editor-originated messages (unknown ex command, blocked paste). */
   onNotify?: (msg: string) => void;
+  /** Hands the app the editor's command dispatch so the searchable palette can
+   *  run editor-action commands (table ops). Explicit prop wiring, NOT a
+   *  module singleton (a shared-module registry splits into two instances the
+   *  moment dev HMR timestamps one importer's URL). `alive: false` retires the
+   *  SAME fn — identity matters because useEditor DEFERS destruction, so on a
+   *  note switch the old editor's teardown lands AFTER the new one registered. */
+  onRegisterDispatch?: (fn: (cmd: Command) => void, alive: boolean) => void;
 }
 
 const MODE_LABEL: Record<string, string> = {
@@ -93,14 +100,20 @@ function resolveImageSrc(src: string, notebookRoot: string | undefined): string 
 }
 
 /** The URL under the caret: a link mark's href, else links.ts urlAt over the
- *  caret's textblock (bare URLs usually autolink, so this is the fallback). */
+ *  caret's textblock (bare URLs usually autolink, so this is the fallback).
+ *
+ *  Also probes the position BEFORE the caret: urlAt's end is half-open, so a
+ *  caret resting immediately after a URL (having just typed it, or arrowed to
+ *  the line end) would otherwise find nothing — following there is exactly
+ *  what a user means, and it's what vim's own caret-left convention implies. */
 function urlAtCaret(editor: TiptapEditor): string | null {
   const $head = editor.state.selection.$head;
   const link = $head.marks().find((m) => m.type.name === "link");
   if (link?.attrs.href) return link.attrs.href as string;
   if (!$head.parent.isTextblock) return null;
   const text = $head.parent.textBetween(0, $head.parent.content.size, "\n", " ");
-  return urlAt(text, $head.parentOffset);
+  const at = $head.parentOffset;
+  return urlAt(text, at) ?? (at > 0 ? urlAt(text, at - 1) : null);
 }
 
 export function Editor(props: EditorProps) {
@@ -209,7 +222,21 @@ function RichEditor(props: EditorProps) {
       findNext(editor);
     } else if (cmd.editor === "searchPrev") {
       findPrev(editor);
+    } else if (cmd.editor === "tableAddRow") {
+      runTableOp(editor.chain().focus().addRowAfter());
+    } else if (cmd.editor === "tableDelRow") {
+      runTableOp(editor.chain().focus().deleteRow());
+    } else if (cmd.editor === "tableAddCol") {
+      runTableOp(editor.chain().focus().addColumnAfter());
+    } else if (cmd.editor === "tableDelCol") {
+      runTableOp(editor.chain().focus().deleteColumn());
     }
+  };
+
+  // Table ops arrive from the palette/ex bar/toolbar with the caret anywhere;
+  // focus() first (the palette blurred the editor), honest flash otherwise.
+  const runTableOp = (chained: { run: () => boolean }) => {
+    if (!chained.run()) propsRef.current.onNotify?.("not in a table");
   };
 
   const editor = useEditor({
@@ -254,6 +281,7 @@ function RichEditor(props: EditorProps) {
     shouldRerenderOnTransaction: false,
     onCreate({ editor: ed }) {
       editorRef.current = ed;
+      propsRef.current.onRegisterDispatch?.(dispatchCommand, true);
       const doc = ed.state.doc;
       wordsRef.current = docWordCount(doc);
       if (propsRef.current.initialText === savedRef.current) {
@@ -311,6 +339,7 @@ function RichEditor(props: EditorProps) {
       setCursorStat(ed);
     },
     onDestroy() {
+      propsRef.current.onRegisterDispatch?.(dispatchCommand, false);
       editorRef.current = null;
     },
   });

@@ -21,6 +21,7 @@ import { Find } from "./find";
 import { HoverHandle } from "./hover-handle";
 import { LinkClick } from "./link-click";
 import { SlashMenu } from "./slash-menu";
+import { TableToolbar } from "./table-toolbar";
 import { Vim, type VimOptions } from "./vim";
 
 export interface ExtensionOpts {
@@ -116,6 +117,7 @@ export function buildExtensions(opts: ExtensionOpts) {
     Find,
     SlashMenu,
     HoverHandle,
+    TableToolbar.configure({ dispatch: opts.chords.dispatch }),
     LinkClick.configure({ onOpenUrl: opts.onOpenUrl ?? (() => {}) }),
     Chords.configure(opts.chords),
     tabKey(opts.getTabWidth),

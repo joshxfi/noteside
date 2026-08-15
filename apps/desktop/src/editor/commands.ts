@@ -51,7 +51,11 @@ export type EditorAction =
   | "follow"
   | "search"
   | "searchNext"
-  | "searchPrev";
+  | "searchPrev"
+  | "tableAddRow"
+  | "tableDelRow"
+  | "tableAddCol"
+  | "tableDelCol";
 
 export interface Command {
   id: string;
@@ -283,6 +287,44 @@ export const COMMANDS: Command[] = [
     editor: "follow",
     needsNote: true,
     inPalette: false,
+  },
+  // Table structure ops. Palette-listed (the palette can run editor actions
+  // through editor/handlers.ts) and ex-named; the pointer path is the floating
+  // toolbar on the active table (editor/table-toolbar.ts) — a thin dispatcher
+  // onto these same commands. Running one outside a table flashes an error.
+  {
+    id: "tableAddRow",
+    title: "Table: add row below",
+    group: "Note",
+    ex: ["addrow"],
+    editor: "tableAddRow",
+    needsNote: true,
+    paletteHint: ":addrow",
+  },
+  {
+    id: "tableDelRow",
+    title: "Table: delete row",
+    group: "Note",
+    ex: ["delrow"],
+    editor: "tableDelRow",
+    needsNote: true,
+  },
+  {
+    id: "tableAddCol",
+    title: "Table: add column right",
+    group: "Note",
+    ex: ["addcol"],
+    editor: "tableAddCol",
+    needsNote: true,
+    paletteHint: ":addcol",
+  },
+  {
+    id: "tableDelCol",
+    title: "Table: delete column",
+    group: "Note",
+    ex: ["delcol"],
+    editor: "tableDelCol",
+    needsNote: true,
   },
   {
     id: "nextNote",

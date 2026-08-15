@@ -39,8 +39,15 @@ export const HoverHandle = Extension.create({
           grip.setAttribute("draggable", "true");
           let gripPos: number | null = null;
 
-          const host = view.dom.closest(".av-cm") as HTMLElement | null;
-          host?.appendChild(grip);
+          // view.dom is not on the page yet when the plugin view constructs
+          // (EditorContent attaches it afterwards) — resolve the host lazily
+          // on the first pointer move, which can only happen post-mount.
+          const ensureHost = (): HTMLElement | null => {
+            if (grip.isConnected) return grip.parentElement;
+            const host = view.dom.closest(".av-cm") as HTMLElement | null;
+            host?.appendChild(grip);
+            return host;
+          };
 
           const hide = () => {
             grip.classList.remove("is-visible");
@@ -50,6 +57,7 @@ export const HoverHandle = Extension.create({
           const onMove = (e: MouseEvent) => {
             // never while dragging, and not for hovers over the grip itself
             if (e.buttons !== 0 || grip.contains(e.target as Node)) return;
+            const host = ensureHost();
             const pos = topLevelPosAt(view, { left: e.clientX + 40, top: e.clientY });
             if (pos === null) {
               hide();
@@ -93,16 +101,17 @@ export const HoverHandle = Extension.create({
             }
           };
 
-          const root = host ?? view.dom;
-          root.addEventListener("mousemove", onMove);
-          root.addEventListener("mouseleave", hide);
+          // Listen on view.dom (always available); the grip itself hangs off
+          // .av-cm so its absolute positioning has the right containing block.
+          view.dom.addEventListener("mousemove", onMove);
+          view.dom.addEventListener("mouseleave", hide);
           grip.addEventListener("mousedown", onGripDown);
           grip.addEventListener("dragstart", onGripDragStart);
 
           return {
             destroy() {
-              root.removeEventListener("mousemove", onMove);
-              root.removeEventListener("mouseleave", hide);
+              view.dom.removeEventListener("mousemove", onMove);
+              view.dom.removeEventListener("mouseleave", hide);
               grip.remove();
             },
           };
