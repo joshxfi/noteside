@@ -662,6 +662,23 @@ body {
 .av-cm .tiptap li + li {
   margin-top: calc(var(--editor-size) * 0.15);
 }
+/* Raw HTML blocks survive as opaque source chips (html-passthrough.ts) —
+   shown as source, never executed. */
+.av-cm .tiptap .av-htmlblock {
+  font-family: var(--mono);
+  font-size: calc(var(--editor-size) * 0.72);
+  line-height: 1.6;
+  color: var(--ink-faint);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.av-cm .tiptap .av-htmlblock.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+}
 
 /* The plain-text config buffer (~/.notesiderc) — a bare textarea in the same
    editor shell. Mono on purpose: it's a dotfile, not prose. */
