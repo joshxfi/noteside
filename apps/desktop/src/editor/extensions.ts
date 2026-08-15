@@ -72,15 +72,20 @@ export function markdownExtensions(opts?: {
 }
 
 // Tab keeps focus inside the editor (the CM editor's focus-trap contract):
-// in a list it nests/unnests the item; elsewhere it inserts tabWidth spaces at
-// the caret (the issue-#23 behavior — never indent-the-whole-line).
+// in a TABLE it moves to the next cell — growing a fresh row when tabbed past
+// the last one (the standard table UX; this MUST come before the fallbacks or
+// they shadow it); in a list it nests/unnests the item; elsewhere it inserts
+// tabWidth spaces at the caret (the issue-#23 behavior — never
+// indent-the-whole-line).
 function tabKey(getTabWidth: () => number) {
   return Extension.create({
     name: "nsTab",
     addKeyboardShortcuts() {
       return {
         Tab: () =>
-          this.editor.commands.first(({ commands }) => [
+          this.editor.commands.first(({ commands, can, chain }) => [
+            () => commands.goToNextCell(),
+            () => can().addRowAfter() && chain().addRowAfter().goToNextCell().run(),
             () => commands.sinkListItem("listItem"),
             // raw insertText — insertContent would route through the markdown
             // parser, which eats a whitespace-only string entirely
@@ -92,6 +97,7 @@ function tabKey(getTabWidth: () => number) {
           ]),
         "Shift-Tab": () =>
           this.editor.commands.first(({ commands }) => [
+            () => commands.goToPreviousCell(),
             () => commands.liftListItem("listItem"),
             // Swallow even when there's nothing to dedent — Tab must not walk
             // focus out of the editor in either direction.
