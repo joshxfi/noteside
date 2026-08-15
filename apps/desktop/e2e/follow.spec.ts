@@ -18,7 +18,9 @@ test.describe("open URL under cursor", () => {
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("https://noteside.app");
-    await page.keyboard.press("Home");
+    // Land INSIDE the URL — "Home" doesn't move the caret on WebKit/macOS, and
+    // urlAt's end boundary is half-open, so line-end wouldn't match either.
+    for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("Alt+Enter");
 
     const opened = await page.evaluate(

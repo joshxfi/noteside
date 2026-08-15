@@ -41,23 +41,21 @@ test.describe("pointer ergonomics", () => {
     await expect(page.locator(".av-file")).toContainText(title);
   });
 
-  test("status bar: the eye toggles live preview; clicking the toast dismisses it", async ({
-    page,
-  }) => {
+  test("clicking a toast dismisses it", async ({ page }) => {
     await boot(page);
-    await page.getByRole("button", { name: "toggle live preview" }).click();
+    // run any toast-producing command (pin) via the command search
+    await page.keyboard.press("ControlOrMeta+Shift+p");
+    await page.keyboard.type("pin note");
+    await page.keyboard.press("Enter");
     const toast = page.locator(".av-toast");
-    await expect(toast).toContainText("live preview off");
+    await expect(toast).toContainText("note pinned");
     await toast.click();
     await expect(toast).toHaveCount(0);
-    // toggle back on for good measure
-    await page.getByRole("button", { name: "toggle live preview" }).click();
-    await expect(page.locator(".av-toast")).toContainText("live preview on");
   });
 
   test("status bar: the [+] dirty chip is click-to-save", async ({ page }) => {
     await boot(page);
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
     await page.keyboard.type("dirty me");
     const dirty = page.locator(".av-dirty");
     await expect(dirty).toBeVisible();
@@ -66,11 +64,9 @@ test.describe("pointer ergonomics", () => {
   });
 
   test("empty state offers clickable actions", async ({ page }) => {
-    await boot(page, { vimMode: true });
-    await page.locator(".cm-content").click();
-    await page.keyboard.press(":");
-    await page.keyboard.type("q");
-    await page.keyboard.press("Enter");
+    await boot(page);
+    await page.locator(".av-cm .tiptap").click();
+    await page.keyboard.press("ControlOrMeta+w");
     await expect(page.locator(".av-empty-title")).toContainText("No note open");
 
     // Find a note → the finder opens (Esc backs out)
@@ -128,8 +124,8 @@ test.describe("pointer ergonomics", () => {
     await expect(page.locator(".av-item")).toHaveCount(0); // brand-new notebook is empty
   });
 
-  test("a link inside a rendered table follows on plain click", async ({ page }) => {
-    await boot(page, { vimMode: false });
+  test("a link inside a table follows on Mod-click; plain click edits", async ({ page }) => {
+    await boot(page);
     // outside Tauri, open-external falls back to window.open — stub it
     await page.evaluate(() => {
       (window as unknown as { __opened: string | null }).__opened = null;
@@ -138,17 +134,20 @@ test.describe("pointer ergonomics", () => {
         return window; // a non-null return marks success to open-external
       }) as typeof window.open;
     });
-    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
-    await page.locator(".cm-content").click();
-    await page.keyboard.type("| link |\n| --- |\n| [site](https://example.com/x) |\n");
-
-    const link = page.locator(".cm-mdtable .cm-mdlink");
+    await page.locator(".av-item").filter({ hasText: "Rich blocks" }).click();
+    const link = page.locator(".av-cm .tiptap table a", { hasText: "Docs" });
     await expect(link).toBeVisible();
+
+    // plain click places the caret (tables are editable now) — nothing opens
     await link.click();
+    expect(
+      await page.evaluate(() => (window as unknown as { __opened: string | null }).__opened),
+    ).toBe(null);
+
+    // Mod-click follows — the honest affordance everywhere in the editor
+    await link.click({ modifiers: ["ControlOrMeta"] });
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __opened: string | null }).__opened))
-      .toBe("https://example.com/x");
-    // the click followed the link instead of revealing the table for editing
-    await expect(page.locator(".cm-mdtable")).toBeVisible();
+      .toBe("https://noteside.app");
   });
 });

@@ -336,3 +336,150 @@ export function parseInline(src: string, depth = 0): Inline[] {
   flush();
   return out;
 }
+
+/** A top-level block's 0-based inclusive source-line range. Implicit empty
+ *  paragraphs (from runs of blank lines — the markdown manager materializes
+ *  them so extra spacing survives) get a zero-width range on their gap. */
+export interface TopBlock {
+  fromLine: number;
+  toLine: number;
+}
+
+const ATX = /^ {0,3}#{1,6}(\s|$)/;
+const SETEXT = /^ {0,3}(=+|-+)\s*$/;
+const HR = /^ {0,3}((\* *){3,}|(- *){3,}|(_ *){3,})$/;
+const HTML_OPEN = /^ {0,3}</;
+const MATH_FENCE = /^\s*\$\$\s*$/;
+const ORDERED_LEAD = /^ {0,3}\d{1,9}[.)]\s/;
+// Link reference definitions ([ref]: url) parse into link attrs, not blocks.
+const LINK_DEF = /^ {0,3}\[[^\]]+\]:\s/;
+const isBlank = (l: string) => l.trim() === "";
+
+/**
+ * Segment a note BODY (frontmatter already split off — see editor/markdown-io)
+ * into top-level blocks the way the editor's markdown parser tokenizes, so a
+ * source line number (a grep hit) maps onto a ProseMirror doc child index.
+ * Approximate by design: goto.test.ts pins agreement with the real parser
+ * across the round-trip vectors, and the caller clamps on any divergence.
+ */
+export function scanTopBlocks(lines: readonly string[]): TopBlock[] {
+  const blocks: TopBlock[] = [];
+  // Implicit empty paragraphs for a blank-line run: interior gaps of B blanks
+  // yield floor((B+1)/2)−1, boundary (leading/trailing) gaps floor(B/2) —
+  // mirrors the manager's paragraph-separator counting.
+  const pushEmpties = (gapStart: number, blanks: number, boundary: boolean) => {
+    const n = boundary ? Math.floor(blanks / 2) : Math.max(0, Math.floor((blanks + 1) / 2) - 1);
+    for (let k = 0; k < n; k++) blocks.push({ fromLine: gapStart, toLine: gapStart });
+  };
+
+  let i = 0;
+  // leading gap
+  let lead = 0;
+  while (i < lines.length && isBlank(lines[i])) {
+    lead++;
+    i++;
+  }
+  if (lead > 0) pushEmpties(0, lead, true);
+
+  while (i < lines.length) {
+    const from = i;
+    const line = lines[i];
+    let emit = true;
+
+    if (LINK_DEF.test(line)) {
+      // definition run — consumed by the parser, no doc child
+      emit = false;
+      i++;
+      while (i < lines.length && LINK_DEF.test(lines[i])) i++;
+    } else if (FENCE.test(line)) {
+      const marker = (FENCE.exec(line) as RegExpExecArray)[1];
+      i++;
+      while (i < lines.length) {
+        const m = FENCE.exec(lines[i]);
+        if (m && m[1][0] === marker[0] && m[1].length >= marker.length && m[2].trim() === "") {
+          i++;
+          break;
+        }
+        i++;
+      }
+    } else if (MATH_FENCE.test(line)) {
+      i++;
+      while (i < lines.length && !MATH_FENCE.test(lines[i])) i++;
+      if (i < lines.length) i++;
+    } else if (ATX.test(line)) {
+      i++;
+    } else if (HR.test(line)) {
+      i++;
+    } else if (QUOTE.test(line)) {
+      // quote run + lazy continuation lines, until a blank line
+      i++;
+      while (i < lines.length && !isBlank(lines[i])) i++;
+    } else if (LIST_LEAD.test(line)) {
+      // a list swallows items, indented continuations, and interior blank
+      // runs whose next non-blank line still belongs to the SAME KIND of list
+      // (a bullet run and an ordered run are two doc children)
+      const ordered = ORDERED_LEAD.test(line);
+      i++;
+      for (;;) {
+        while (i < lines.length && !isBlank(lines[i])) i++;
+        let j = i;
+        while (j < lines.length && isBlank(lines[j])) j++;
+        if (
+          j < lines.length &&
+          ((LIST_LEAD.test(lines[j]) && indentOf(lines[j]) === 0
+            ? ORDERED_LEAD.test(lines[j]) === ordered
+            : LIST_LEAD.test(lines[j])) ||
+            indentOf(lines[j]) >= 2)
+        ) {
+          i = j;
+          continue;
+        }
+        break;
+      }
+    } else if (
+      i + 1 < lines.length &&
+      splitRow(line) !== null &&
+      !LIST_LEAD.test(line) &&
+      parseDelimRow(lines[i + 1]) !== null
+    ) {
+      // pipe table: header + delimiter + rows
+      i += 2;
+      while (i < lines.length && !isBlank(lines[i]) && splitRow(lines[i]) !== null) i++;
+    } else if (HTML_OPEN.test(line)) {
+      i++;
+      while (i < lines.length && !isBlank(lines[i])) i++;
+    } else {
+      // paragraph: until a blank line or an interrupter; a setext underline
+      // folds the run into one heading block
+      i++;
+      while (i < lines.length) {
+        const next = lines[i];
+        if (isBlank(next)) break;
+        if (SETEXT.test(next)) {
+          i++;
+          break;
+        }
+        if (ATX.test(next) || FENCE.test(next) || QUOTE.test(next) || HR.test(next)) break;
+        if (
+          i + 1 < lines.length &&
+          splitRow(next) !== null &&
+          parseDelimRow(lines[i + 1]) !== null
+        ) {
+          break;
+        }
+        i++;
+      }
+    }
+    if (emit) blocks.push({ fromLine: from, toLine: i - 1 });
+
+    // interior / trailing gap
+    let blanks = 0;
+    const gapStart = i;
+    while (i < lines.length && isBlank(lines[i])) {
+      blanks++;
+      i++;
+    }
+    if (blanks > 0) pushEmpties(gapStart, blanks, i >= lines.length);
+  }
+  return blocks;
+}

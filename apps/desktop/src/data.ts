@@ -49,6 +49,7 @@ Everything here is a real block — click into any of it and just type.
 | :------ | -----: |
 | Tables  | ready  |
 | Math    | ready  |
+| [Docs](https://noteside.app) | linked |
 
 - [ ] an open task
 - [x] a finished task

@@ -530,6 +530,7 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative; /* anchors the hover grip */
 }
 .av-editor-scroll {
   flex: 1;
@@ -875,6 +876,138 @@ body {
 .av-cm .tiptap .av-callout[data-callout="warning"],
 .av-cm .tiptap .av-callout[data-callout="caution"] {
   --callout: var(--danger);
+}
+
+/* Slash menu (editor/slash-menu.ts) — the `/` block-insertion popup, cloned
+   from the command-palette chrome. Fixed-position portal on <body>. */
+.av-slash {
+  position: fixed;
+  z-index: 60;
+  min-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  font-size: calc(13px * var(--ui-scale));
+}
+.av-slash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 9px;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+.av-slash-row:hover {
+  background: var(--paper-2);
+}
+.av-slash-row.is-selected {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.av-slash-hint {
+  font-family: var(--mono);
+  font-size: 0.8em;
+  color: var(--ink-faint);
+}
+.av-slash-empty {
+  padding: 8px 10px;
+  color: var(--ink-faint);
+}
+
+/* The hover drag grip (editor/hover-handle.ts) — one shared element, revealed
+   by pointer proximity, never per-block state. */
+.av-grip {
+  position: absolute;
+  z-index: 5;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: -0.12em;
+  line-height: 1;
+  color: var(--ink-faint);
+  padding: 4px 2px;
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms linear;
+}
+.av-grip.is-visible {
+  opacity: 0.6;
+  pointer-events: auto;
+}
+.av-grip:hover {
+  opacity: 1;
+  background: var(--paper-2);
+}
+.av-grip:active {
+  cursor: grabbing;
+}
+
+/* In-note find bar (editor/find-bar.tsx), top-docked over the content — the
+   old CM search panel's spec on our own markup. Highlights style
+   prosemirror-search's fixed class names below. */
+.av-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  background: var(--paper-2);
+  font-family: var(--mono);
+  font-size: calc(12px * var(--ui-scale));
+}
+.av-find-input {
+  font-family: var(--mono);
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 3px 8px;
+  outline: none;
+  width: min(320px, 60%);
+}
+.av-find-input:focus-visible {
+  border-color: var(--accent);
+}
+.av-find-count {
+  color: var(--ink-faint);
+  min-width: 3.5em;
+}
+.av-find-btn {
+  font-family: var(--mono);
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1px 9px;
+  cursor: pointer;
+}
+.av-find-btn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.av-find-close {
+  margin-left: auto;
+}
+.av-cm .tiptap .ProseMirror-search-match {
+  background: color-mix(in oklab, var(--accent), transparent 62%);
+  border-radius: 2px;
+}
+.av-cm .tiptap .ProseMirror-active-search-match {
+  background: color-mix(in oklab, var(--accent), transparent 35%);
 }
 
 /* Raw HTML blocks survive as opaque source chips (html-passthrough.ts) —
