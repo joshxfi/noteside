@@ -62,6 +62,24 @@ test.describe("vim mode", () => {
     await expect(stat(page)).toHaveText("1:1");
   });
 
+  // REGRESSION: a k-probe from an empty block lands in the leading BETWEEN
+  // blocks; the boundary position snapped forward (down) again, so k from an
+  // empty trailing line went nowhere. j back down must also work.
+  test("j/k work from an empty trailing line", async ({ page }) => {
+    await bootVim(page);
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter"); // open an empty block at the very bottom
+    await page.keyboard.press("Escape");
+    const emptyLine = await stat(page).innerText();
+    const emptyBlock = Number(emptyLine.split(":")[0]);
+
+    await page.keyboard.press("k");
+    await expect(stat(page)).toHaveText(new RegExp(`^${emptyBlock - 1}:`));
+    await page.keyboard.press("j");
+    await expect(stat(page)).toHaveText(new RegExp(`^${emptyBlock}:`));
+  });
+
   test("dd deletes a block into the register; p pastes it back below", async ({ page }) => {
     await bootVim(page);
     const blocks = page.locator(".av-cm .tiptap > *");
