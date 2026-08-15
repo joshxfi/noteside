@@ -19,6 +19,9 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Selection } from "@tiptap/pm/state";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import "katex/dist/katex.min.css";
+import { isTauri } from "../use-window-controls";
 import type { AppCommand, ChordOverrides, Command } from "./commands";
 import { buildExtensions } from "./extensions";
 import { joinNote, type NoteIO, splitNote } from "./markdown-io";
@@ -48,6 +51,8 @@ export interface EditorProps {
   escMap: string;
   /** 1-based source line to open on (e.g. a grep hit). */
   gotoLine?: number;
+  /** The open notebook's root path — relative image srcs resolve against it. */
+  notebookRoot?: string;
   refocusToken: number;
   onChange: (text: string | (() => string), dirty: boolean) => void;
   onSave: (text: string) => void;
@@ -67,6 +72,17 @@ const MODE_LABEL: Record<string, string> = {
 function serializeDoc(editor: TiptapEditor, io: NoteIO, doc: PMNode): string {
   const manager = editor.storage.markdown.manager;
   return joinNote(io, manager.serialize(doc.toJSON()));
+}
+
+/** Resolve an image src for DISPLAY (attrs keep the written value verbatim):
+ *  absolute URLs pass through; relative paths resolve against the notebook
+ *  root via the Tauri asset protocol. In the web/demo build a relative src
+ *  stays relative and simply shows its alt text. */
+function resolveImageSrc(src: string, notebookRoot: string | undefined): string {
+  if (/^(https?:|data:|asset:)/i.test(src)) return src;
+  if (!isTauri() || !notebookRoot) return src;
+  const rel = src.replace(/^\.\//, "");
+  return convertFileSrc(`${notebookRoot.replace(/\/$/, "")}/${rel}`);
 }
 
 /** The URL under the caret: a link mark's href, else links.ts urlAt over the
@@ -189,6 +205,7 @@ function RichEditor(props: EditorProps) {
         dispatch: dispatchCommand,
       },
       getTabWidth: () => propsRef.current.tabWidth,
+      resolveImageSrc: (src) => resolveImageSrc(src, propsRef.current.notebookRoot),
     }),
     content: io.body,
     contentType: "markdown",

@@ -8,20 +8,36 @@
 import { Extension } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Mathematics } from "@tiptap/extension-mathematics";
 import { Chords, type ChordsOptions } from "./chords";
 import { HtmlBlock } from "./html-passthrough";
+import { tableExtensions } from "./table";
+import { Callout } from "./callout";
+import { NsImage } from "./image";
+import { NsCodeBlock } from "./code-block";
+import { ActiveBlock } from "./active-block";
 
 export interface ExtensionOpts {
   chords: ChordsOptions;
   /** Read live (ref) so a settings change needs no editor reconfigure. */
   getTabWidth: () => number;
+  /** Display-URL resolver for images (Tauri asset protocol / passthrough). */
+  resolveImageSrc?: (src: string) => string;
 }
 
 /** The schema-bearing extension set — the exact configuration the round-trip
  *  tests exercise (round-trip.test.ts builds its MarkdownManager from THIS, so
  *  a config drift between app and test is impossible). Editor-behavior
- *  extensions (chords, Tab) stack on top in buildExtensions. */
-export function markdownExtensions() {
+ *  extensions (chords, Tab, lowlight code blocks — DOM-bound) stack on top in
+ *  buildExtensions.
+ *
+ *  codeBlock comes from StarterKit here (schema + markdown fence spec); the
+ *  app swaps it for the lowlight NodeView variant, which shares that spec. */
+export function markdownExtensions(opts?: {
+  codeBlock?: false;
+  resolveImageSrc?: (src: string) => string;
+}) {
   return [
     StarterKit.configure({
       link: {
@@ -29,11 +45,18 @@ export function markdownExtensions() {
         autolink: true,
         linkOnPaste: true,
       },
+      ...(opts?.codeBlock === false ? { codeBlock: false as const } : {}),
     }),
     Markdown.configure({
       indentation: { style: "space", size: 2 },
       markedOptions: { gfm: true },
     }),
+    ...tableExtensions(),
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    Mathematics.configure({ katexOptions: { throwOnError: false } }),
+    NsImage.configure({ resolveSrc: opts?.resolveImageSrc ?? ((src) => src) }),
+    Callout,
     HtmlBlock,
   ];
 }
@@ -64,5 +87,11 @@ function tabKey(getTabWidth: () => number) {
 }
 
 export function buildExtensions(opts: ExtensionOpts) {
-  return [...markdownExtensions(), Chords.configure(opts.chords), tabKey(opts.getTabWidth)];
+  return [
+    ...markdownExtensions({ codeBlock: false, resolveImageSrc: opts.resolveImageSrc }),
+    NsCodeBlock,
+    ActiveBlock,
+    Chords.configure(opts.chords),
+    tabKey(opts.getTabWidth),
+  ];
 }

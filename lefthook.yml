@@ -20,6 +20,9 @@ pre-commit:
         - "CHANGELOG.md"
         - "**/dist/**"
         - "apps/landing/public/demo/**"
+        # Round-trip vectors are byte-exact serializer fixtures — a reformat
+        # (e.g. *em* → _em_) silently breaks their identity tests.
+        - "**/test-vectors/round-trip/**"
       # `pnpm exec` resolves the workspace-local oxfmt binary cross-platform —
       # lefthook does not add node_modules/.bin to PATH.
       run: pnpm exec oxfmt {staged_files}

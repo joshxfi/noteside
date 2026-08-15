@@ -662,6 +662,221 @@ body {
 .av-cm .tiptap li + li {
   margin-top: calc(var(--editor-size) * 0.15);
 }
+/* Task lists (TaskList/TaskItem) — checkbox + strikethrough-when-done, the
+   .cm-task-box / .cm-task-done spec on real list items. */
+.av-cm .tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.av-cm .tiptap ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.55em;
+  align-items: baseline;
+}
+.av-cm .tiptap ul[data-type="taskList"] li > label {
+  flex: none;
+}
+.av-cm .tiptap ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 0.85em;
+  height: 0.85em;
+  margin: 0;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.av-cm .tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--ink-faint), transparent 40%);
+}
+
+/* Tables — the .cm-mdtable spec on real <table> nodes. The wrapper scrolls so
+   a wide table never scrolls the page sideways. */
+.av-cm .tiptap .tableWrapper {
+  overflow-x: auto;
+  padding: 4px 0;
+}
+.av-cm .tiptap table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  line-height: 1.55;
+  width: auto;
+}
+.av-cm .tiptap th,
+.av-cm .tiptap td {
+  border: 1px solid var(--rule);
+  padding: 4px 12px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 3em;
+  position: relative;
+}
+.av-cm .tiptap th {
+  background: var(--paper-2);
+  font-weight: 600;
+}
+.av-cm .tiptap th p,
+.av-cm .tiptap td p {
+  margin: 0;
+}
+.av-cm .tiptap .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--sel);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.av-cm .tiptap .column-resize-handle {
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  cursor: col-resize;
+}
+
+/* Code blocks — .cm-codeblock reborn as a NodeView (code-block.ts): lang label
+   top-left, copy button top-right, lowlight tokens on hljs-* classes. */
+.av-cm .tiptap pre.av-codeblock {
+  padding: 30px 14px 12px;
+}
+.av-cm .tiptap .av-code-lang {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  color: var(--ink-faint);
+  font-size: 0.85em;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+.av-cm .tiptap .av-code-copy {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 1px 7px;
+  cursor: pointer;
+  opacity: 0.65;
+}
+.av-cm .tiptap .av-code-copy:hover {
+  opacity: 1;
+  color: var(--ink);
+}
+.av-cm .tiptap .av-code-copy.is-copied {
+  color: var(--accent);
+  border-color: var(--accent);
+  opacity: 1;
+}
+/* Fenced-code token colors — the restrained two-tone noteHighlight spec:
+   accent keywords, soft strings, faint comments (base16 syntax slots stay v2). */
+.av-cm .tiptap .hljs-comment,
+.av-cm .tiptap .hljs-quote {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+.av-cm .tiptap .hljs-string,
+.av-cm .tiptap .hljs-regexp,
+.av-cm .tiptap .hljs-addition {
+  color: var(--ink-soft);
+}
+.av-cm .tiptap .hljs-keyword,
+.av-cm .tiptap .hljs-selector-tag,
+.av-cm .tiptap .hljs-built_in,
+.av-cm .tiptap .hljs-meta {
+  color: var(--accent);
+}
+.av-cm .tiptap .hljs-number,
+.av-cm .tiptap .hljs-literal,
+.av-cm .tiptap .hljs-symbol {
+  color: color-mix(in oklab, var(--accent), var(--ink) 45%);
+}
+.av-cm .tiptap .hljs-title,
+.av-cm .tiptap .hljs-class,
+.av-cm .tiptap .hljs-function,
+.av-cm .tiptap .hljs-type {
+  font-weight: 600;
+}
+
+/* Math (KaTeX) — selected node gets the accent ring; block math centers. */
+.av-cm .tiptap .tiptap-mathematics-render {
+  border-radius: 4px;
+  padding: 0 2px;
+}
+.av-cm .tiptap .tiptap-mathematics-render.inline-math-node {
+  display: inline-block;
+}
+.av-cm .tiptap div[data-type="blockMath"] {
+  text-align: center;
+  padding: 8px 0;
+}
+.av-cm .tiptap .ProseMirror-selectednode.tiptap-mathematics-render,
+.av-cm .tiptap div[data-type="blockMath"].ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Images — attrs keep the written src; display resolves via asset protocol.
+   Broken/missing files fall back to alt text, kept legible. */
+.av-cm .tiptap img.av-image {
+  max-width: 100%;
+  border-radius: 8px;
+  font-style: italic;
+  color: var(--ink-faint);
+}
+.av-cm .tiptap img.av-image.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Callouts — GFM alerts (> [!NOTE] …) as tinted blocks; the kind label is
+   CSS-generated so the markdown marker stays out of the editable content. */
+.av-cm .tiptap .av-callout {
+  border-left: 2px solid var(--callout, var(--accent));
+  background: color-mix(in oklab, var(--callout, var(--accent)) 7%, transparent);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+  margin: calc(var(--editor-size) * 0.2) 0;
+}
+.av-cm .tiptap .av-callout::before {
+  content: attr(data-callout);
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.7em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--callout, var(--accent));
+  margin-bottom: 2px;
+  user-select: none;
+}
+.av-cm .tiptap .av-callout > p {
+  margin: 0;
+}
+.av-cm .tiptap .av-callout > * + * {
+  margin-top: calc(var(--editor-size) * 0.25);
+}
+.av-cm .tiptap .av-callout[data-callout="note"] {
+  --callout: var(--accent);
+}
+.av-cm .tiptap .av-callout[data-callout="tip"] {
+  --callout: color-mix(in oklab, var(--accent), var(--ink) 30%);
+}
+.av-cm .tiptap .av-callout[data-callout="important"] {
+  --callout: color-mix(in oklab, var(--accent), var(--danger) 35%);
+}
+.av-cm .tiptap .av-callout[data-callout="warning"],
+.av-cm .tiptap .av-callout[data-callout="caution"] {
+  --callout: var(--danger);
+}
+
 /* Raw HTML blocks survive as opaque source chips (html-passthrough.ts) —
    shown as source, never executed. */
 .av-cm .tiptap .av-htmlblock {

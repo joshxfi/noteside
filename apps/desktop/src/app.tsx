@@ -1524,6 +1524,7 @@ export function App() {
                     chordOverrides={cfg.chords}
                     escMap={cfg.escMap}
                     gotoLine={s.gotoLine}
+                    notebookRoot={notebookPath ?? undefined}
                     refocusToken={refocus}
                     onChange={(text, dirty) => session.change(text, dirty)}
                     onSave={(text) => session.save(text)}

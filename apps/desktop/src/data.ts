@@ -34,6 +34,44 @@ Open the Keymap note — or press ⌘P — for the full reference.
 Everything is a keystroke away, and everything clicks.`,
   },
   {
+    id: "rich-blocks",
+    title: "Rich blocks",
+    path: "rich-blocks.md",
+    tag: "showcase",
+    updated: "30m ago",
+    git: null,
+    frecency: 90,
+    body: `# Rich blocks
+
+Everything here is a real block — click into any of it and just type.
+
+| Feature | Status |
+| :------ | -----: |
+| Tables  | ready  |
+| Math    | ready  |
+
+- [ ] an open task
+- [x] a finished task
+
+Inline math like $e^{i\\pi} + 1 = 0$ sits in the text, and display math
+gets its own block:
+
+$$
+\\int_0^1 x^2 \\, dx = \\frac{1}{3}
+$$
+
+\`\`\`ts
+const answer = compute(42);
+export default answer;
+\`\`\`
+
+> [!NOTE]
+> Callouts are stored as plain GFM alerts, so they degrade gracefully
+> in any other markdown app.
+
+> A plain quote stays a quote.`,
+  },
+  {
     id: "keymap",
     title: "Keymap",
     path: "keymap.md",
