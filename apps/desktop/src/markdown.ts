@@ -1,13 +1,11 @@
-// markdown.ts — pure block + inline models for the live-preview markdown
-// renderer. Like links.ts, this is kept free of CodeMirror/React so the table
-// scanner and the cell tokenizer are unit-testable (markdown.test.ts) and
-// benchable (perf.bench.ts) in node. The editor side (editor/block-preview.ts)
-// maps these line-indexed blocks onto document positions and widgets.
+// markdown.ts — pure line-level markdown models. Like links.ts, this is kept
+// free of the editor engine so everything here is unit-testable
+// (markdown.test.ts, goto.test.ts) and benchable (perf.bench.ts) in node.
 //
-// The scanner is line-based on purpose: it re-derives every block from the raw
-// lines in one pass, so the result is deterministic, independent of lezer's
-// incremental parse state, and cheap enough to run on every document change
-// (see the scanBlocks bench).
+// Two consumers: editor/markdown-io.ts splits frontmatter off with
+// scanFrontmatter before text reaches the block editor, and editor/goto.ts
+// maps grep-hit source lines onto ProseMirror doc children with scanTopBlocks
+// (whose block segmentation is pinned against the real markdown parser).
 
 export type Align = "left" | "center" | "right" | null;
 
@@ -19,30 +17,6 @@ export interface TableCell {
   from: number;
 }
 
-export interface TableRow {
-  /** 0-based line index within the scanned text. */
-  line: number;
-  cells: TableCell[];
-}
-
-export interface TableBlock {
-  /** 0-based inclusive line range: header row … last body row. */
-  fromLine: number;
-  toLine: number;
-  align: Align[];
-  header: TableRow;
-  rows: TableRow[];
-}
-
-export interface FenceBlock {
-  /** 0-based inclusive line range: opening fence … closing fence (or the last
-   *  scanned line when the fence is never closed). */
-  fromLine: number;
-  toLine: number;
-  closed: boolean;
-  lang: string;
-}
-
 /** The leading `---` YAML block `parse_meta` reads note metadata out of. It is
  *  NOT markdown — lezer has no concept of it and would otherwise parse the
  *  fences as a thematic break plus a setext heading. Only the range matters:
@@ -51,15 +25,6 @@ export interface FrontmatterBlock {
   /** 0-based inclusive line range: opening `---` … closing `---`. */
   fromLine: number;
   toLine: number;
-}
-
-export interface MarkdownBlocks {
-  tables: TableBlock[];
-  fences: FenceBlock[];
-  /** 0-based indexes of `>`-prefixed blockquote lines. */
-  quotes: number[];
-  /** The leading frontmatter block, or null when the note has none. */
-  frontmatter: FrontmatterBlock | null;
 }
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
@@ -144,197 +109,6 @@ export function frontmatterEndLine(lineCount: number, at: (i: number) => string)
     if (at(i).trimEnd() === "---") return i;
   }
   return -1;
-}
-
-/** One pass over the note's lines: pipe tables (header + delimiter + rows),
- *  fenced code blocks, and blockquote lines. Table detection is skipped inside
- *  fences, on quote lines, and on list items; rows run until a blank line, a
- *  quote, a fence opener, or a line without an unescaped pipe. A leading
- *  frontmatter block is recognized separately and excluded from all three scans
- *  (its `key: value` lines are metadata, not markdown). */
-export function scanBlocks(lines: readonly string[]): MarkdownBlocks {
-  const tables: TableBlock[] = [];
-  const fences: FenceBlock[] = [];
-  const quotes: number[] = [];
-  const frontmatter = scanFrontmatter(lines);
-  let fence: { start: number; marker: string; lang: string } | null = null;
-  for (let i = frontmatter ? frontmatter.toLine + 1 : 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (fence) {
-      const m = FENCE.exec(line);
-      if (
-        m &&
-        m[1][0] === fence.marker[0] &&
-        m[1].length >= fence.marker.length &&
-        m[2].trim() === ""
-      ) {
-        fences.push({ fromLine: fence.start, toLine: i, closed: true, lang: fence.lang });
-        fence = null;
-      }
-      continue;
-    }
-    if (line.length === 0) continue;
-    if (line.includes("`") || line.includes("~")) {
-      const m = FENCE.exec(line);
-      // a backtick fence's info string may not contain a backtick (~~~ may)
-      if (m && !(m[1][0] === "`" && m[2].includes("`"))) {
-        fence = { start: i, marker: m[1], lang: (m[2].trim().split(/\s+/)[0] ?? "").trim() };
-        continue;
-      }
-    }
-    if (QUOTE.test(line)) {
-      quotes.push(i);
-      continue;
-    }
-    if (!line.includes("|") || indentOf(line) > 3 || i + 1 >= lines.length) continue;
-    if (LIST_LEAD.test(line)) continue;
-    const align = parseDelimRow(lines[i + 1]);
-    if (!align) continue;
-    const header = splitRow(line);
-    if (!header || header.length !== align.length) continue;
-    const rows: TableRow[] = [];
-    let j = i + 2;
-    for (; j < lines.length; j++) {
-      const l = lines[j];
-      if (l.trim() === "" || QUOTE.test(l) || FENCE.test(l) || !l.includes("|")) break;
-      const cells = splitRow(l);
-      if (!cells) break;
-      rows.push({ line: j, cells });
-    }
-    tables.push({ fromLine: i, toLine: j - 1, align, header: { line: i, cells: header }, rows });
-    i = j - 1;
-  }
-  if (fence) {
-    fences.push({
-      fromLine: fence.start,
-      toLine: lines.length - 1,
-      closed: false,
-      lang: fence.lang,
-    });
-  }
-  return { tables, fences, quotes, frontmatter };
-}
-
-// ── inline tokenizer ───────────────────────────────────────────────────────
-// Just enough inline markdown for rendered table cells: code spans, strong,
-// em, strikethrough, and http(s)/mailto links. Everything the tokenizer doesn't
-// recognize stays literal text — cells never lose content.
-
-export type Inline =
-  | { t: "text"; text: string }
-  | { t: "code"; text: string }
-  | { t: "strong"; children: Inline[] }
-  | { t: "em"; children: Inline[] }
-  | { t: "strike"; children: Inline[] }
-  | { t: "link"; text: string; url: string };
-
-// Sticky regex, lastIndex set before every exec. parseInline recurses, but each
-// exec completes before the recursive call, so the shared state is safe.
-const LINK_Y = /\[([^\]\n]*)\]\(([^()\s]+)\)/y;
-const URL_SCHEME = /^(?:https?|mailto):/i;
-const MAX_DEPTH = 6;
-
-const isSpace = (ch: string | undefined): boolean => ch === undefined || /\s/.test(ch);
-const isWordy = (ch: string | undefined): boolean => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
-
-/** Find the closing delimiter for an emphasis run: the next `mark` whose
- *  preceding char isn't whitespace (a `* ` can't close). */
-function findClose(src: string, mark: string, from: number): number {
-  let at = src.indexOf(mark, from);
-  while (at !== -1) {
-    if (!isSpace(src[at - 1])) return at;
-    at = src.indexOf(mark, at + mark.length);
-  }
-  return -1;
-}
-
-export function parseInline(src: string, depth = 0): Inline[] {
-  const out: Inline[] = [];
-  let text = "";
-  const flush = () => {
-    if (text) {
-      out.push({ t: "text", text });
-      text = "";
-    }
-  };
-  const wrap = (t: "strong" | "em" | "strike", inner: string) => {
-    flush();
-    out.push({ t, children: parseInline(inner, depth + 1) });
-  };
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (ch === "\\" && i + 1 < src.length) {
-      text += src[i + 1];
-      i++;
-      continue;
-    }
-    if (depth < MAX_DEPTH) {
-      if (ch === "`") {
-        let run = 1;
-        while (src[i + run] === "`") run++;
-        const close = src.indexOf("`".repeat(run), i + run);
-        if (close !== -1) {
-          let code = src.slice(i + run, close);
-          // GFM: strip one space from both ends when both are present
-          if (code.length > 1 && code.startsWith(" ") && code.endsWith(" "))
-            code = code.slice(1, -1);
-          flush();
-          out.push({ t: "code", text: code });
-          i = close + run - 1;
-          continue;
-        }
-      } else if (ch === "[" || (ch === "!" && src[i + 1] === "[")) {
-        const at = ch === "!" ? i + 1 : i;
-        LINK_Y.lastIndex = at;
-        const m = LINK_Y.exec(src);
-        if (m) {
-          flush();
-          // images render as their alt text; non-web link targets keep just
-          // the label (the widget can't open a relative path anyway)
-          if (ch === "!" || !URL_SCHEME.test(m[2])) out.push({ t: "text", text: m[1] });
-          else out.push({ t: "link", text: m[1], url: m[2] });
-          i = at + m[0].length - 1;
-          continue;
-        }
-      } else if (ch === "*" || ch === "_" || ch === "~") {
-        const doubled = src[i + 1] === ch;
-        // openers need a following non-space; intraword _ never opens
-        const open = !isSpace(src[i + (doubled ? 2 : 1)]) && !(ch === "_" && isWordy(src[i - 1]));
-        if (open && ch !== "~" && doubled && src[i + 2] === ch) {
-          // ***bold italic*** — the triple run closes on the next triple
-          const close = findClose(src, ch.repeat(3), i + 3);
-          if (close !== -1) {
-            flush();
-            out.push({
-              t: "strong",
-              children: [{ t: "em", children: parseInline(src.slice(i + 3, close), depth + 1) }],
-            });
-            i = close + 2;
-            continue;
-          }
-        }
-        if (open && doubled) {
-          const close = findClose(src, ch + ch, i + 2);
-          if (close !== -1) {
-            wrap(ch === "~" ? "strike" : "strong", src.slice(i + 2, close));
-            i = close + 1;
-            continue;
-          }
-        }
-        if (open && !doubled && ch !== "~") {
-          const close = findClose(src, ch, i + 1);
-          if (close !== -1) {
-            wrap("em", src.slice(i + 1, close));
-            i = close;
-            continue;
-          }
-        }
-      }
-    }
-    text += ch;
-  }
-  flush();
-  return out;
 }
 
 /** A top-level block's 0-based inclusive source-line range. Implicit empty

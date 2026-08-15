@@ -34,7 +34,13 @@ describe("config serialize/parse round-trip", () => {
       chords: { find: "Ctrl-j", grep: "" },
       extraLines: [],
     };
-    expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual(cfg);
+    // livePreview/relativeNumbers are accepted-but-inert (block editor): the
+    // serializer no longer emits them, so a round-trip lands on the defaults.
+    expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual({
+      ...cfg,
+      livePreview: CONFIG_DEFAULTS.livePreview,
+      relativeNumbers: CONFIG_DEFAULTS.relativeNumbers,
+    });
   });
 
   it("round-trips bind lines (rebind + unbind)", () => {
@@ -253,5 +259,32 @@ describe("isFirstLaunch", () => {
   it("is false for an existing user with a remembered notebook", () => {
     expect(isFirstLaunch(null, "/notes")).toBe(false);
     expect(isFirstLaunch({ vimMode: true }, "/notes")).toBe(false);
+  });
+});
+
+describe("accepted-but-inert keys (block editor)", () => {
+  it("all legacy spellings still parse without landing in extraLines", () => {
+    const text = [
+      "set live-preview = off",
+      "set preview      = off",
+      "set relative-numbers = on",
+      "set relativenumber   = on",
+      "set rnu              = on",
+    ].join("\n");
+    const parsed = parseConfig(text, CONFIG_DEFAULTS);
+    expect(parsed.extraLines).toEqual([]);
+    expect(unrecognizedDirectives(parsed)).toEqual([]);
+    // the values ARE captured (storage back-compat), just not re-emitted
+    expect(parsed.livePreview).toBe(false);
+    expect(parsed.relativeNumbers).toBe(true);
+    expect(serializeConfig(parsed)).not.toContain("live-preview");
+    expect(serializeConfig(parsed)).not.toContain("relative-numbers");
+  });
+
+  it("vim :map lines round-trip verbatim even though the subset ignores them", () => {
+    const cfg = parseConfig("nmap <Space>w :w<CR>\nimap jj <Esc>", CONFIG_DEFAULTS);
+    expect(cfg.keymaps).toContain("nmap <Space>w :w<CR>");
+    const again = parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS);
+    expect(again.keymaps).toEqual(cfg.keymaps);
   });
 });
