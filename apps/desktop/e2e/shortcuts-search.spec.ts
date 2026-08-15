@@ -5,7 +5,7 @@ import { boot, expect, test } from "./fixtures";
 test.describe("keyboard shortcuts search", () => {
   test("typing filters the list and Enter+chord rebinds the match", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
 
     await page.keyboard.press("ControlOrMeta+/");
     await expect(page.locator(".cheat-panel")).toBeVisible();
@@ -49,7 +49,7 @@ test.describe("keyboard shortcuts search", () => {
     await page.keyboard.press("a");
 
     await expect(page.locator(".av-item")).toHaveCount(before);
-    await expect(page.locator(".cm-content")).toContainText("a");
+    await expect(page.locator(".av-cm .tiptap")).toContainText("a");
   });
 
   test("unsafe persisted overrides are removed on boot", async ({ page }) => {
@@ -65,12 +65,12 @@ test.describe("keyboard shortcuts search", () => {
     await page.keyboard.press("Escape");
     await page.keyboard.press("a");
     await expect(page.locator(".av-item")).toHaveCount(before);
-    await expect(page.locator(".cm-content")).toContainText("a");
+    await expect(page.locator(".av-cm .tiptap")).toContainText("a");
   });
 
   test("a no-match query shows the empty state; Escape closes", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
     await page.keyboard.press("ControlOrMeta+/");
     await page.locator(".cheat-search-input").waitFor();
 

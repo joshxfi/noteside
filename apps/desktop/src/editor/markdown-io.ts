@@ -35,11 +35,18 @@ export function splitNote(text: string): NoteIO {
   const trailingNewline = lf.endsWith("\n");
   const lines = lf.split("\n");
   // split("\n") yields a final "" entry for a trailing newline — that empty tail
-  // is an artifact of the split, not a source line.
+  // is an artifact of the split, not a source line. The body therefore never
+  // carries the final newline; joinNote restores it from `trailingNewline`.
   if (trailingNewline) lines.pop();
   const fm = scanFrontmatter(lines);
   if (!fm) {
-    return { frontmatter: "", frontmatterLines: 0, body: lf, crlf, trailingNewline };
+    return {
+      frontmatter: "",
+      frontmatterLines: 0,
+      body: lines.join("\n"),
+      crlf,
+      trailingNewline,
+    };
   }
   const frontmatterLines = fm.toLine + 1;
   const frontmatter = lines.slice(0, frontmatterLines).join("\n") + "\n";
@@ -48,14 +55,17 @@ export function splitNote(text: string): NoteIO {
 }
 
 /** Re-attach the held frontmatter to a (possibly re-serialized) body and restore
- *  the file's own line-ending + trailing-newline shape. */
+ *  the file's own line-ending + trailing-newline shape. The serializer never
+ *  emits a final newline (any trailing "\n"s in `body` are real blank lines),
+ *  so the terminator is APPENDED — except for a frontmatter-only file, whose
+ *  held block already ends with it. */
 export function joinNote(
   io: Pick<NoteIO, "frontmatter" | "crlf" | "trailingNewline">,
   body: string,
 ): string {
   let out = io.frontmatter + body;
   if (io.trailingNewline) {
-    if (!out.endsWith("\n")) out += "\n";
+    if (body !== "" || io.frontmatter === "") out += "\n";
   } else if (out.endsWith("\n")) {
     out = out.slice(0, -1);
   }

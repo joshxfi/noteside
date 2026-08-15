@@ -1,20 +1,27 @@
 import { boot, expect, test } from "./fixtures";
 
 // Duplicate + Rename are native-menu items backed by real commands; the menu is
-// native (Tauri-only), so these drive the command path (:dup / :rename) that the
-// web build can exercise — same handlers the native menu dispatches. (Reveal opens
+// native (Tauri-only), so these drive the command-search path that the web
+// build can exercise — same handlers the native menu dispatches. (Reveal opens
 // a file manager and no-ops in the mock, so it isn't covered here.)
+
+/** Run a (non-danger) command by title through the searchable command palette. */
+const runCommand = async (page: import("@playwright/test").Page, title: string) => {
+  await page.keyboard.press("ControlOrMeta+Shift+p");
+  await expect(page.locator(".fnd-input")).toBeFocused();
+  await page.keyboard.type(title);
+  await page.keyboard.press("Enter");
+};
+
 test.describe("duplicate note", () => {
-  test(":dup copies the active note to a '… copy' and opens it", async ({ page }) => {
-    await boot(page, { vimMode: true });
-    await page.locator(".cm-content").click();
+  test("duplicate copies the active note to a '… copy' and opens it", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-cm .tiptap").click();
 
     const activeTitle = await page.locator(".av-item.is-active .av-item-titletext").innerText();
     const before = await page.locator(".av-item").count();
 
-    await page.keyboard.press(":");
-    await page.keyboard.type("dup");
-    await page.keyboard.press("Enter");
+    await runCommand(page, "duplicate");
 
     await expect(page.locator(".av-toast")).toContainText("note duplicated");
     await expect(page.locator(".av-item")).toHaveCount(before + 1);
@@ -28,35 +35,28 @@ test.describe("duplicate note", () => {
     );
   });
 
-  test(":dup includes edits made immediately before duplication", async ({ page }) => {
-    await boot(page, { vimMode: true });
-    await page.locator(".cm-content").click();
-    await page.keyboard.press("G");
-    await page.keyboard.press("A");
+  test("duplicate includes edits made immediately before duplication", async ({ page }) => {
+    await boot(page);
+    // Caret to the end of the doc, then type an unsaved sentinel.
+    await page.locator(".av-cm .tiptap").click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowRight");
     await page.keyboard.type(" UNSAVED_DUPLICATE_SENTINEL");
-    await page.keyboard.press("Escape");
-    await page.keyboard.press(":");
-    await page.keyboard.type("dup");
-    await page.keyboard.press("Enter");
+
+    await runCommand(page, "duplicate");
 
     await expect(page.locator(".av-toast")).toContainText("note duplicated");
-    // The duplicate opens with the caret at the top; the sentinel sits on the
-    // LAST line, which CodeMirror may not render yet — jump there first.
-    await page.locator(".cm-content").click();
-    await page.keyboard.press("G");
-    await expect(page.locator(".cm-content")).toContainText("UNSAVED_DUPLICATE_SENTINEL");
+    await expect(page.locator(".av-cm .tiptap")).toContainText("UNSAVED_DUPLICATE_SENTINEL");
   });
 });
 
 test.describe("rename note", () => {
-  test(":rename opens a prefilled prompt; confirming retitles the note", async ({ page }) => {
-    await boot(page, { vimMode: true });
-    await page.locator(".cm-content").click();
+  test("rename opens a prefilled prompt; confirming retitles the note", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-cm .tiptap").click();
     const before = await page.locator(".av-item").count();
 
-    await page.keyboard.press(":");
-    await page.keyboard.type("rename");
-    await page.keyboard.press("Enter");
+    await runCommand(page, "rename");
 
     // The prompt opens with the current title pre-selected.
     const input = page.locator(".cfm-input");
@@ -76,13 +76,11 @@ test.describe("rename note", () => {
   });
 
   test("cancelling the rename prompt changes nothing", async ({ page }) => {
-    await boot(page, { vimMode: true });
-    await page.locator(".cm-content").click();
+    await boot(page);
+    await page.locator(".av-cm .tiptap").click();
     const activeTitle = await page.locator(".av-item.is-active .av-item-titletext").innerText();
 
-    await page.keyboard.press(":");
-    await page.keyboard.type("rename");
-    await page.keyboard.press("Enter");
+    await runCommand(page, "rename");
     await expect(page.locator(".cfm-input")).toBeVisible();
     await page.keyboard.press("Escape");
 

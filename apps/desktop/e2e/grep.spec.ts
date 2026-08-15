@@ -3,7 +3,7 @@ import { boot, expect, test } from "./fixtures";
 test.describe("content search", () => {
   test("greps note bodies and opens a hit", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
 
     // Open the finder with Mod-p and switch to the content tab, rather than the
     // Mod-Shift-f chord (which collides with CodeMirror's in-note search on Linux).

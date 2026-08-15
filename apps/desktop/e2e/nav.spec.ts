@@ -9,7 +9,7 @@ test.describe("note navigation", () => {
     await expect(file).toContainText("Keymap");
 
     // Mod-j → next note: the open note changes (order-agnostic assertion).
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
     await page.keyboard.press("ControlOrMeta+j");
     await expect(file).not.toContainText("Keymap");
   });

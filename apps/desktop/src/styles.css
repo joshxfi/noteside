@@ -522,16 +522,163 @@ body {
   outline: none;
   background: var(--paper);
 }
-/* CodeMirror host fills the editor area above the status bar */
+/* Editor host fills the area above the status bar; the scroll wrapper is the
+   EditorContent div (className av-editor-scroll), the .tiptap contenteditable
+   is the centered content column — the same split CM's scroller/content had. */
 .av-cm {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.av-cm .cm-editor {
+.av-editor-scroll {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+}
+.av-cm .tiptap {
+  min-height: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px 36vh;
+  outline: none;
+  font-family: var(--editor-font);
+  font-size: var(--editor-size);
+  line-height: var(--editor-lh);
+  color: var(--ink);
+  caret-color: var(--accent);
+}
+.av-cm .tiptap ::selection,
+.av-cm .tiptap::selection {
+  background: var(--sel);
+}
+
+/* ── editor: blocks ─────────────────────────────────────────────
+   The old editor/theme.ts noteHighlight/nsTheme tables, transcribed onto real
+   block elements. Everything is var()-driven so themes re-skin live — and
+   unlike the CM StyleModule era, these ARE hot-reloadable. */
+.av-cm .tiptap > * {
+  margin: 0;
+}
+.av-cm .tiptap > * + * {
+  margin-top: calc(var(--editor-size) * 0.45);
+}
+.av-cm .tiptap h1,
+.av-cm .tiptap h2,
+.av-cm .tiptap h3,
+.av-cm .tiptap h4,
+.av-cm .tiptap h5,
+.av-cm .tiptap h6 {
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.35;
+}
+.av-cm .tiptap > h1 + *,
+.av-cm .tiptap > h2 + *,
+.av-cm .tiptap > h3 + * {
+  margin-top: calc(var(--editor-size) * 0.3);
+}
+.av-cm .tiptap h1 {
+  font-size: 1.5em;
+}
+.av-cm .tiptap h2 {
+  font-size: 1.3em;
+}
+.av-cm .tiptap h3 {
+  font-size: 1.15em;
+}
+.av-cm .tiptap h4,
+.av-cm .tiptap h5,
+.av-cm .tiptap h6 {
+  font-size: 1em;
+}
+.av-cm .tiptap strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+.av-cm .tiptap s {
+  text-decoration: line-through;
+}
+.av-cm .tiptap a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent), transparent 55%);
+  text-underline-offset: 3px;
+}
+.av-cm .tiptap a:hover {
+  text-decoration-color: var(--accent);
+}
+/* Plain click places the caret; follow is Mod-click. While Mod is held the
+   pointer affordance turns honest (is-mod toggled by link-click.ts). */
+.av-editor.is-mod .tiptap a {
+  cursor: pointer;
+}
+.av-cm .tiptap code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--ink-soft);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.av-cm .tiptap pre {
+  font-family: var(--mono);
+  font-size: calc(var(--editor-size) * 0.82);
+  line-height: 1.6;
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  position: relative;
+}
+.av-cm .tiptap pre code {
+  font-size: inherit;
+  color: var(--ink);
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+}
+.av-cm .tiptap blockquote {
+  border-left: 2px solid color-mix(in oklab, var(--accent), transparent 45%);
+  padding-left: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.av-cm .tiptap hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: calc(var(--editor-size) * 0.6) 0;
+}
+.av-cm .tiptap ul,
+.av-cm .tiptap ol {
+  padding-left: 1.4em;
+}
+.av-cm .tiptap li::marker {
+  color: var(--ink-faint);
+}
+.av-cm .tiptap li > p {
+  margin: 0;
+}
+.av-cm .tiptap li + li {
+  margin-top: calc(var(--editor-size) * 0.15);
+}
+
+/* The plain-text config buffer (~/.notesiderc) — a bare textarea in the same
+   editor shell. Mono on purpose: it's a dotfile, not prose. */
+.av-plain {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: calc(var(--editor-size) * 0.8);
+  line-height: 1.8;
+  padding: 32px 40px;
+  caret-color: var(--accent);
 }
 .av-scroller {
   flex: 1;
@@ -1785,39 +1932,10 @@ html.tauri.macos .av-titlebar {
   padding-left: 84px;
 }
 
-/* ── CodeMirror: force the vim block cursor to the accent (override the
-      package default #ff9696) and use the accent for the bar caret too ── */
-.av-cm .cm-fat-cursor,
-.av-cm .cm-fat-cursor.cm-cursor-primary {
-  background: var(--accent) !important;
-  border-color: var(--accent) !important;
-}
-.av-cm .cm-fat-cursor.cm-cursor-secondary {
-  background: color-mix(in oklab, var(--accent), transparent 55%) !important;
-}
-.av-cm .cm-cursor {
-  border-left-color: var(--accent);
-}
-/* Caret shape from cfg.cursor (data-cursor on .av-editor). Scoped with
-   :not(.cm-fat-cursor) so vim's intrinsic normal/visual block stays a block —
-   this governs the insert-mode and non-vim caret only. */
-.av-editor[data-cursor="bar"] .cm-cursor:not(.cm-fat-cursor) {
-  border-left: 2px solid var(--accent);
-  border-bottom: none;
-  background: transparent;
-}
-.av-editor[data-cursor="underline"] .cm-cursor:not(.cm-fat-cursor) {
-  border-left: none;
-  border-bottom: 2px solid var(--accent);
-  background: transparent;
-  width: 0.55em;
-}
-.av-editor[data-cursor="block"] .cm-cursor:not(.cm-fat-cursor) {
-  border-left: none;
-  border-bottom: none;
-  background: color-mix(in oklab, var(--accent), transparent 55%);
-  width: 0.55em;
-}
+/* Caret rendering: the native caret carries insert/non-vim mode (caret-color
+   set on .tiptap above). The vim layer's block/underline decoration caret
+   (.av-caret, keyed off .av-editor[data-cursor] + data-blink) ships with the
+   vim module. */
 
 /* ── legibility: bump the smallest UI fonts (settings panel, status, meta) ── */
 .set-head p {

@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import { Selection } from "@tiptap/pm/state";
 import type { AppCommand, ChordOverrides, Command } from "./commands";
 import { buildExtensions } from "./extensions";
 import { joinNote, type NoteIO, splitNote } from "./markdown-io";
@@ -191,7 +192,15 @@ function RichEditor(props: EditorProps) {
     }),
     content: io.body,
     contentType: "markdown",
-    autofocus: "start",
+    // Focus is dispatched from onCreate below, NOT via the autofocus option:
+    // Tiptap runs autofocus in a create-time setTimeout that can race a rapid
+    // destroy/recreate (note switch) into "Applying a mismatched transaction".
+    autofocus: false,
+    // Create the editor in an effect, not during render: render-phase creation
+    // fires onCreate's setState before mount (React 19 warns) and a discarded
+    // concurrent render's instance then crashes the NEXT mount with
+    // "Applying a mismatched transaction".
+    immediatelyRender: false,
     shouldRerenderOnTransaction: false,
     onCreate({ editor: ed }) {
       editorRef.current = ed;
@@ -217,6 +226,12 @@ function RichEditor(props: EditorProps) {
         pct: "All",
         dirty: propsRef.current.initialText !== savedRef.current,
       });
+      // Selection first, DOM focus second — never commands.focus() here: its
+      // view.focus() runs MID-command, and WebKit fires selectionchange
+      // synchronously, dispatching a repair transaction that stales the
+      // command's own ("Applying a mismatched transaction").
+      ed.view.dispatch(ed.state.tr.setSelection(Selection.atStart(ed.state.doc)));
+      ed.view.focus();
       setCursorStat(ed);
     },
     onUpdate({ editor: ed, transaction }) {
@@ -244,7 +259,10 @@ function RichEditor(props: EditorProps) {
   editorRef.current = editor;
 
   useEffect(() => {
-    editorRef.current?.commands.focus();
+    // Plain DOM focus — the selection is wherever the user left it, and a
+    // commands.focus() dispatch here has the same WebKit reentrancy trap as
+    // the onCreate one above.
+    editorRef.current?.view.focus();
   }, [props.refocusToken]);
 
   // A save landed (savedText caught up with what we serialized): advance the
@@ -261,7 +279,7 @@ function RichEditor(props: EditorProps) {
   return (
     <div className="av-editor" data-cursor={props.cursor}>
       <div className="av-cm">
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} className="av-editor-scroll" />
       </div>
       <StatusBar
         modeClass={props.vimMode ? "mode-" + mode : "mode-text"}

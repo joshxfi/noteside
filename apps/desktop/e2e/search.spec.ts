@@ -3,7 +3,7 @@ import { boot, expect, test } from "./fixtures";
 test.describe("finder", () => {
   test("Mod-p finds a note by title and opens it", async ({ page }) => {
     await boot(page, { vimMode: false });
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
 
     await page.keyboard.press("ControlOrMeta+p");
     await page.locator(".fnd-panel").waitFor();
