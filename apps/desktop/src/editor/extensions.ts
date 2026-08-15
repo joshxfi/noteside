@@ -9,11 +9,33 @@ import { Extension } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { Chords, type ChordsOptions } from "./chords";
+import { HtmlBlock } from "./html-passthrough";
 
 export interface ExtensionOpts {
   chords: ChordsOptions;
   /** Read live (ref) so a settings change needs no editor reconfigure. */
   getTabWidth: () => number;
+}
+
+/** The schema-bearing extension set — the exact configuration the round-trip
+ *  tests exercise (round-trip.test.ts builds its MarkdownManager from THIS, so
+ *  a config drift between app and test is impossible). Editor-behavior
+ *  extensions (chords, Tab) stack on top in buildExtensions. */
+export function markdownExtensions() {
+  return [
+    StarterKit.configure({
+      link: {
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+      },
+    }),
+    Markdown.configure({
+      indentation: { style: "space", size: 2 },
+      markedOptions: { gfm: true },
+    }),
+    HtmlBlock,
+  ];
 }
 
 // Tab keeps focus inside the editor (the CM editor's focus-trap contract):
@@ -42,19 +64,5 @@ function tabKey(getTabWidth: () => number) {
 }
 
 export function buildExtensions(opts: ExtensionOpts) {
-  return [
-    StarterKit.configure({
-      link: {
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true,
-      },
-    }),
-    Markdown.configure({
-      indentation: { style: "space", size: 2 },
-      markedOptions: { gfm: true },
-    }),
-    Chords.configure(opts.chords),
-    tabKey(opts.getTabWidth),
-  ];
+  return [...markdownExtensions(), Chords.configure(opts.chords), tabKey(opts.getTabWidth)];
 }
