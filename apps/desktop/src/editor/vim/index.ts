@@ -51,14 +51,25 @@ function vertical(
     if (goal.x === null) goal.x = coords.left;
     const h = Math.max(8, coords.bottom - coords.top);
     let moved: number | null = null;
+    let boundary: number | null = null;
     for (const dy of [h * 0.75, h * 1.5, h * 2.5, h * 4, h * 8]) {
       const y = dir === 1 ? coords.bottom + dy : coords.top - dy;
       const next = view.posAtCoords({ left: goal.x, top: y });
-      if (next && next.pos !== head) {
+      if (!next) continue;
+      const $next = view.state.doc.resolve(next.pos);
+      // Inside a textblock at the goal column — the real target.
+      if ($next.parent.isTextblock && next.pos !== head) {
         moved = next.pos;
         break;
       }
+      // A probe in the leading BETWEEN blocks returns the doc-level boundary
+      // position. Keep it as a fallback, normalized with the MOTION'S bias —
+      // an unbiased near() snaps forward, which is back ONTO the same line
+      // when moving up: k from an empty trailing block used to go nowhere.
+      const norm = TextSelection.near($next, dir).head;
+      if (norm !== head && boundary === null) boundary = norm;
     }
+    if (moved === null) moved = boundary;
     if (moved === null) break;
     head = moved;
   }
@@ -80,7 +91,7 @@ function vertical(
     return;
   }
   view.dispatch(
-    state.tr.setSelection(TextSelection.near(state.doc.resolve(head))).scrollIntoView(),
+    state.tr.setSelection(TextSelection.near(state.doc.resolve(head), dir)).scrollIntoView(),
   );
 }
 
