@@ -17,6 +17,10 @@ import { Callout } from "./callout";
 import { NsImage } from "./image";
 import { NsCodeBlock } from "./code-block";
 import { ActiveBlock } from "./active-block";
+import { Find } from "./find";
+import { HoverHandle } from "./hover-handle";
+import { LinkClick } from "./link-click";
+import { SlashMenu } from "./slash-menu";
 
 export interface ExtensionOpts {
   chords: ChordsOptions;
@@ -24,6 +28,8 @@ export interface ExtensionOpts {
   getTabWidth: () => number;
   /** Display-URL resolver for images (Tauri asset protocol / passthrough). */
   resolveImageSrc?: (src: string) => string;
+  /** Mod-click / follow target — opens in the system browser. */
+  onOpenUrl?: (url: string) => void;
 }
 
 /** The schema-bearing extension set — the exact configuration the round-trip
@@ -91,6 +97,10 @@ export function buildExtensions(opts: ExtensionOpts) {
     ...markdownExtensions({ codeBlock: false, resolveImageSrc: opts.resolveImageSrc }),
     NsCodeBlock,
     ActiveBlock,
+    Find,
+    SlashMenu,
+    HoverHandle,
+    LinkClick.configure({ onOpenUrl: opts.onOpenUrl ?? (() => {}) }),
     Chords.configure(opts.chords),
     tabKey(opts.getTabWidth),
   ];

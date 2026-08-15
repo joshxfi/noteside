@@ -22,5 +22,8 @@ test.describe("content search", () => {
     await page.locator(".fnd-row").first().click();
     await expect(page.locator(".fnd-panel")).toBeHidden();
     await expect(page.locator(".av-file")).toContainText("Thursday");
+    // gotoLine maps the hit's source line onto its block — the caret (and so
+    // the active-block highlight) must land on the paragraph with the match.
+    await expect(page.locator(".av-active-block")).toContainText("bluffed");
   });
 });

@@ -24,6 +24,9 @@ import "katex/dist/katex.min.css";
 import { isTauri } from "../use-window-controls";
 import type { AppCommand, ChordOverrides, Command } from "./commands";
 import { buildExtensions } from "./extensions";
+import { FindBar } from "./find-bar";
+import { findNext, findPrev } from "./find";
+import { posForBodyLine } from "./goto";
 import { joinNote, type NoteIO, splitNote } from "./markdown-io";
 import { docWordCount, transactionWordDelta } from "./pm-doc";
 import { PlainEditor } from "./plain-editor";
@@ -135,6 +138,7 @@ function RichEditor(props: EditorProps) {
 
   // Mode is owned by the vim layer once it mounts (P5); non-vim is fixed "text".
   const [mode] = useState(props.vimMode ? "insert" : "text");
+  const [findOpen, setFindOpen] = useState(false);
   const [stat, setStat] = useState<EditorStat>({
     words: 0,
     line: 1,
@@ -194,8 +198,13 @@ function RichEditor(props: EditorProps) {
     } else if (cmd.editor === "follow") {
       const url = urlAtCaret(editor);
       if (url) p.onOpenUrl(url);
+    } else if (cmd.editor === "search") {
+      setFindOpen((open) => !open);
+    } else if (cmd.editor === "searchNext") {
+      findNext(editor);
+    } else if (cmd.editor === "searchPrev") {
+      findPrev(editor);
     }
-    // search/searchNext/searchPrev land with the find bar (P4).
   };
 
   const editor = useEditor({
@@ -206,6 +215,7 @@ function RichEditor(props: EditorProps) {
       },
       getTabWidth: () => propsRef.current.tabWidth,
       resolveImageSrc: (src) => resolveImageSrc(src, propsRef.current.notebookRoot),
+      onOpenUrl: (url) => propsRef.current.onOpenUrl(url),
     }),
     content: io.body,
     contentType: "markdown",
@@ -247,7 +257,15 @@ function RichEditor(props: EditorProps) {
       // view.focus() runs MID-command, and WebKit fires selectionchange
       // synchronously, dispatching a repair transaction that stales the
       // command's own ("Applying a mismatched transaction").
-      ed.view.dispatch(ed.state.tr.setSelection(Selection.atStart(ed.state.doc)));
+      const goto = propsRef.current.gotoLine ?? 0;
+      const bodyLine = goto - io.frontmatterLines;
+      const gotoPos =
+        goto > 0 && bodyLine >= 1 ? posForBodyLine(ed.state.doc, io.body, bodyLine) : null;
+      const sel =
+        gotoPos !== null
+          ? Selection.near(ed.state.doc.resolve(gotoPos))
+          : Selection.atStart(ed.state.doc);
+      ed.view.dispatch(ed.state.tr.setSelection(sel).scrollIntoView());
       ed.view.focus();
       setCursorStat(ed);
     },
@@ -296,6 +314,7 @@ function RichEditor(props: EditorProps) {
   return (
     <div className="av-editor" data-cursor={props.cursor}>
       <div className="av-cm">
+        {findOpen && editor && <FindBar editor={editor} onClose={() => setFindOpen(false)} />}
         <EditorContent editor={editor} className="av-editor-scroll" />
       </div>
       <StatusBar
