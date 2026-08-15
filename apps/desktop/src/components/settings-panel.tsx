@@ -172,7 +172,7 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..14) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => onPickTheme() }, // idx 0 — Theme: opens the live-preview picker
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
@@ -198,8 +198,6 @@ export function SettingsPanel({
           tabWidth: Math.max(TAB_WIDTH_MIN, Math.min(TAB_WIDTH_MAX, cfg.tabWidth + d)),
         }),
     },
-    { cycle: () => setCfg({ relativeNumbers: !cfg.relativeNumbers }) },
-    { cycle: () => setCfg({ livePreview: !cfg.livePreview }) }, // idx 7 — Live preview
     {
       cycle: (d) =>
         cycleList([{ id: "block" }, { id: "bar" }, { id: "underline" }], cfg.cursor, "cursor", d),
@@ -207,9 +205,9 @@ export function SettingsPanel({
     { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 12 — opens the keymap editor (cheatsheet)
-    { cycle: () => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck }) }, // idx 13 — Automatic updates
-    { cycle: onAboutAction }, // idx 14 — About: check for updates / open releases
+    { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
+    { cycle: () => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck }) }, // idx 11 — Automatic updates
+    { cycle: onAboutAction }, // idx 12 — About: check for updates / open releases
   ];
 
   const currentTheme = themeById(cfg.theme);
@@ -403,7 +401,13 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={5} focus={focus} setFocus={setFocus} label="Tab width" hint="spaces per indent">
+          <Row
+            idx={5}
+            focus={focus}
+            setFocus={setFocus}
+            label="Tab width"
+            hint="spaces per Tab in code blocks"
+          >
             <div className="set-stepper">
               <button
                 tabIndex={-1}
@@ -420,35 +424,9 @@ export function SettingsPanel({
               </button>
             </div>
           </Row>
-          <Row idx={6} focus={focus} setFocus={setFocus} label="Relative line numbers">
-            <button
-              type="button"
-              tabIndex={-1}
-              className={"set-switch" + (cfg.relativeNumbers ? " is-on" : "")}
-              onClick={() => setCfg({ relativeNumbers: !cfg.relativeNumbers })}
-            >
-              <span className="set-knob" />
-            </button>
-          </Row>
-          <Row
-            idx={7}
-            focus={focus}
-            setFocus={setFocus}
-            label="Live preview"
-            hint="render markdown in place"
-          >
-            <button
-              type="button"
-              tabIndex={-1}
-              className={"set-switch" + (cfg.livePreview ? " is-on" : "")}
-              onClick={() => setCfg({ livePreview: !cfg.livePreview })}
-            >
-              <span className="set-knob" />
-            </button>
-          </Row>
 
           <div className="set-sec">Cursor</div>
-          <Row idx={8} focus={focus} setFocus={setFocus} label="Style">
+          <Row idx={6} focus={focus} setFocus={setFocus} label="Style">
             {(
               [
                 ["block", "Block"],
@@ -461,7 +439,7 @@ export function SettingsPanel({
               </Pill>
             ))}
           </Row>
-          <Row idx={9} focus={focus} setFocus={setFocus} label="Blink">
+          <Row idx={7} focus={focus} setFocus={setFocus} label="Blink">
             <button
               type="button"
               tabIndex={-1}
@@ -474,7 +452,7 @@ export function SettingsPanel({
 
           <div className="set-sec">Keys</div>
           <Row
-            idx={10}
+            idx={8}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -490,7 +468,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={11}
+            idx={9}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -525,7 +503,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={12}
+            idx={10}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"
@@ -538,7 +516,7 @@ export function SettingsPanel({
 
           <div className="set-sec">About</div>
           <Row
-            idx={13}
+            idx={11}
             focus={focus}
             setFocus={setFocus}
             label="Automatic updates"
@@ -553,7 +531,7 @@ export function SettingsPanel({
               <span className="set-knob" />
             </button>
           </Row>
-          <Row idx={14} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+          <Row idx={12} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
             {aboutControl()}
           </Row>
         </div>

@@ -3,7 +3,7 @@ import { bench, describe } from "vitest";
 import { getSchema } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { EditorState } from "@tiptap/pm/state";
-import { parseInline, scanBlocks } from "./markdown";
+import { scanTopBlocks } from "./markdown";
 import { docWordCount, transactionWordDelta } from "./editor/pm-doc";
 
 function buildMarkdownDoc(lines: number): string[] {
@@ -33,21 +33,16 @@ function buildMarkdownDoc(lines: number): string[] {
   return out.slice(0, lines);
 }
 
+// scanTopBlocks runs once per grep-hit open (goto mapping) — this pins its
+// cost on a large, block-heavy note.
 for (const n of [1000, 10000]) {
   const doc = buildMarkdownDoc(n);
-  describe(`scanBlocks N=${n} lines`, () => {
-    bench("tables + fences + quotes", () => {
-      scanBlocks(doc);
+  describe(`scanTopBlocks N=${n} lines`, () => {
+    bench("block segmentation", () => {
+      scanTopBlocks(doc);
     });
   });
 }
-
-const cellText = "**bold** then *em* and `a | b` plus [x](https://x.dev) ";
-describe("parseInline", () => {
-  bench("mixed table cell", () => {
-    parseInline(cellText);
-  });
-});
 
 // Markdown parse (open-time) and serialize (autosave-time) — the two O(doc)
 // costs the editor pays per note. Parse gates the open; serialize runs on the

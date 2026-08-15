@@ -153,10 +153,9 @@ export function serializeConfig(c: Config): string {
   L.push(`set cursor       = ${c.cursor}`);
   L.push(`set cursor-blink = ${c.cursorBlink ? "on" : "off"}`);
   L.push("");
-  L.push(C.editor);
-  L.push(`set live-preview = ${c.livePreview ? "on" : "off"}`);
-  L.push(`set relative-numbers = ${c.relativeNumbers ? "on" : "off"}`);
-  L.push("");
+  // live-preview and relative-numbers are ACCEPTED-BUT-INERT since the block
+  // editor (no source preview, no gutter): parseConfig still understands every
+  // spelling so old configs never error, but the keys are no longer emitted.
   L.push(C.updates);
   L.push(`set auto-update  = ${c.autoUpdateCheck ? "on" : "off"}`);
   L.push("");
