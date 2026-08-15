@@ -1,559 +1,278 @@
-import { useEffect, useRef, useState } from "react";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import {
-  drawSelection,
-  EditorView,
-  highlightActiveLineGutter,
-  keymap,
-  lineNumbers,
-} from "@codemirror/view";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentLess,
-  indentMore,
-} from "@codemirror/commands";
-import {
-  closeSearchPanel,
-  findNext,
-  findPrevious,
-  openSearchPanel,
-  search,
-  searchPanelOpen,
-} from "@codemirror/search";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { languages } from "@codemirror/language-data";
-import { indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { getCM, vim } from "@replit/codemirror-vim";
-import { Eye, EyeOff } from "lucide-react";
-import type { AppCommand } from "./commands";
-import { defineExCommands, setActiveHandlers } from "./ex-commands";
-import { type ChordOverrides, chordLabel, type Command, commandChordKeymap } from "./commands";
-import { activeLineHighlight } from "./active-line";
-import { livePreview } from "./live-preview";
-import { blockPreview, bodyStart, linkHandlers } from "./block-preview";
-import { urlAt } from "../links";
-import { noteHighlight, nsTheme } from "./theme";
-import { isModKey, modActive } from "./platform";
-import { countWordsIn, wordCountDelta } from "./word-count";
-
-const MODE_LABEL: Record<string, string> = {
-  normal: "NORMAL",
-  insert: "INSERT",
-  visual: "VISUAL",
-  replace: "REPLACE",
-};
-
-const DIRTY_CHECK_DELAY_MS = 220;
-
-// The always-on chord keymap lives in a Compartment so a rebind (cfg.chords)
-// can be re-applied to the LIVE editor without a remount (CM wires keymaps at
-// mount; a remount would also steal focus from the open shortcut editor).
-const chordKeymap = new Compartment();
-// drawSelection lives in its own Compartment too, so toggling cursor-blink
-// reconfigures the live editor (same no-remount reason). Both CM's bar caret and
-// vim's block cursor read this drawSelection config for their blink rate.
-const selectionComp = new Compartment();
-// The preview-dependent decorations and the lineNumbers config get Compartments
-// as well, so toggling preview / relativeNumbers reconfigures the live editor —
-// a remount would tear down 10-100ms of view AND reseed the doc from the
-// open-time initialText, visibly reverting a mid-edit buffer.
-const previewComp = new Compartment();
-const lineNumbersComp = new Compartment();
-// Indent width, same no-remount reasoning: changing it from Settings must not
-// tear down the view (cursor + undo history) mid-edit.
-const indentComp = new Compartment();
-const indentExt = (width: number): Extension => indentUnit.of(" ".repeat(width));
-
-// livePreview/blockPreview are singletons the compartment just adds or removes
-// when preview toggles.
-const previewExts = (preview: boolean): Extension => (preview ? [livePreview, blockPreview] : []);
-const lineNumbersExt = (relative: boolean): Extension =>
-  lineNumbers(relative ? { formatNumber: relFmt } : undefined);
-
-// Static extension values, hoisted so a remount doesn't rebuild them — CM
-// extensions are immutable configs; per-editor state lives in the EditorState.
-// NOTE: relFmt's relative numbers refresh on cursor-line moves ONLY because
-// this gutterLineClass compute forces CM's gutter sync — removing
-// gutterHighlight from the extension list would silently freeze them.
-const gutterHighlight = highlightActiveLineGutter();
-const historyExt = history();
-// in-note find (Mod-f via the command table); matches reuse the .cm-searchMatch
-// theme styling. The default panel handles type / Enter (next) / Esc (close).
-const searchExt = search({ top: true });
-// The editor-scope chord only fires when the content is focused; this makes
-// Mod-f also CLOSE the panel while the find field itself is focused, so it toggles.
-const searchPanelToggle = keymap.of([
-  {
-    key: "Mod-f",
-    scope: "search-panel",
-    preventDefault: true,
-    run: (view) => {
-      closeSearchPanel(view);
-      return true;
-    },
-  },
-]);
-// GFM base (the default is plain commonmark — without it tables, task lists,
-// strikethrough and autolinks never parse); codeLanguages lazy-loads syntax
-// highlighting for fenced blocks per language (separate chunks, offline-safe).
-const markdownExt = markdown({
-  addKeymap: false,
-  base: markdownLanguage,
-  codeLanguages: languages,
-});
-const noteSyntax = syntaxHighlighting(noteHighlight);
-// Vim handles normal/visual-mode keys first, then delegates insert-mode editing
-// to the regular CM keymap.
-const defaultKeys = keymap.of(defaultKeymap);
-// Tab with a collapsed caret inserts ONE INDENT UNIT AT THE CARET; with a
-// selection it falls back to indenting the lines.
+// editor.tsx — the note editor: a Notion-like WYSIWYG block editor over
+// markdown (Tiptap v3 / ProseMirror). Markdown files stay the source of truth:
+// the doc is parsed from disk text at mount (frontmatter split off verbatim by
+// markdown-io.ts) and serialized back through @tiptap/markdown on save.
 //
-// Not `indentMore` (which was the bug in issue #23 — it indents the whole LINE
-// wherever the caret sits, so Tab mid-sentence jumped the indent to the line's
-// left edge), and not CodeMirror's `insertTab` either: that inserts a literal
-// `\t`, which ignores the configured tab width and disagrees with what
-// indentMore/indentLess step by. Reading the `indentUnit` facet keeps Tab,
-// Shift-Tab and auto-indent all speaking the same unit.
-const insertIndentUnit = (view: EditorView): boolean => {
-  const { state } = view;
-  if (state.selection.ranges.some((r) => !r.empty)) return indentMore(view);
-  view.dispatch(
-    state.update(state.replaceSelection(state.facet(indentUnit)), {
-      scrollIntoView: true,
-      userEvent: "input",
-    }),
-  );
-  return true;
-};
-
-// CodeMirror deliberately excludes Tab from defaultKeymap. Indent in plain text
-// mode and Vim insert mode, but consume it without editing in Vim normal/visual
-// mode so focus cannot Tab out of the editor.
-const indentationKeys = keymap.of([
-  {
-    key: "Tab",
-    run: (view) => {
-      const vimState = getCM(view)?.state.vim;
-      return vimState && !vimState.insertMode ? true : insertIndentUnit(view);
-    },
-    shift: (view) => {
-      const vimState = getCM(view)?.state.vim;
-      return vimState && !vimState.insertMode ? true : indentLess(view);
-    },
-  },
-]);
-
-defineExCommands();
+// The seams the app relies on (see AGENTS.md):
+// - onChange passes a THUNK capturing the immutable PM doc — serialization runs
+//   when the session actually writes (autosave debounce / explicit save), never
+//   on the typing path.
+// - Dirtiness is doc.eq against the saved-doc snapshot: exact, synchronous, and
+//   it RETRACTS on undo-to-saved (the CM editor needed a debounced string
+//   compare for this).
+// - The parent remounts via `key` (session editorKey + vim suffix); everything
+//   else (chords, tabWidth) reconfigures live through refs.
+// - Typing must never re-render React beyond this component's own status bar:
+//   shouldRerenderOnTransaction is false and all node views are plain DOM.
+import { useEffect, useRef, useState } from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import type { Editor as TiptapEditor } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import type { AppCommand, ChordOverrides, Command } from "./commands";
+import { buildExtensions } from "./extensions";
+import { joinNote, type NoteIO, splitNote } from "./markdown-io";
+import { docWordCount, transactionWordDelta } from "./pm-doc";
+import { PlainEditor } from "./plain-editor";
+import { type EditorStat, StatusBar } from "./status-bar";
+import { urlAt } from "../links";
 
 export interface EditorProps {
-  /** Changing this remounts the editor (fresh CM state) — parent keys on it. */
+  /** Changing this remounts the editor (fresh doc) — parent keys on it. */
   notePath: string;
   fileLabel: string;
   initialText: string;
   savedText: string;
-  /** Session-tracked dirty state (note buffers). When provided, the status bar
-   *  trusts it verbatim on savedText/dirty changes — no O(doc) stringify per
-   *  autosave. Leave undefined for buffers whose dirtiness is Editor-local
-   *  (the config buffer), which keep the internal doc-vs-savedText compare. */
+  /** Session-tracked dirty state (note buffers). Undefined = derive locally
+   *  (the config buffer). */
   dirty?: boolean;
   vimMode: boolean;
   cursorBlink: boolean;
   /** Caret shape for insert / non-vim mode (vim normal mode is always a block). */
   cursor: "block" | "bar" | "underline";
-  relativeNumbers: boolean;
-  /** Indent width in spaces — what Tab inserts and what indent/dedent step by. */
+  /** Indent width in spaces — what Tab inserts (code blocks, loose text). */
   tabWidth: number;
-  /** Non-vim chord overrides (`bind` lines), applied to the chord keymap at mount. */
+  /** Non-vim chord overrides (`bind` lines), read live by the chord layer. */
   chordOverrides?: ChordOverrides;
-  /** Render markdown inline (hide markup off the cursor line), Obsidian-style. */
-  preview: boolean;
-  /** 1-based line to place the cursor on at mount (e.g. opening a grep hit). */
+  /** Vim insert-escape sequence (e.g. "jk"); consumed by the vim layer. */
+  escMap: string;
+  /** 1-based source line to open on (e.g. a grep hit). */
   gotoLine?: number;
   refocusToken: number;
   onChange: (text: string | (() => string), dirty: boolean) => void;
   onSave: (text: string) => void;
   onQuit: () => void;
   onCommand: (c: AppCommand) => void;
-  /** Open an external URL under the cursor in the system browser. */
+  /** Open an external URL under the caret in the system browser. */
   onOpenUrl: (url: string) => void;
 }
 
-// Open the external URL at a document offset in the browser (`gx` / `:follow` /
-// Mod-click). Reads raw line text, so live-preview is moot.
-function openLinkAt(view: EditorView, pos: number, p: EditorProps): boolean {
-  const ln = view.state.doc.lineAt(pos);
-  const url = urlAt(ln.text, pos - ln.from);
-  if (url) {
-    p.onOpenUrl(url);
-    return true;
-  }
-  return false;
+const MODE_LABEL: Record<string, string> = {
+  normal: "NORMAL",
+  insert: "INSERT",
+  visual: "VISUAL",
+};
+
+/** Serialize a captured (immutable) PM doc back to full disk text. */
+function serializeDoc(editor: TiptapEditor, io: NoteIO, doc: PMNode): string {
+  const manager = editor.storage.markdown.manager;
+  return joinNote(io, manager.serialize(doc.toJSON()));
 }
 
-function relFmt(n: number, state: EditorState): string {
-  const cur = state.doc.lineAt(state.selection.main.head).number;
-  return n === cur ? String(n) : String(Math.abs(n - cur));
+/** The URL under the caret: a link mark's href, else links.ts urlAt over the
+ *  caret's textblock (bare URLs usually autolink, so this is the fallback). */
+function urlAtCaret(editor: TiptapEditor): string | null {
+  const $head = editor.state.selection.$head;
+  const link = $head.marks().find((m) => m.type.name === "link");
+  if (link?.attrs.href) return link.attrs.href as string;
+  if (!$head.parent.isTextblock) return null;
+  const text = $head.parent.textBetween(0, $head.parent.content.size, "\n", " ");
+  return urlAt(text, $head.parentOffset);
 }
 
 export function Editor(props: EditorProps) {
-  const { initialText, vimMode, cursorBlink, relativeNumbers, preview, refocusToken } = props;
-  const hostRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
+  if (props.notePath === "config") {
+    return (
+      <PlainEditor
+        fileLabel={props.fileLabel}
+        initialText={props.initialText}
+        savedText={props.savedText}
+        chordOverrides={props.chordOverrides}
+        refocusToken={props.refocusToken}
+        onChange={props.onChange}
+        onSave={props.onSave}
+        onQuit={props.onQuit}
+        onCommand={props.onCommand}
+      />
+    );
+  }
+  return <RichEditor {...props} />;
+}
+
+function RichEditor(props: EditorProps) {
   const propsRef = useRef(props);
   propsRef.current = props;
   const savedRef = useRef(props.savedText);
   savedRef.current = props.savedText;
-  const dirtyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Running word total, seeded once at mount and advanced by per-change deltas
-  // (see word-count.ts). Held in a ref, not state: the delta is computed from the
-  // update's own before/after docs, so it must not depend on a rendered value.
+
+  // Mount-stable: the session remounts this component (editorKey) per open.
+  const [io] = useState<NoteIO>(() => splitNote(props.initialText));
+
+  const editorRef = useRef<TiptapEditor | null>(null);
+  // Running word total, seeded at mount and advanced by per-step deltas.
   const wordsRef = useRef(0);
-  // dispatchCommand lives inside the mount effect; expose it so the live chord
-  // reconfigure effect below can rebuild the keymap with fresh overrides.
-  const dispatchRef = useRef<(cmd: Command) => void>(() => {});
-  // False during the first effect pass (flipped by the last effect below), so
-  // the reconfigure effects skip the mount run — their compartments were just
-  // initialized with the same config; a reconfigure would be redundant work.
-  const didMountRef = useRef(false);
+  // The doc as of the last landed save — the dirtiness baseline.
+  const savedDocRef = useRef<PMNode | null>(null);
+  // What the last-run serialize thunk produced, so the savedText effect below
+  // can recognize "our save landed" and advance the baseline to that doc.
+  const lastSerializedRef = useRef<{ text: string; doc: PMNode } | null>(null);
 
-  const [mode, setMode] = useState(vimMode ? "normal" : "insert");
-  const [stat, setStat] = useState({ words: 0, line: 1, col: 1, pct: "All", dirty: false });
+  // Mode is owned by the vim layer once it mounts (P5); non-vim is fixed "text".
+  const [mode] = useState(props.vimMode ? "insert" : "text");
+  const [stat, setStat] = useState<EditorStat>({
+    words: 0,
+    line: 1,
+    col: 1,
+    pct: "All",
+    dirty: false,
+  });
 
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-
-    const clearDirtyTimer = () => {
-      if (dirtyTimerRef.current !== null) {
-        clearTimeout(dirtyTimerRef.current);
-        dirtyTimerRef.current = null;
+  const setCursorStat = (editor: TiptapEditor, dirty?: boolean) => {
+    const state = editor.state;
+    const $head = state.selection.$head;
+    const blockIdx = $head.index(0);
+    const blocks = state.doc.childCount;
+    const next = {
+      line: blockIdx + 1,
+      col: ($head.parent.isTextblock ? $head.parentOffset : 0) + 1,
+      pct: blocks <= 1 ? "All" : Math.round((blockIdx / (blocks - 1)) * 100) + "%",
+    };
+    setStat((s) => {
+      const d = dirty === undefined ? s.dirty : dirty;
+      const w = wordsRef.current;
+      if (
+        s.line === next.line &&
+        s.col === next.col &&
+        s.pct === next.pct &&
+        s.dirty === d &&
+        s.words === w
+      ) {
+        return s; // unchanged — skip the re-render
       }
-    };
-    const cursorStat = (state: EditorState) => {
-      const head = state.selection.main.head;
-      const lineObj = state.doc.lineAt(head);
-      const total = state.doc.lines;
-      const pct = total <= 1 ? "All" : Math.round(((lineObj.number - 1) / (total - 1)) * 100) + "%";
-      return {
-        line: lineObj.number,
-        col: head - lineObj.from + 1,
-        pct,
-      };
-    };
-    // `words` defaults to the running total so a cursor move never recounts.
-    const setCursorStat = (state: EditorState, dirty?: boolean) => {
-      const next = cursorStat(state);
-      setStat((s) => {
-        const d = dirty === undefined ? s.dirty : dirty;
-        const w = wordsRef.current;
-        if (
-          s.line === next.line &&
-          s.col === next.col &&
-          s.pct === next.pct &&
-          s.dirty === d &&
-          s.words === w
-        ) {
-          return s; // unchanged — skip the re-render
-        }
-        return { ...s, ...next, words: w, dirty: d };
-      });
-    };
-    const scheduleExactCleanCheck = (state: EditorState) => {
-      clearDirtyTimer();
-      if (state.doc.length !== savedRef.current.length) return;
-      dirtyTimerRef.current = setTimeout(() => {
-        dirtyTimerRef.current = null;
-        const view = viewRef.current;
-        if (!view || view.state.doc.length !== savedRef.current.length) return;
-        const dirty = view.state.doc.toString() !== savedRef.current;
-        if (!dirty) {
-          propsRef.current.onChange(() => view.state.doc.toString(), false);
-          setStat((s) => (s.dirty ? { ...s, dirty: false } : s));
-        }
-      }, DIRTY_CHECK_DELAY_MS);
-    };
-    const onVimMode = (e: { mode?: string }) => {
-      if (e?.mode) setMode(e.mode);
-    };
-
-    // Run a table command in the editor's context: AppCommands go to onCommand,
-    // editor actions act on the live view. Powers the always-on Mod- chords.
-    const dispatchCommand = (cmd: Command) => {
-      const v = viewRef.current;
-      const p = propsRef.current;
-      if (cmd.command) p.onCommand(cmd.command);
-      else if (cmd.editor === "save") {
-        if (v) p.onSave(v.state.doc.toString());
-      } else if (cmd.editor === "quit") p.onQuit();
-      else if (cmd.editor === "saveQuit" && v) {
-        p.onSave(v.state.doc.toString());
-        p.onQuit();
-      } else if (cmd.editor === "search" && v) {
-        // Mod-f toggles the find panel: close it if it's open, otherwise open it.
-        if (searchPanelOpen(v.state)) closeSearchPanel(v);
-        else openSearchPanel(v);
-      } else if (cmd.editor === "follow" && v) {
-        // Non-vim equivalent of `gx` / `:follow`: open the URL under the cursor.
-        openLinkAt(v, v.state.selection.main.head, p);
-      } else if (cmd.editor === "searchNext" && v) {
-        findNext(v);
-      } else if (cmd.editor === "searchPrev" && v) {
-        findPrevious(v);
-      }
-    };
-    dispatchRef.current = dispatchCommand;
-
-    const extensions: Extension[] = [];
-    // No persistent status bar: the mode + counts live in our own status bar
-    // below. The `:` / `/` command line still appears as a transient panel.
-    if (vimMode) extensions.push(vim());
-    extensions.push(
-      lineNumbersComp.of(lineNumbersExt(relativeNumbers)),
-      indentComp.of(indentExt(props.tabWidth)),
-      activeLineHighlight,
-      gutterHighlight,
-      selectionComp.of(drawSelection(cursorBlink === false ? { cursorBlinkRate: 0 } : {})),
-      historyExt,
-      searchExt,
-      searchPanelToggle,
-      markdownExt,
-      noteSyntax,
-      previewComp.of(previewExts(preview)),
-      // rendered-table cells route their clicked URLs through the same app
-      // handler as gx / Mod-click on raw text (plain click follows in a table)
-      linkHandlers.of({
-        openUrl: (u) => propsRef.current.onOpenUrl(u),
-      }),
-      EditorView.lineWrapping,
-      nsTheme,
-      // Mod-click (Cmd/Ctrl) opens the external URL under the pointer, leaving
-      // plain click for cursor placement. A `cm-mod-active` class (toggled while
-      // Mod is held) reveals the link cursor only then, so the pointer affordance
-      // is honest; blur clears any lingering state.
-      EditorView.domEventHandlers({
-        mousedown(e, view) {
-          if (e.button !== 0 || !modActive(e)) return false;
-          const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
-          if (pos == null || !openLinkAt(view, pos, propsRef.current)) return false;
-          e.preventDefault();
-          return true;
-        },
-        keydown(e, view) {
-          if (isModKey(e.key)) view.dom.classList.add("cm-mod-active");
-          return false;
-        },
-        keyup(e, view) {
-          if (isModKey(e.key)) view.dom.classList.remove("cm-mod-active");
-          return false;
-        },
-        blur(_e, view) {
-          view.dom.classList.remove("cm-mod-active");
-          return false;
-        },
-      }),
-      // Always-on app chords (both vim and non-vim) — Mod- combos can't collide
-      // with vim's bare-key normal mode. Derived from the command table.
-      chordKeymap.of(
-        keymap.of([
-          ...commandChordKeymap(dispatchCommand, propsRef.current.chordOverrides),
-          ...historyKeymap,
-        ]),
-      ),
-      EditorView.updateListener.of((u) => {
-        if (u.docChanged) {
-          const state = u.state;
-          // Exact, and O(changed lines) rather than O(doc) — so the count is live
-          // instead of debounced, and a long note costs nothing extra per keystroke.
-          wordsRef.current += wordCountDelta(u.changes, u.startState.doc, state.doc);
-          propsRef.current.onChange(() => state.doc.toString(), true);
-          setCursorStat(state, true);
-          scheduleExactCleanCheck(state);
-        } else if (u.selectionSet) {
-          setCursorStat(u.state);
-        }
-      }),
-    );
-    extensions.push(defaultKeys, indentationKeys);
-
-    const view = new EditorView({
-      state: EditorState.create({ doc: initialText, extensions }),
-      parent: host,
+      return { ...s, ...next, words: w, dirty: d };
     });
-    viewRef.current = view;
-    // Seed the running word total from the mount text itself — the doc was just
-    // built from it, and word counts are line-ending agnostic, so CodeMirror's
-    // CRLF→LF normalization can't make this disagree with the doc.
-    wordsRef.current = countWordsIn(initialText);
-    // Same reasoning for dirtiness: compare the props directly (a reference
-    // compare in the clean case) instead of stringifying the doc.
-    setStat({
-      words: wordsRef.current,
-      ...cursorStat(view.state),
-      dirty: initialText !== savedRef.current,
-    });
+  };
 
-    const goto = propsRef.current.gotoLine ?? 0;
-    if (goto > 0) {
-      const ln = view.state.doc.line(Math.min(goto, view.state.doc.lines));
-      view.dispatch({ selection: { anchor: ln.from }, scrollIntoView: true });
-    } else {
-      // No explicit target: start on the note's first prose line, not offset 0.
-      // A note with frontmatter would otherwise open with the caret inside the
-      // block, revealing its raw YAML — the caret is never placed in metadata
-      // the user didn't ask to edit. A no-op (0) for the usual note.
-      const body = bodyStart(view.state.doc);
-      if (body > 0) view.dispatch({ selection: { anchor: body } });
+  const serializeNow = (editor: TiptapEditor): string => {
+    const doc = editor.state.doc;
+    const text = serializeDoc(editor, io, doc);
+    lastSerializedRef.current = { text, doc };
+    return text;
+  };
+
+  // Run a table command in the editor's context: AppCommands go to onCommand,
+  // editor actions act on the live editor. Powers the always-on Mod- chords.
+  const dispatchCommand = (cmd: Command) => {
+    const editor = editorRef.current;
+    const p = propsRef.current;
+    if (cmd.command) {
+      p.onCommand(cmd.command);
+      return;
     }
+    if (!editor) return;
+    if (cmd.editor === "save") p.onSave(serializeNow(editor));
+    else if (cmd.editor === "quit") p.onQuit();
+    else if (cmd.editor === "saveQuit") {
+      p.onSave(serializeNow(editor));
+      p.onQuit();
+    } else if (cmd.editor === "follow") {
+      const url = urlAtCaret(editor);
+      if (url) p.onOpenUrl(url);
+    }
+    // search/searchNext/searchPrev land with the find bar (P4).
+  };
 
-    setActiveHandlers({
-      view,
-      save: () => propsRef.current.onSave(view.state.doc.toString()),
-      quit: () => propsRef.current.onQuit(),
-      saveQuit: () => {
-        propsRef.current.onSave(view.state.doc.toString());
-        propsRef.current.onQuit();
+  const editor = useEditor({
+    extensions: buildExtensions({
+      chords: {
+        getOverrides: () => propsRef.current.chordOverrides,
+        dispatch: dispatchCommand,
       },
-      command: (c) => propsRef.current.onCommand(c),
-      openUrl: (u) => propsRef.current.onOpenUrl(u),
-    });
-
-    const cm = getCM(view);
-    cm?.on("vim-mode-change", onVimMode);
-    view.focus();
-
-    return () => {
-      clearDirtyTimer();
-      cm?.off("vim-mode-change", onVimMode);
-      setActiveHandlers(null);
-      view.destroy();
-      viewRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // parent remounts (via key) on note or vim-mode change
-
-  useEffect(() => {
-    viewRef.current?.focus();
-  }, [refocusToken]);
-
-  // Re-apply the chord keymap when the user rebinds a shortcut, so the change
-  // takes effect in the already-open editor (no remount, no focus theft).
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!didMountRef.current || !view) return;
-    view.dispatch({
-      effects: chordKeymap.reconfigure(
-        keymap.of([
-          ...commandChordKeymap(dispatchRef.current, props.chordOverrides),
-          ...historyKeymap,
-        ]),
-      ),
-    });
-  }, [props.chordOverrides]);
-
-  // Re-apply cursor-blink to the live editor (no remount → no focus theft).
-  // Reconfiguring the facet makes both CM's cursorLayer and vim's block-cursor
-  // plugin re-read the blink rate, so the change takes effect immediately.
-  useEffect(() => {
-    if (!didMountRef.current) return;
-    viewRef.current?.dispatch({
-      effects: selectionComp.reconfigure(
-        drawSelection(props.cursorBlink === false ? { cursorBlinkRate: 0 } : {}),
-      ),
-    });
-  }, [props.cursorBlink]);
-
-  // Toggle live-preview on the LIVE view (no remount): doc, cursor, and undo
-  // history survive. Fresh plugin instances — they close over the flag.
-  useEffect(() => {
-    if (!didMountRef.current) return;
-    viewRef.current?.dispatch({
-      effects: previewComp.reconfigure(previewExts(props.preview)),
-    });
-  }, [props.preview]);
-
-  // Same for the gutter's relative/absolute numbering.
-  useEffect(() => {
-    if (!didMountRef.current) return;
-    viewRef.current?.dispatch({
-      effects: lineNumbersComp.reconfigure(lineNumbersExt(props.relativeNumbers)),
-    });
-  }, [props.relativeNumbers]);
-
-  // Same for the indent width.
-  useEffect(() => {
-    if (!didMountRef.current) return;
-    viewRef.current?.dispatch({
-      effects: indentComp.reconfigure(indentExt(props.tabWidth)),
-    });
-  }, [props.tabWidth]);
+      getTabWidth: () => propsRef.current.tabWidth,
+    }),
+    content: io.body,
+    contentType: "markdown",
+    autofocus: "start",
+    shouldRerenderOnTransaction: false,
+    onCreate({ editor: ed }) {
+      editorRef.current = ed;
+      const doc = ed.state.doc;
+      wordsRef.current = docWordCount(doc);
+      if (propsRef.current.initialText === savedRef.current) {
+        savedDocRef.current = doc;
+      } else {
+        // Reopened dirty buffer: the baseline is the SAVED text's doc, parsed
+        // once here so undo-to-saved can still retract dirtiness exactly.
+        try {
+          const savedIo = splitNote(savedRef.current);
+          const manager = ed.storage.markdown.manager;
+          savedDocRef.current = ed.schema.nodeFromJSON(manager.parse(savedIo.body));
+        } catch {
+          savedDocRef.current = null; // never clean until a save lands
+        }
+      }
+      setStat({
+        words: wordsRef.current,
+        line: 1,
+        col: 1,
+        pct: "All",
+        dirty: propsRef.current.initialText !== savedRef.current,
+      });
+      setCursorStat(ed);
+    },
+    onUpdate({ editor: ed, transaction }) {
+      if (!transaction.docChanged) return;
+      wordsRef.current += transactionWordDelta(transaction);
+      const doc = ed.state.doc;
+      const saved = savedDocRef.current;
+      const dirty = !saved || saved.nodeSize !== doc.nodeSize || !doc.eq(saved);
+      const manager = ed.storage.markdown.manager;
+      lastSerializedRef.current = null;
+      propsRef.current.onChange(() => {
+        const text = joinNote(io, manager.serialize(doc.toJSON()));
+        lastSerializedRef.current = { text, doc };
+        return text;
+      }, dirty);
+      setCursorStat(ed, dirty);
+    },
+    onSelectionUpdate({ editor: ed }) {
+      setCursorStat(ed);
+    },
+    onDestroy() {
+      editorRef.current = null;
+    },
+  });
+  editorRef.current = editor;
 
   useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    // Note buffers pass session-tracked dirtiness; only the config buffer
-    // (dirty === undefined) still derives it from the doc here.
-    const dirty =
-      props.dirty !== undefined
-        ? props.dirty
-        : view.state.doc.length !== props.savedText.length ||
-          view.state.doc.toString() !== props.savedText;
-    setStat((s) => (s.dirty === dirty ? s : { ...s, dirty }));
+    editorRef.current?.commands.focus();
+  }, [props.refocusToken]);
+
+  // A save landed (savedText caught up with what we serialized): advance the
+  // dirtiness baseline to that doc. Note buffers also carry session-tracked
+  // dirtiness for the status bar.
+  useEffect(() => {
+    const last = lastSerializedRef.current;
+    if (last && props.savedText === last.text) savedDocRef.current = last.doc;
+    if (props.dirty !== undefined) {
+      setStat((s) => (s.dirty === props.dirty ? s : { ...s, dirty: props.dirty as boolean }));
+    }
   }, [props.savedText, props.dirty]);
-
-  // Declared last so it runs after the guarded effects above on first mount.
-  useEffect(() => {
-    didMountRef.current = true;
-  }, []);
 
   return (
     <div className="av-editor" data-cursor={props.cursor}>
-      <div className="av-cm" ref={hostRef} />
-      <div className="av-status">
-        <div className={"av-mode " + (vimMode ? "mode-" + mode : "mode-text")}>
-          {vimMode ? (MODE_LABEL[mode] ?? mode.toUpperCase()) : "TEXT"}
-        </div>
-        <div className="av-file">
-          {props.fileLabel}
-          {stat.dirty && (
-            <button
-              type="button"
-              className="av-dirty"
-              title={`unsaved — click to save (${chordLabel("Mod-s")})`}
-              onMouseDown={(e) => e.preventDefault()} // keep the editor focused (Chromium focuses buttons on click)
-              onClick={() => {
-                const v = viewRef.current;
-                if (v) props.onSave(v.state.doc.toString());
-              }}
-            >
-              [+]
-            </button>
-          )}
-        </div>
-        <div className="av-spacer" />
-        {props.notePath !== "config" && (
-          <button
-            type="button"
-            className="av-statbtn"
-            title={`live preview ${props.preview ? "on" : "off"} (${chordLabel("Mod-e")})`}
-            aria-label="toggle live preview"
-            onMouseDown={(e) => e.preventDefault()} // keep the editor focused
-            onClick={() => props.onCommand("togglePreview")}
-          >
-            {props.preview ? (
-              <Eye size={13} aria-hidden="true" />
-            ) : (
-              <EyeOff size={13} aria-hidden="true" />
-            )}
-          </button>
-        )}
-        <div className="av-stat">{stat.words} words</div>
-        <div className="av-stat">
-          {stat.line}:{stat.col}
-        </div>
-        <div className="av-stat av-pct">{stat.pct}</div>
+      <div className="av-cm">
+        <EditorContent editor={editor} />
       </div>
+      <StatusBar
+        modeClass={props.vimMode ? "mode-" + mode : "mode-text"}
+        modeLabel={props.vimMode ? (MODE_LABEL[mode] ?? mode.toUpperCase()) : "TEXT"}
+        fileLabel={props.fileLabel}
+        stat={stat}
+        onSave={() => {
+          const ed = editorRef.current;
+          if (ed) props.onSave(serializeNow(ed));
+        }}
+      />
     </div>
   );
 }

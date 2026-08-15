@@ -4,10 +4,9 @@
 // all DERIVED from this table, so they cannot drift. Adding a command (or rebinding
 // one) is a one-line edit here.
 //
-// Pure + framework-free (only a type import from CodeMirror): node-testable, and
-// the chord matcher is reused by both the editor keymap and the document-level
-// fallback for the no-note-open state.
-import type { KeyBinding } from "@codemirror/view";
+// Pure + framework-free: node-testable, and the chord matcher (eventChord +
+// normChord) is reused by the editor's chord layer, the plain-text buffer, and
+// the document-level fallback for the no-note-open state.
 import { isSafeChord } from "../shortcut";
 
 export { isSafeChord } from "../shortcut";
@@ -31,7 +30,6 @@ export const APP_COMMANDS = [
   "unpin",
   "palette",
   "commands",
-  "togglePreview",
   "reopen",
   "nextNote",
   "prevNote",
@@ -59,7 +57,8 @@ export interface Command {
   id: string;
   title: string;
   group: "Find" | "Note" | "View" | "Settings" | "Help";
-  /** CM6 chord string, also the canonical form rendered (via chordLabel) and matched. */
+  /** Chord string (CM6-style syntax), the canonical form rendered (via chordLabel)
+   *  and matched (via eventChord/normChord). */
   chord?: string;
   /** Vim ex-command names (`:find`, `:files`, …). */
   ex?: string[];
@@ -145,14 +144,16 @@ export const COMMANDS: Command[] = [
     command: "commands",
     inPalette: false,
   },
+  // The which-key leader menu. <Space> opens it in vim normal mode; Mod-l is the
+  // non-vim (and insert-mode) path — rebindable like any chord. It's a different
+  // surface from the searchable palette, so listing it there is not recursion.
   {
     id: "palette",
     title: "Leader menu",
     group: "Find",
+    chord: "Mod-l",
     ex: ["palette"],
     command: "palette",
-    inPalette: false,
-    inCheatsheet: false,
   },
   {
     id: "notebooks",
@@ -354,15 +355,6 @@ export const COMMANDS: Command[] = [
     group: "View",
     command: "uiReset",
   },
-  {
-    id: "togglePreview",
-    title: "Toggle live preview",
-    group: "View",
-    chord: "Mod-e",
-    ex: ["preview"],
-    leader: "p",
-    command: "togglePreview",
-  },
   // ── Settings / Help ───────────────────────────────────────────────
   {
     id: "settings",
@@ -501,41 +493,34 @@ export function chordConflict(
   return commands.find((c) => c.id !== exceptId && effectiveChord(c, overrides) === chord);
 }
 
-/**
- * Build the always-on CM6 chord keymap from the table. `dispatch` runs a command
- * in the editor's context (AppCommands via onCommand, editor actions via onSave/etc).
- */
-// CM matches a shifted-punctuation chord ("Mod-Shift-=") through a keyCode
-// base-key fallback that assumes a US keyCode table — WebKitGTK/Linux report
-// '+'/'_' with keyCodes that defeat it. Aliasing the shifted GLYPH form makes
-// the binding match on event.key alone, on every platform.
-const CHORD_ALIASES: [RegExp, string][] = [
-  [/Shift-=$/, "+"],
-  [/Shift--$/, "_"],
-];
-function chordAliases(chord: string): string[] {
-  for (const [re, glyph] of CHORD_ALIASES) {
-    if (re.test(chord)) return [chord, chord.replace(re, glyph)];
-  }
-  return [chord];
+/** Chord → command lookup for the EDITOR scope: unlike the global map it also
+ *  includes editor-action commands (save/search/follow/…), which need live
+ *  editor state to run. Matched against `eventChord(e)` — whose SHIFT_BASE fold
+ *  already lands shifted punctuation ("+"/"_") on the base key, on every
+ *  platform (the old CM keymap needed per-glyph aliases for this). */
+export function makeEditorChordMap(overrides?: ChordOverrides): Map<string, Command> {
+  return new Map(
+    COMMANDS.map((c) => ({ c, chord: effectiveChord(c, overrides) }))
+      .filter((x) => x.chord && isSafeChord(x.chord))
+      .map(({ c, chord }) => [normChord(chord as string), c]),
+  );
 }
+const DEFAULT_EDITOR_MAP = makeEditorChordMap();
 
-export function commandChordKeymap(
-  dispatch: (cmd: Command) => void,
-  overrides?: ChordOverrides,
-): KeyBinding[] {
-  return COMMANDS.map((c) => ({ c, chord: effectiveChord(c, overrides) }))
-    .filter((x) => x.chord && isSafeChord(x.chord))
-    .flatMap(({ c, chord }) =>
-      chordAliases(chord as string).map((key) => ({
-        key,
-        preventDefault: true,
-        run: () => {
-          dispatch(c);
-          return true;
-        },
-      })),
-    );
+// Identity-keyed cache, same reasoning as globalChordMap below: cfg.chords is
+// replaced (never mutated) on a rebind, so the editor's keydown handler reuses
+// the map instead of rebuilding it per keystroke.
+let cachedEditorOverrides: ChordOverrides | undefined;
+let cachedEditorMap: Map<string, Command> = DEFAULT_EDITOR_MAP;
+
+/** `makeEditorChordMap`, memoized on the overrides object identity. */
+export function editorChordMap(overrides?: ChordOverrides): Map<string, Command> {
+  if (!overrides) return DEFAULT_EDITOR_MAP;
+  if (overrides !== cachedEditorOverrides) {
+    cachedEditorOverrides = overrides;
+    cachedEditorMap = makeEditorChordMap(overrides);
+  }
+  return cachedEditorMap;
 }
 
 /** Chord → command lookup for the document-level fallback. Only command-kind

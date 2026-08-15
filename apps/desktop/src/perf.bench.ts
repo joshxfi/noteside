@@ -1,11 +1,10 @@
 // JS-side hot-path baselines (run: `pnpm --filter @noteside/desktop bench`).
-// scanBlocks runs on EVERY doc change while live preview is on (the
-// block-preview StateField re-derives tables/fences/quotes from the raw lines) —
-// this pins the per-keystroke cost on a large, block-heavy note.
 import { bench, describe } from "vitest";
-import { ChangeSet, Text } from "@codemirror/state";
+import { getSchema } from "@tiptap/core";
+import { StarterKit } from "@tiptap/starter-kit";
+import { EditorState } from "@tiptap/pm/state";
 import { parseInline, scanBlocks } from "./markdown";
-import { countWordsIn, wordCountDelta } from "./editor/word-count";
+import { docWordCount, transactionWordDelta } from "./editor/pm-doc";
 
 function buildMarkdownDoc(lines: number): string[] {
   const out: string[] = [];
@@ -52,18 +51,23 @@ describe("parseInline", () => {
 
 // The status bar's word counter runs on EVERY doc change. The delta path should
 // be flat in document size; the full rescan it replaced is the comparison arm.
+const schema = getSchema([StarterKit]);
 for (const n of [1000, 10000]) {
-  const doc = Text.of(buildMarkdownDoc(n));
-  const text = doc.toString();
-  const at = doc.line(Math.floor(n / 2)).from;
-  const typed = ChangeSet.of({ from: at, to: at, insert: "x" }, doc.length);
-  const after = typed.apply(doc);
-  describe(`word count N=${n} lines`, () => {
+  const doc = schema.node(
+    "doc",
+    null,
+    buildMarkdownDoc(n).map((l) => schema.node("paragraph", null, l ? [schema.text(l)] : [])),
+  );
+  const state = EditorState.create({ schema, doc });
+  // Type one character in the middle of the doc.
+  const mid = Math.floor(doc.content.size / 2);
+  const typed = state.tr.insertText("x", mid, mid);
+  describe(`word count N=${n} blocks`, () => {
     bench("delta (one typed character)", () => {
-      wordCountDelta(typed, doc, after);
+      transactionWordDelta(typed);
     });
     bench("full rescan (the old per-keystroke path)", () => {
-      countWordsIn(text);
+      docWordCount(typed.doc);
     });
   });
 }

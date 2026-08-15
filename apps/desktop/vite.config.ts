@@ -24,24 +24,24 @@ export default defineConfig({
           // Vite's preload helper is imported by every chunk that has a
           // dynamic import(). Left to rollup it can get hoisted INTO the lazy
           // editor chunk, which the entry then imports statically — silently
-          // re-eagering ~1.7MB at first paint (the exact invariant this config
-          // protects). Pin it to its own tiny chunk.
+          // re-eagering the whole editor at first paint (the exact invariant
+          // this config protects). Pin it to its own tiny chunk.
           if (id.includes("vite/preload-helper")) return "preload";
-          // Per-language syntax modules are loaded on demand by
-          // @codemirror/language-data when a fenced block names them — each
-          // must stay its own lazy chunk, NOT join the editor chunk. Modules
-          // the editor statically reaches (lang-markdown → lang-html →
-          // lang-css/lang-javascript and their @lezer parsers) stay in it.
-          if (/@codemirror\/(lang-(?!markdown|html|css|javascript)|legacy-modes)/.test(id)) {
-            return undefined;
-          }
-          if (/@lezer\/(?!common|highlight|lr|markdown|javascript|css|html)/.test(id)) {
-            return undefined;
-          }
+          // KaTeX is statically imported by the math extension, so it can't be
+          // fully lazy — but it gets its own cache-isolated chunk that loads
+          // WITH the editor chunk, still off the first paint.
+          if (id.includes("/katex/")) return "katex";
+          // Per-language highlight.js grammars are loaded on demand by
+          // code-block.ts when a fenced block names them — each must stay its
+          // own lazy chunk, NOT join the editor chunk (the successor of the
+          // CM-era codeLanguages contract).
+          if (id.includes("highlight.js/lib/languages/")) return undefined;
           if (
-            id.includes("@codemirror") ||
-            id.includes("@replit/codemirror-vim") ||
-            id.includes("@lezer")
+            id.includes("@tiptap") ||
+            id.includes("prosemirror-") ||
+            id.includes("/lowlight/") ||
+            id.includes("highlight.js/lib/core") ||
+            id.includes("/marked/")
           )
             return "editor";
           if (id.includes("/react-dom/") || id.includes("/react/")) return "react";

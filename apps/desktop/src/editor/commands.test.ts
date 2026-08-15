@@ -5,11 +5,11 @@ import {
   chordLabel,
   COMMAND_BY_ID,
   COMMANDS,
-  commandChordKeymap,
   effectiveChord,
   eventChord,
   globalCommandForEvent,
   isSafeChord,
+  makeEditorChordMap,
   makeGlobalChordMap,
   paletteCommands,
   resolveGlobalChord,
@@ -134,19 +134,23 @@ describe("command table", () => {
     });
   });
 
-  it("commandChordKeymap yields one binding per chord (plus shifted-glyph aliases) and dispatches", () => {
-    const ran: string[] = [];
-    const km = commandChordKeymap((c) => ran.push(c.id));
-    // Shift-= / Shift-- chords each get a '+' / '_' glyph alias (keyCode-free
-    // matching on WebKitGTK/Linux), so the keymap is chords + those aliases.
+  it("makeEditorChordMap has one entry per default chord, editor actions included", () => {
+    const map = makeEditorChordMap();
     const chords = COMMANDS.map((c) => c.chord).filter(Boolean) as string[];
-    const aliases = chords.filter((c) => /Shift-(=|-)$/.test(c)).length;
-    expect(km.length).toBe(chords.length + aliases);
-    expect(km.map((b) => b.key)).toContain("Mod-+"); // uiUp's glyph alias
-    expect(km.map((b) => b.key)).toContain("Mod-_"); // uiDown's glyph alias
-    const find = km.find((b) => b.key === "Mod-p");
-    expect(find?.run?.({} as never)).toBe(true);
-    expect(ran).toEqual(["find"]);
+    expect(map.size).toBe(chords.length);
+    expect(map.get("Mod-p")?.id).toBe("find");
+    expect(map.get("Mod-s")?.id).toBe("save"); // editor-action commands ARE in this map
+    expect(map.get("F3")?.id).toBe("searchNext");
+  });
+
+  it("editor chords match shifted-glyph events through eventChord's fold (no aliases needed)", () => {
+    // event.key reports "+" for Shift-= — SHIFT_BASE folds it back, so the map
+    // lookup lands on the canonical chord on every platform (the CM keymap
+    // needed per-glyph alias bindings for WebKitGTK/Linux here).
+    const map = makeEditorChordMap();
+    expect(map.get(eventChord(ev("+", { meta: true, shift: true })))?.id).toBe("uiUp");
+    expect(map.get(eventChord(ev("_", { meta: true, shift: true })))?.id).toBe("uiDown");
+    expect(map.get(eventChord(ev("+", { meta: true })))?.id).toBe("fontUp"); // real '+' key layouts
   });
 
   describe("resolveGlobalChord (document-level fallback guard)", () => {
@@ -209,16 +213,15 @@ describe("command table", () => {
       expect(effectiveChord(COMMAND_BY_ID.find, { find: "" })).toBeUndefined();
       expect(effectiveChord(COMMAND_BY_ID.find, {})).toBe("Mod-p");
     });
-    it("commandChordKeymap honors overrides", () => {
-      const km = commandChordKeymap(() => {}, { find: "Mod-g", grep: "" });
-      const keys = km.map((b) => b.key);
-      expect(keys).toContain("Mod-g"); // find rebound
-      expect(keys).not.toContain("Mod-p"); // old find chord gone
-      expect(keys).not.toContain("Mod-Shift-f"); // grep unbound
+    it("makeEditorChordMap honors overrides", () => {
+      const map = makeEditorChordMap({ find: "Mod-g", grep: "" });
+      expect(map.get("Mod-g")?.id).toBe("find"); // find rebound
+      expect(map.has("Mod-p")).toBe(false); // old find chord gone
+      expect(map.has("Mod-Shift-f")).toBe(false); // grep unbound
     });
     it("drops unsafe overrides at both editor and global dispatch boundaries", () => {
       const overrides = { new: "a", nav: "Tab" };
-      expect(commandChordKeymap(() => {}, overrides).map((b) => b.key)).not.toContain("a");
+      expect(makeEditorChordMap(overrides).has("a")).toBe(false);
       expect(
         resolveGlobalChord(
           ev("a"),
@@ -286,25 +289,17 @@ describe("command table", () => {
     });
 
     it("palette exclusions are a conscious set, each with its own pointer story", () => {
-      // save → the status bar's [+] chip; follow → plain click in rendered
-      // tables / Mod-click in source; search* → the CM panel's own buttons once
-      // open; commands/palette → the titlebar button IS the pointer path;
-      // saveQuit → keyboard-only composite of two pointer-reachable actions.
+      // save → the status bar's [+] chip; follow → Mod-click on links;
+      // search* → the find bar's own buttons once open; commands → the
+      // titlebar button IS the pointer path (don't list "open the palette"
+      // in the palette); saveQuit → keyboard-only composite of two
+      // pointer-reachable actions.
       // Adding an id here means consciously answering "what's its mouse path?".
       const excluded = COMMANDS.filter((c) => c.inPalette === false)
         .map((c) => c.id)
         .sort();
       expect(excluded).toEqual(
-        [
-          "commands",
-          "follow",
-          "palette",
-          "save",
-          "saveQuit",
-          "search",
-          "searchNext",
-          "searchPrev",
-        ].sort(),
+        ["commands", "follow", "save", "saveQuit", "search", "searchNext", "searchPrev"].sort(),
       );
     });
   });

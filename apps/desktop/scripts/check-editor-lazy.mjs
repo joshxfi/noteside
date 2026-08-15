@@ -13,17 +13,21 @@ const scripts = [...html.matchAll(/<script\s+[^>]*type=["']module["'][^>]*src=["
 );
 const assets = await readdir(path.join(dist, "assets"));
 const editorChunks = assets.filter((asset) => /^editor-.*\.js$/.test(asset));
+// KaTeX rides with the editor chunk (math statically imports it) but must stay
+// off the first paint exactly like the editor itself.
+const katexChunks = assets.filter((asset) => /^katex-.*\.js$/.test(asset));
 
 if (editorChunks.length === 0) {
   throw new Error("lazy-editor contract failed: the build produced no editor chunk");
 }
-const eagerEditor = [...preloads, ...scripts].filter((asset) => editorChunks.includes(asset));
-if (eagerEditor.length > 0) {
+const lazyOnly = [...editorChunks, ...katexChunks];
+const eager = [...preloads, ...scripts].filter((asset) => lazyOnly.includes(asset));
+if (eager.length > 0) {
   throw new Error(
-    `lazy-editor contract failed: editor chunk is loaded by index.html (${eagerEditor.join(", ")})`,
+    `lazy-editor contract failed: editor/katex chunk is loaded by index.html (${eager.join(", ")})`,
   );
 }
 
 console.log(
-  `lazy-editor contract passed (${editorChunks.length} editor ${editorChunks.length === 1 ? "chunk" : "chunks"}, none eager)`,
+  `lazy-editor contract passed (${editorChunks.length} editor + ${katexChunks.length} katex chunks, none eager)`,
 );
