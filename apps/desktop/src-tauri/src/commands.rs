@@ -164,6 +164,19 @@ pub async fn open_notebook(
         *state.watcher.lock().unwrap() = None;
         generation
     };
+    // Grant the asset protocol read access to THIS notebook's folder so the
+    // editor can display relative-path images (editor/image.ts resolves them
+    // through convertFileSrc). The static scope in tauri.conf.json is EMPTY on
+    // purpose — least privilege: the webview can only ever read files under
+    // notebooks the user actually opened this session. Grants are additive and
+    // session-scoped; there is no revoke API, which matches the trust model
+    // (the user opened the folder).
+    if let Err(e) = app.asset_protocol_scope().allow_directory(&root, true) {
+        eprintln!(
+            "noteside: asset scope grant failed for {}: {e}",
+            root.display()
+        );
+    }
     match watcher::start_watcher(app, state.notebook.clone(), root.clone(), generation) {
         Ok(d) => {
             // A newer open may have committed while this watcher was starting.

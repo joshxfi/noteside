@@ -34,12 +34,14 @@ describe("tauri capabilities", () => {
     expect(caps.permissions).toContain("opener:allow-reveal-item-in-dir");
   });
 
-  // Relative image srcs render through convertFileSrc (editor/image.ts), which
-  // needs the asset protocol enabled with the notebook's files in scope.
-  // Notebooks can live anywhere on disk, hence the broad scope — the protocol
-  // only ever serves what the webview explicitly requests by path.
-  it("enables the asset protocol for local note images", () => {
+  // Relative image srcs render through convertFileSrc (editor/image.ts). The
+  // STATIC scope stays EMPTY on purpose (least privilege): open_notebook
+  // grants the opened folder at runtime via asset_protocol_scope(), so the
+  // webview can only ever read files under notebooks the user actually opened.
+  // Widening this list would silently re-broaden what a compromised webview
+  // could exfiltrate — the runtime grant in commands.rs is the sanctioned path.
+  it("enables the asset protocol with an EMPTY static scope (runtime grants only)", () => {
     expect(conf.app.security.assetProtocol.enable).toBe(true);
-    expect(conf.app.security.assetProtocol.scope).toContain("**");
+    expect(conf.app.security.assetProtocol.scope).toEqual([]);
   });
 });
