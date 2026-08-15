@@ -14,7 +14,7 @@ test.describe("open URL under cursor", () => {
     });
     await boot(page, { vimMode: false });
 
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("https://noteside.app");

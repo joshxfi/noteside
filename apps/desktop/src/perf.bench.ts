@@ -49,6 +49,24 @@ describe("parseInline", () => {
   });
 });
 
+// Markdown parse (open-time) and serialize (autosave-time) — the two O(doc)
+// costs the editor pays per note. Parse gates the open; serialize runs on the
+// 800ms autosave debounce (never per keystroke — the onChange thunk defers it).
+import { Markdown, MarkdownManager } from "@tiptap/markdown";
+const manager = new MarkdownManager({ extensions: [StarterKit, Markdown] });
+for (const n of [1000, 10000]) {
+  const md = buildMarkdownDoc(n).join("\n");
+  const parsed = manager.parse(md);
+  describe(`markdown io N=${n} lines`, () => {
+    bench("manager.parse (open-time)", () => {
+      manager.parse(md);
+    });
+    bench("manager.serialize (autosave-time)", () => {
+      manager.serialize(parsed);
+    });
+  });
+}
+
 // The status bar's word counter runs on EVERY doc change. The delta path should
 // be flat in document size; the full rescan it replaced is the comparison arm.
 const schema = getSchema([StarterKit]);

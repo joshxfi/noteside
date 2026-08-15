@@ -51,7 +51,7 @@ test.describe("notebook switcher", () => {
 
   test("Mod-o opens the switcher; Esc closes it without switching", async ({ page }) => {
     await boot(page);
-    await page.locator(".cm-content").click(); // focus the editor so the chord routes through it
+    await page.locator(".av-cm .tiptap").click(); // focus the editor so the chord routes through it
     const before = await page.locator(".av-item").count();
 
     await page.keyboard.press("ControlOrMeta+o");
@@ -66,7 +66,7 @@ test.describe("notebook switcher", () => {
   // the marker would land in the new notebook (or be lost) → this fails.
   test("a pending edit persists to the origin notebook across a switch", async ({ page }) => {
     await boot(page); // opens /demo-notebook, first note = Welcome
-    await page.locator(".cm-content").click();
+    await page.locator(".av-cm .tiptap").click();
     await page.keyboard.type("\nSWITCH_MARKER_42");
 
     // switch to the journal, then back — without waiting out the autosave debounce
@@ -80,6 +80,6 @@ test.describe("notebook switcher", () => {
     // reopens — the marker survived the switch, proving switchNotebook flushed into
     // the ORIGIN notebook before the index swapped. (A save re-derives the title
     // from the first body line, so we assert on the editor, not the sidebar row.)
-    await expect(page.locator(".cm-content")).toContainText("SWITCH_MARKER_42");
+    await expect(page.locator(".av-cm .tiptap")).toContainText("SWITCH_MARKER_42");
   });
 });
