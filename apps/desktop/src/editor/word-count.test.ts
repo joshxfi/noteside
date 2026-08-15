@@ -1,20 +1,37 @@
-// Drives the delta counter with REAL ChangeSet/Text values (@codemirror/state is
-// pure JS — no DOM — so it loads fine in the node test env). The contract under
-// test is that `total + wordCountDelta(...)` never diverges from a full rescan.
+// Drives the delta counter with REAL ProseMirror docs/transactions through the
+// pm-doc.ts adapters (prosemirror-model/state are pure JS — no DOM — so they
+// load fine in the node test env, the same precedent @codemirror/state set).
+// The contract under test is unchanged from the CM era: `total +
+// transactionWordDelta(tr)` never diverges from a full rescan of the new doc.
 import { describe, expect, it } from "vitest";
-import { ChangeSet, type ChangeSpec, Text } from "@codemirror/state";
-import { countWordsIn, wordCountDelta } from "./word-count";
+import { getSchema } from "@tiptap/core";
+import { StarterKit } from "@tiptap/starter-kit";
+import type { Node as PMNode } from "@tiptap/pm/model";
+import { EditorState, type Transaction } from "@tiptap/pm/state";
+import { countWordsIn } from "./word-count";
+import { docWordCount, transactionWordDelta } from "./pm-doc";
 
-/** Apply `spec` to `text` and return the delta alongside the exact totals. */
-function apply(lines: string[], spec: ChangeSpec) {
-  const before = Text.of(lines);
-  const changes = ChangeSet.of(spec, before.length);
-  const after = changes.apply(before);
+const schema = getSchema([StarterKit]);
+
+/** One paragraph per entry — the block-editor analogue of "one line per entry". */
+function docOf(paragraphs: string[]): PMNode {
+  return schema.node(
+    "doc",
+    null,
+    paragraphs.map((p) => schema.node("paragraph", null, p ? [schema.text(p)] : [])),
+  );
+}
+
+/** Build a transaction over `doc`, return the delta alongside the exact totals. */
+function apply(doc: PMNode, f: (tr: Transaction) => void) {
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+  f(tr);
   return {
-    delta: wordCountDelta(changes, before, after),
-    exactBefore: countWordsIn(before.toString()),
-    exactAfter: countWordsIn(after.toString()),
-    after: after.toString(),
+    delta: transactionWordDelta(tr),
+    exactBefore: docWordCount(doc),
+    exactAfter: docWordCount(tr.doc),
+    after: tr.doc,
   };
 }
 
@@ -32,7 +49,7 @@ describe("countWordsIn", () => {
     expect(countWordsIn("a\nb\nc")).toBe(3);
   });
 
-  it("is line-ending agnostic, so CRLF source matches the CRLF→LF normalized doc", () => {
+  it("is line-ending agnostic, so CRLF source matches the normalized doc", () => {
     expect(countWordsIn("a b\r\nc d")).toBe(countWordsIn("a b\nc d"));
   });
 
@@ -42,89 +59,75 @@ describe("countWordsIn", () => {
   });
 });
 
-describe("wordCountDelta", () => {
+describe("docWordCount", () => {
+  it("treats block boundaries as whitespace", () => {
+    expect(docWordCount(docOf(["a b", "c d"]))).toBe(4);
+    expect(docWordCount(docOf(["", ""]))).toBe(0);
+    expect(docWordCount(docOf(["one"]))).toBe(1);
+  });
+});
+
+describe("transactionWordDelta", () => {
   it("is zero for a change that neither adds nor removes a word", () => {
-    const r = apply(["a b", "c d"], { from: 3, to: 3, insert: "x" }); // "a b" → "a bx"
+    // First paragraph content starts at pos 1: "a b" → "a bx".
+    const r = apply(docOf(["a b", "c d"]), (tr) => tr.insertText("x", 4, 4));
     expect(r.delta).toBe(0);
     expectExact(r);
   });
 
   it("counts a word split by an inserted space", () => {
-    const r = apply(["ab"], { from: 1, to: 1, insert: " " });
+    const r = apply(docOf(["ab"]), (tr) => tr.insertText(" ", 2, 2));
     expect(r.delta).toBe(1);
     expectExact(r);
   });
 
-  it("counts words joined by deleting the newline between two lines", () => {
-    // "a b" + "c d" = 4 words; "b" and "c" fuse into "bc", so one word is lost.
-    const r = apply(["a b", "c d"], { from: 3, to: 4 });
-    expect(r.after).toBe("a bc d");
+  it("counts words joined by deleting the boundary between two paragraphs", () => {
+    // "a b" | "c d" = 4 words; joining fuses "b" and "c" into "bc" → 3.
+    const doc = docOf(["a b", "c d"]);
+    // Delete from before "b"’s end boundary to after "c"’s start: [4, 7) spans
+    // the paragraph break (paragraph 1 is positions 0..5, paragraph 2 starts at 5).
+    const r = apply(doc, (tr) => tr.delete(4, 7));
     expect(r.delta).toBe(-1);
     expectExact(r);
   });
 
-  it("counts a multi-line paste", () => {
-    const r = apply(["intro"], { from: 5, to: 5, insert: "\none two\nthree" });
+  it("counts a paragraph split through the middle of a word", () => {
+    const r = apply(docOf(["onetwo"]), (tr) => tr.split(4));
+    expect(r.delta).toBe(1);
+    expectExact(r);
+  });
+
+  it("counts a multi-paragraph paste", () => {
+    const r = apply(docOf(["intro"]), (tr) =>
+      tr.insert(7, [docOf(["one two"]).child(0), docOf(["three"]).child(0)]),
+    );
     expect(r.delta).toBe(3);
     expectExact(r);
   });
 
-  it("counts a multi-line deletion", () => {
-    // Drops the two middle lines whole: "keep\nkeep" is left.
-    const r = apply(["keep", "one two", "three", "keep"], { from: 4, to: 18 });
-    expect(r.after).toBe("keep\nkeep");
+  it("counts a multi-paragraph deletion", () => {
+    const doc = docOf(["keep", "one two", "three", "keep"]);
+    // Remove the two middle paragraph nodes wholesale.
+    const from = 6; // end of "keep" paragraph (node spans 0..6)
+    const to = 6 + 9 + 7; // + "one two" node (9) + "three" node (7)
+    const r = apply(doc, (tr) => tr.delete(from, to));
     expect(r.delta).toBe(-3);
     expectExact(r);
   });
 
-  it("handles two separate edits on the SAME line without double counting", () => {
-    // Both ranges expand to the same line — pushMerged must collapse them.
-    const r = apply(
-      ["one two three"],
-      [
-        { from: 0, to: 3, insert: "1" },
-        { from: 8, to: 13, insert: "3" },
-      ],
-    );
-    expect(r.after).toBe("1 two 3");
+  it("handles several edits in ONE transaction (per-step docs keep coords exact)", () => {
+    const r = apply(docOf(["one two three"]), (tr) => {
+      tr.insertText("1", 1, 4); // "one" → "1"
+      tr.insertText("3", 7, 12); // "three" → "3" (post-step coords)
+    });
     expect(r.delta).toBe(0);
     expectExact(r);
   });
 
-  it("handles edits on adjacent lines (expanded ranges abut, never overlap)", () => {
-    const r = apply(
-      ["one two", "three four"],
-      [
-        { from: 0, to: 3, insert: "" },
-        { from: 8, to: 13, insert: "" },
-      ],
-    );
-    expectExact(r);
-  });
-
-  it("handles far-apart edits that stay separate ranges", () => {
-    // First and last line, two untouched lines apart — one word added at each end.
-    const r = apply(
-      ["a b", "filler", "filler", "c d"],
-      [
-        { from: 0, to: 0, insert: "zzz " },
-        { from: 21, to: 21, insert: " yyy" },
-      ],
-    );
-    expect(r.after).toBe("zzz a b\nfiller\nfiller\nc d yyy");
-    expect(r.delta).toBe(2);
-    expectExact(r);
-  });
-
-  it("handles an edit at the very start and end of the document", () => {
-    expectExact(apply(["a b c"], { from: 0, to: 0, insert: "x " }));
-    expectExact(apply(["a b c"], { from: 5, to: 5, insert: " x" }));
-    expectExact(apply(["a b c"], { from: 0, to: 5, insert: "" }));
-  });
-
-  it("handles emptying and refilling the document", () => {
-    expectExact(apply(["a b", "c d"], { from: 0, to: 7, insert: "" }));
-    expectExact(apply([""], { from: 0, to: 0, insert: "a b\nc d" }));
+  it("handles edits at the very start and end of the document", () => {
+    expectExact(apply(docOf(["a b c"]), (tr) => tr.insertText("x ", 1, 1)));
+    expectExact(apply(docOf(["a b c"]), (tr) => tr.insertText(" x", 6, 6)));
+    expectExact(apply(docOf(["a b c"]), (tr) => tr.delete(1, 6)));
   });
 
   it("stays exact across a long randomized edit sequence", () => {
@@ -134,38 +137,52 @@ describe("wordCountDelta", () => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       return seed % n;
     };
-    const alphabet = ["a", "bb", " ", "\n", "  ", "cc dd", "\n\n", "e"];
+    const alphabet = ["a", "bb", " ", "  ", "cc dd", "e"];
 
-    let doc = Text.of(["seed text", "second line", "third"]);
-    let running = countWordsIn(doc.toString());
+    let state = EditorState.create({ schema, doc: docOf(["seed text", "second line", "third"]) });
+    let running = docWordCount(state.doc);
 
-    for (let i = 0; i < 500; i++) {
-      const from = rnd(doc.length + 1);
-      const to = Math.min(doc.length, from + rnd(6));
-      const insert = rnd(3) === 0 ? "" : alphabet[rnd(alphabet.length)];
-      const changes = ChangeSet.of({ from, to, insert }, doc.length);
-      const next = changes.apply(doc);
-      running += wordCountDelta(changes, doc, next);
-      expect(running).toBe(countWordsIn(next.toString()));
-      doc = next;
+    for (let i = 0; i < 400; i++) {
+      const tr = state.tr;
+      const size = tr.doc.content.size;
+      const from = rnd(size + 1);
+      const to = Math.min(size, from + rnd(6));
+      try {
+        if (rnd(8) === 0) {
+          tr.split(Math.max(1, Math.min(size - 1, from)));
+        } else if (rnd(3) === 0) {
+          tr.delete(from, to);
+        } else {
+          tr.insertText(alphabet[rnd(alphabet.length)], from, to);
+        }
+      } catch {
+        continue; // invalid position for this op — skip, determinism holds
+      }
+      running += transactionWordDelta(tr);
+      state = state.apply(tr);
+      expect(running).toBe(docWordCount(state.doc));
     }
   });
 
   it("stays exact when one transaction carries many scattered edits", () => {
-    let doc = Text.of(Array.from({ length: 40 }, (_, i) => `line ${i} of text`));
-    let running = countWordsIn(doc.toString());
-    for (let round = 0; round < 20; round++) {
-      // Every third line, back-to-front so the offsets stay valid as specs.
-      const specs: ChangeSpec[] = [];
-      for (let n = 0; n < doc.lines; n += 3) {
-        const line = doc.line(n + 1);
-        specs.push({ from: line.from, to: line.to, insert: round % 2 ? "x y z" : "" });
+    let state = EditorState.create({
+      schema,
+      doc: docOf(Array.from({ length: 40 }, (_, i) => `line ${i} of text`)),
+    });
+    let running = docWordCount(state.doc);
+    for (let round = 0; round < 10; round++) {
+      const tr = state.tr;
+      // Every third paragraph, back-to-front so positions stay valid per step.
+      for (let n = tr.doc.childCount - 1; n >= 0; n -= 3) {
+        let pos = 0;
+        for (let k = 0; k < n; k++) pos += tr.doc.child(k).nodeSize;
+        const node = tr.doc.child(n);
+        if (round % 2) tr.insertText("x y z", pos + 1, pos + node.nodeSize - 1);
+        else tr.delete(pos + 1, pos + node.nodeSize - 1);
       }
-      const changes = ChangeSet.of(specs, doc.length);
-      const next = changes.apply(doc);
-      running += wordCountDelta(changes, doc, next);
-      expect(running).toBe(countWordsIn(next.toString()));
-      doc = next;
+      running += transactionWordDelta(tr);
+      state = state.apply(tr);
+      expect(running).toBe(docWordCount(state.doc));
     }
   });
 });

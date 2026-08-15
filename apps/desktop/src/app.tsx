@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { backend, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/commands";
-import { setInsertEscape, setUserKeymaps } from "./editor/vim-config";
 import { Finder } from "./components/finder";
 import { SettingsPanel } from "./components/settings-panel";
 import { CommandPalette } from "./components/command-palette";
@@ -67,7 +66,7 @@ import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-
 import { disposeNoteContextMenu, showNoteContextMenu } from "./native-menu";
 import { sanitizeChordOverrides } from "./shortcut";
 
-// The editor chunk (~700KB: CM6 + vim) is the parse-heavy part of the bundle.
+// The editor chunk (Tiptap + ProseMirror) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
 // module scope starts the (local, fast) fetch immediately, so it's ready by the
 // time a note opens.
@@ -845,16 +844,6 @@ export function App() {
     };
   }, [flushConfig, session]);
 
-  // keep the vim insert-escape mapping (e.g. "jj" → <Esc>) in sync with settings
-  useEffect(() => {
-    setInsertEscape(cfg.escMap);
-  }, [cfg.escMap]);
-
-  // apply user keymaps from ~/.notesiderc (nmap/imap/vmap lines)
-  useEffect(() => {
-    setUserKeymaps(cfg.keymaps);
-  }, [cfg.keymaps]);
-
   // Monotonic notebook-load token: overlapping opens/switches resolve to the
   // LATEST user pick (mirrors the Rust side's own latest-request-wins fence), so
   // a slow older open can't land its notes/path/state after a newer one.
@@ -1061,11 +1050,6 @@ export function App() {
     setNavOpen((v) => !v);
     setRefocus((r) => r + 1);
   };
-  const togglePreview = () => {
-    setCfgPatch({ livePreview: !cfg.livePreview });
-    flash(cfg.livePreview ? "live preview off" : "live preview on");
-  };
-
   // Create/delete patch the sidebar list locally — the meta (or the removal) is
   // already known, so refetching all N metas over IPC is wasted; the watcher's
   // reconcile() remains the eventual-consistency backstop.
@@ -1274,7 +1258,6 @@ export function App() {
     else if (c === "pin") setActivePinned(true);
     else if (c === "unpin") setActivePinned(false);
     else if (c === "reveal") revealActive();
-    else if (c === "togglePreview") togglePreview();
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
     else if (c === "prevNote") stepNote(-1);
@@ -1415,7 +1398,6 @@ export function App() {
   const titleText = s.title;
   const showEditor = s.status !== "empty";
   const vimSuffix = cfg.vimMode ? "v" : "t";
-  const previewOn = s.status === "note" && cfg.livePreview;
 
   return (
     <div className="av-desktop">
@@ -1523,8 +1505,8 @@ export function App() {
             ) : status === "no-notebook" ? (
               <NotebookPicker onPick={() => void pickNotebook()} />
             ) : showEditor ? (
-              // Preview/relativeNumbers deliberately NOT in the key: the editor
-              // reconfigures them live via compartments (a remount would lose
+              // Settings (chords/tabWidth/escMap) deliberately NOT in the key:
+              // the editor reads them live through refs (a remount would lose
               // cursor + undo history and reseed from open-time text).
               <EditorBoundary>
                 <Suspense fallback={null}>
@@ -1538,10 +1520,9 @@ export function App() {
                     vimMode={cfg.vimMode}
                     cursorBlink={cfg.cursorBlink}
                     cursor={cfg.cursor}
-                    relativeNumbers={cfg.relativeNumbers}
                     tabWidth={cfg.tabWidth}
                     chordOverrides={cfg.chords}
-                    preview={previewOn}
+                    escMap={cfg.escMap}
                     gotoLine={s.gotoLine}
                     refocusToken={refocus}
                     onChange={(text, dirty) => session.change(text, dirty)}
@@ -1627,7 +1608,7 @@ export function App() {
             actions={leaderCommands.map((c) => ({
               key: c.leader as string,
               label: c.title,
-              hint: c.id === "togglePreview" ? (cfg.livePreview ? "on" : "off") : c.paletteHint,
+              hint: c.paletteHint,
               danger: c.danger,
               run: () => runPaletteCommand(c),
             }))}
