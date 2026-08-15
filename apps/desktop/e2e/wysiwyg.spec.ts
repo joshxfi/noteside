@@ -72,6 +72,37 @@ test.describe("wysiwyg blocks", () => {
     expect(clip).toContain("const answer = compute(42);");
   });
 
+  // REGRESSION: the app's Tab extension shadowed the table's — Tab inside a
+  // cell inserted spaces instead of navigating, and tables could never grow.
+  test("Tab navigates table cells and grows a new row past the last one", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
+    await caretToEnd(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/table");
+    await page.keyboard.press("Enter"); // slash menu → 3×3 with a header row
+    const rows = page.locator(".av-cm .tiptap table tr");
+    await expect(rows).toHaveCount(3);
+
+    // caret lands in the first cell; label the header, Tab to the next cell
+    await page.keyboard.type("A1");
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("B1");
+    await expect(page.locator(".av-cm .tiptap table th").nth(0)).toHaveText("A1");
+    await expect(page.locator(".av-cm .tiptap table th").nth(1)).toHaveText("B1");
+    // Shift-Tab goes back without editing
+    await page.keyboard.press("Shift+Tab");
+    await expect(rows).toHaveCount(3);
+
+    // From A1: 8 hops land ON the last cell; the 9th Tab goes PAST it and
+    // appends a fresh row.
+    for (let i = 0; i < 9; i++) await page.keyboard.press("Tab");
+    await expect(rows).toHaveCount(4);
+    // ...and the caret is IN the new row: typing lands there
+    await page.keyboard.type("new row");
+    await expect(rows.nth(3)).toContainText("new row");
+  });
+
   test("typing markdown shorthand creates real blocks (input rules)", async ({ page }) => {
     await boot(page);
     await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
