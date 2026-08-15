@@ -664,6 +664,9 @@ export function App() {
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   const [refocus, setRefocus] = useState(0);
+  // The open editor's command dispatch (registered via onRegisterDispatch) —
+  // lets the searchable palette run editor-action commands (table ops).
+  const editorDispatchRef = useRef<((cmd: Command) => void) | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: NotifyKind } | null>(null);
   const toastTimer = useRef<number | null>(null);
   // Update-check state lives here (not in SettingsPanel) so the boot check can run
@@ -1279,11 +1282,14 @@ export function App() {
     }
   };
 
-  // Run a command chosen from the searchable palette. App-level: AppCommands via
-  // onCommand, plus quit. Editor-context commands (save/follow) aren't listed there.
+  // Run a command chosen from the searchable palette. AppCommands via onCommand,
+  // quit via the session, and other editor actions (table ops) through the
+  // editor's registered dispatch — silently a no-op with no editor mounted
+  // (empty state / config buffer).
   const runPaletteCommand = (cmd: Command) => {
     if (cmd.command) onCommand(cmd.command);
     else if (cmd.editor === "quit") session.quit();
+    else if (cmd.editor) editorDispatchRef.current?.(cmd);
   };
 
   // Chords when no editor is focused (empty state / picker). Disabled while any
@@ -1538,6 +1544,10 @@ export function App() {
                     onCommand={onCommand}
                     onOpenUrl={onOpenUrl}
                     onNotify={(msg) => flash(msg, "error")}
+                    onRegisterDispatch={(fn, alive) => {
+                      if (alive) editorDispatchRef.current = fn;
+                      else if (editorDispatchRef.current === fn) editorDispatchRef.current = null;
+                    }}
                   />
                 </Suspense>
               </EditorBoundary>

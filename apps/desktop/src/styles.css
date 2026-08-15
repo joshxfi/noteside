@@ -924,6 +924,37 @@ body {
   color: var(--ink-faint);
 }
 
+/* Table toolbar (editor/table-toolbar.ts) — floats above the table the caret
+   is in; each button dispatches the same command the palette/ex bar run. */
+.av-tablebar {
+  position: absolute;
+  z-index: 6;
+  display: none;
+  gap: 4px;
+  padding: 3px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+}
+.av-tablebar.is-visible {
+  display: flex;
+}
+.av-tablebar-btn {
+  font-family: var(--mono);
+  font-size: calc(10.5px * var(--ui-scale));
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 1px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.av-tablebar-btn:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
 /* The hover drag grip (editor/hover-handle.ts) — one shared element, revealed
    by pointer proximity, never per-block state. */
 .av-grip {

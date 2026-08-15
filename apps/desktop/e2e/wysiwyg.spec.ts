@@ -103,6 +103,45 @@ test.describe("wysiwyg blocks", () => {
     await expect(rows.nth(3)).toContainText("new row");
   });
 
+  // Table structure ops: the floating toolbar is the pointer path, the
+  // searchable palette the keyboard path — both dispatch the SAME commands.
+  test("the table toolbar and palette add/remove rows and columns", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
+    await caretToEnd(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/table");
+    await page.keyboard.press("Enter");
+
+    const rows = page.locator(".av-cm .tiptap table tr");
+    const headerCells = page.locator(".av-cm .tiptap table tr").first().locator("th,td");
+    const bar = page.locator(".av-tablebar");
+
+    // toolbar appears while the caret is in the table
+    await expect(bar).toBeVisible();
+
+    // pointer path: buttons
+    await bar.getByRole("button", { name: "+ col" }).click();
+    await expect(headerCells).toHaveCount(4);
+    await bar.getByRole("button", { name: "− col" }).click();
+    await expect(headerCells).toHaveCount(3);
+    await bar.getByRole("button", { name: "+ row" }).click();
+    await expect(rows).toHaveCount(4);
+    await bar.getByRole("button", { name: "− row" }).click();
+    await expect(rows).toHaveCount(3);
+
+    // keyboard path: the palette runs the same command on the same selection
+    await page.keyboard.press("ControlOrMeta+Shift+p");
+    await page.keyboard.type("add column");
+    await page.keyboard.press("Enter");
+    await expect(headerCells).toHaveCount(4);
+
+    // caret leaves the table → toolbar hides
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowRight");
+    await expect(bar).toBeHidden();
+  });
+
   test("typing markdown shorthand creates real blocks (input rules)", async ({ page }) => {
     await boot(page);
     await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();

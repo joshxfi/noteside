@@ -40,9 +40,21 @@ export async function boot(page: Page, config: BootConfig = {}): Promise<void> {
  *  selection (the flakiest bug this suite ever had). */
 export async function caretToEnd(page: Page): Promise<void> {
   await page.locator(".av-cm .tiptap").click();
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("ArrowRight");
-  await page.waitForFunction(() => window.getSelection()?.isCollapsed === true);
+  // Retry loop: a stale queued selectionchange can swallow one collapse — a
+  // fresh press pair always lands within an attempt or two.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowRight");
+    try {
+      await page.waitForFunction(() => window.getSelection()?.isCollapsed === true, undefined, {
+        timeout: 1000,
+      });
+      return;
+    } catch {
+      /* selection still ranged — press again */
+    }
+  }
+  throw new Error("caretToEnd: the selection never collapsed");
 }
 
 export { base as test, expect };
