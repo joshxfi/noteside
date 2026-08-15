@@ -80,6 +80,27 @@ test.describe("vim mode", () => {
     await expect(stat(page)).toHaveText(new RegExp(`^${emptyBlock}:`));
   });
 
+  // REGRESSION (WebKit): probing below a table's last row returns the TABLE's
+  // own position; snapped forward, it re-entered row 1 — j cycled inside the
+  // table forever. The probe now rejects "advances" against the motion.
+  test("j traverses down through a table and out; k comes back up", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    await page.locator(".av-item").filter({ hasText: "Rich blocks" }).click();
+    await page.locator(".av-cm .tiptap table").waitFor();
+    await page.locator(".av-cm .tiptap").click();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press(":");
+    await page.locator(".av-exbar-input").fill("3"); // the table block
+    await page.keyboard.press("Enter");
+    await expect(stat(page)).toHaveText(/^3:/);
+
+    for (let i = 0; i < 8; i++) await page.keyboard.press("j");
+    await expect(stat(page)).not.toHaveText(/^3:/); // out the bottom, not cycling
+
+    for (let i = 0; i < 14; i++) await page.keyboard.press("k");
+    await expect(stat(page)).toHaveText(/^1:/); // back up through it to the top
+  });
+
   test("dd deletes a block into the register; p pastes it back below", async ({ page }) => {
     await bootVim(page);
     const blocks = page.locator(".av-cm .tiptap > *");

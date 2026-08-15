@@ -40,6 +40,9 @@ test.describe("slash menu", () => {
     // a fresh line starts a fresh session
     await page.keyboard.press("Enter");
     await page.keyboard.type("/quo");
+    // wait for the filter to settle on ONE row — clicking mid-refilter can hit
+    // a row the popup is about to rebuild (parallel-load flake)
+    await expect(page.locator(".av-slash-row")).toHaveCount(1);
     await page.locator(".av-slash-row", { hasText: "Quote" }).click();
     await expect(page.locator(".av-cm .tiptap blockquote")).toBeVisible();
   });
