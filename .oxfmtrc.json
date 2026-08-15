@@ -4,6 +4,7 @@
     "**/src-tauri/**",
     "apps/landing/public/demo/**",
     "pnpm-lock.yaml",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "**/test-vectors/round-trip/**"
   ]
 }

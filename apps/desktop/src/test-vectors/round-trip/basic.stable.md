@@ -1,6 +1,6 @@
 # Title
 
-Some _prose_ with **bold**, `inline code`, and ~~struck~~ text.
+Some *prose* with **bold**, `inline code`, and ~~struck~~ text.
 
 ## Section two
 

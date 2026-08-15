@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import caps from "../src-tauri/capabilities/default.json";
+import conf from "../src-tauri/tauri.conf.json";
 
 // REGRESSION (v1.3.0): app.tsx registers a JS `onCloseRequested` listener
 // (the config flush), which makes Tauri core intercept the native close; the
@@ -31,5 +32,14 @@ describe("tauri capabilities", () => {
   // The context menu's "Reveal in Finder/Explorer" → reveal_note → opener plugin.
   it("grants reveal-item-in-dir (the Reveal in Finder/Explorer menu item)", () => {
     expect(caps.permissions).toContain("opener:allow-reveal-item-in-dir");
+  });
+
+  // Relative image srcs render through convertFileSrc (editor/image.ts), which
+  // needs the asset protocol enabled with the notebook's files in scope.
+  // Notebooks can live anywhere on disk, hence the broad scope — the protocol
+  // only ever serves what the webview explicitly requests by path.
+  it("enables the asset protocol for local note images", () => {
+    expect(conf.app.security.assetProtocol.enable).toBe(true);
+    expect(conf.app.security.assetProtocol.scope).toContain("**");
   });
 });

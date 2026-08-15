@@ -27,6 +27,13 @@ if (eager.length > 0) {
     `lazy-editor contract failed: editor/katex chunk is loaded by index.html (${eager.join(", ")})`,
   );
 }
+// Per-language highlight.js grammars must stay their own lazy chunks — if this
+// count hits zero, someone's import pattern folded them into the editor chunk
+// (the regression the CM-era codeLanguages contract guarded).
+const langChunks = assets.filter((asset) => /^(typescript|python|rust|bash)-.*\.js$/.test(asset));
+if (langChunks.length === 0) {
+  throw new Error("lazy-editor contract failed: no per-language syntax chunks were emitted");
+}
 
 console.log(
   `lazy-editor contract passed (${editorChunks.length} editor + ${katexChunks.length} katex chunks, none eager)`,

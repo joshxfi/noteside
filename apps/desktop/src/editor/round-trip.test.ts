@@ -59,13 +59,47 @@ describe("targeted preservation", () => {
     expect(diskRoundTrip(note)).toBe(note);
   });
 
-  it("task states survive once the parser knows them", () => {
-    // GFM task lists parse as plain list items until the P3 TaskList extension
-    // lands — this pins that at minimum NO TEXT is lost meanwhile.
+  it("task states round-trip", () => {
     const md = "- [ ] open task\n- [x] done task";
-    const out = roundTrip(md);
-    expect(out).toContain("open task");
-    expect(out).toContain("done task");
+    expect(roundTrip(md)).toBe(md);
+  });
+
+  it("literal pipes inside table cells stay escaped (cell-corruption regression)", () => {
+    // The stock serializer drops the \| escape, so the cell splits on reparse;
+    // table.ts wraps cell rendering with the GFM escape rule.
+    const md = "| a | b |\n| --- | --- |\n| pi\\|pe | x |";
+    const once = roundTrip(md);
+    expect(once).toContain("pi\\|pe");
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it("table alignment colons survive", () => {
+    const once = roundTrip("| L | C | R |\n| :--- | :---: | ---: |\n| a | b | c |");
+    expect(once).toMatch(/\| :-+ \| :-+: \| -+: \|/);
+    expect(roundTrip(once)).toBe(once);
+  });
+
+  it("math survives byte-identically, inline and block", () => {
+    expect(roundTrip("Euler: $e^{i\\pi} + 1 = 0$ inline.")).toBe(
+      "Euler: $e^{i\\pi} + 1 = 0$ inline.",
+    );
+    expect(roundTrip("$$\n\\int_0^1 x^2 dx\n$$")).toBe("$$\n\\int_0^1 x^2 dx\n$$");
+  });
+
+  it("images keep their written src verbatim (relative paths included)", () => {
+    expect(roundTrip("![alt](./assets/pic.png)")).toBe("![alt](./assets/pic.png)");
+    expect(roundTrip('![c](https://x.dev/c.png "t")')).toBe('![c](https://x.dev/c.png "t")');
+  });
+
+  it("callouts round-trip as GFM alerts; plain quotes stay plain", () => {
+    const callout = "> [!WARNING]\n> Careful now.";
+    expect(roundTrip(callout)).toBe(callout);
+    const quote = "> just a quote\n> across lines";
+    expect(roundTrip(quote)).toBe(quote);
+  });
+
+  it("the [!KIND] marker with an inline lead splits onto its own line", () => {
+    expect(roundTrip("> [!TIP] lead text")).toBe("> [!TIP]\n> lead text");
   });
 
   it("raw html blocks are byte-preserved, not entity-escaped", () => {
