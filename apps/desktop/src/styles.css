@@ -440,6 +440,74 @@ body {
 .av-item-act svg {
   display: block;
 }
+/* ── sidebar: folder groups ── */
+/* A collapsible group header per folder (flat, full relative dir as the label,
+   .cheat-grouphead lineage). The chevron rotation and the hover kebab are
+   CSS-only — the row is memoized and pointer motion must never re-render it. */
+.av-grouphead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 5px;
+  margin-top: 4px;
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: calc(10.5px * var(--ui-scale));
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+}
+.av-grouphead:hover {
+  background: color-mix(in oklab, var(--paper-2), var(--ink) 5%);
+  color: var(--ink-soft);
+}
+.av-grouphead .av-chev {
+  flex: none;
+  transition: transform 0.12s ease;
+}
+.av-grouphead.is-open .av-chev {
+  transform: rotate(90deg);
+}
+.av-group-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.av-group-count {
+  flex: none;
+  font-size: calc(9.5px * var(--ui-scale));
+  color: var(--ink-faint);
+  opacity: 0.8;
+}
+.av-grouphead:hover .av-item-actions,
+.av-grouphead:focus-within .av-item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* the expanded EMPTY group's body — also the drop target for the drag below */
+.av-group-blank {
+  margin: 0 2px;
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in oklab, var(--ink-faint), transparent 55%);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: calc(10.5px * var(--ui-scale));
+  color: var(--ink-faint);
+  opacity: 0.75;
+}
+/* drag-and-drop affordances: the nav tints while a note row is dragged over it
+   ("anywhere not in a group = root"), the resolved group header gets a ring */
+.av-list.is-dragging {
+  background: color-mix(in oklab, var(--paper-2), var(--accent) 4%);
+}
+.av-grouphead.is-drop,
+.av-group-blank.is-drop {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);
+}
 .av-sidefoot {
   padding: 10px 12px 12px;
   display: flex;

@@ -141,20 +141,20 @@ pub async fn open_notebook(
     }
     let load_token = state.notebook.lock().unwrap().begin_load();
     let store = frecency_file(&app);
-    let (root, records, frec) = blocking(move || {
+    let (root, scan, frec) = blocking(move || {
         let scan_root = std::fs::canonicalize(&requested_root)?;
-        let records = notebook::scan_notebook(&scan_root)?;
+        let scan = notebook::scan_notebook(&scan_root)?;
         let frec = store.map_or_else(HashMap::new, |file| {
             frecency::load(&file, &scan_root.to_string_lossy())
         });
-        Ok((scan_root, records, frec))
+        Ok((scan_root, scan, frec))
     })
     .await?;
-    let metas = sorted_metas(&records);
+    let metas = sorted_metas(&scan.records);
     let generation = {
         let mut g = state.notebook.lock().unwrap();
         let generation = g
-            .finish_load(load_token, root.clone(), records, frec)
+            .finish_load(load_token, root.clone(), scan.records, scan.folders, frec)
             .ok_or_else(|| {
                 AppError::Msg("notebook open was superseded by a newer request".into())
             })?;
@@ -258,8 +258,14 @@ pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -
     Ok(meta)
 }
 
+/// Create a note, optionally inside a folder (`dir`; None/"" = the notebook
+/// root — the folder header's "New note here" passes a dir).
 #[tauri::command]
-pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> Result<NoteMeta> {
+pub async fn create_note(
+    title: Option<String>,
+    dir: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<NoteMeta> {
     let (root, generation) = notebook_context(&state)?;
     let raw = title.unwrap_or_default();
     let display = if raw.trim().is_empty() {
@@ -267,11 +273,17 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
     } else {
         raw.trim().to_string()
     };
+    let folder = dir.unwrap_or_default();
+    let dest = if folder.is_empty() {
+        root.clone()
+    } else {
+        notebook::safe_dir_path(&root, &folder)
+            .ok_or_else(|| AppError::Msg("destination is not a folder in the notebook".into()))?
+    };
     let disk_root = root.clone();
     let (meta, initial) = blocking(move || {
         let initial = format!("# {display}\n\n");
-        let abs =
-            notebook::atomic_create_unique(&disk_root, &notebook::slugify(&display), &initial)?;
+        let abs = notebook::atomic_create_unique(&dest, &notebook::slugify(&display), &initial)?;
         let rel = notebook::rel_path(&disk_root, &abs);
         let meta = notebook::parse_meta(rel, &initial, notebook::mtime_millis(&abs));
         Ok((meta, initial))
@@ -280,6 +292,7 @@ pub async fn create_note(title: Option<String>, state: State<'_, AppState>) -> R
     let mut g = state.notebook.lock().unwrap();
     ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), initial, Instant::now());
+    g.add_folder(&folder);
     Ok(meta)
 }
 
@@ -349,6 +362,227 @@ pub async fn rename_note(
     }
     // No-op path: save_note already recorded this exact meta+body — nothing to update.
     Ok(meta)
+}
+
+/// The current notebook's folders (sorted relative dirs, empties included).
+/// Folders are first-class sidebar data, kept on `NotebookState` under the
+/// same snapshot discipline as `records`.
+#[tauri::command]
+pub fn list_folders(state: State<AppState>) -> Vec<String> {
+    let g = state.notebook.lock().unwrap();
+    g.folders.as_ref().clone()
+}
+
+/// Move a note into another folder (`dir`; "" = the notebook root), preserving
+/// the filename STEM — a move is a location change, not a rename (the slug
+/// still follows the title on the next explicit save). Destination collisions
+/// get the usual `-N` suffix. Moving a note into the folder it already lives
+/// in is a byte-free no-op returning the current meta (an mtime bump would
+/// jump the note to the top of the updated-sort for nothing — the pin
+/// short-circuit's reasoning).
+#[tauri::command]
+pub async fn move_note(
+    path: String,
+    dir: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<NoteMeta> {
+    // Index-first body, exactly like rename_note: a move relinks the inode and
+    // never writes body bytes, so a stale body cannot lose content.
+    let (root, generation, recorded) = {
+        let g = state.notebook.lock().unwrap();
+        let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
+        let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
+        (root, generation, body)
+    };
+    let persist_root = root.clone();
+    let disk_root = root.clone();
+    let rel = path.clone();
+    let target = dir.clone();
+    let (moved, meta, body) = blocking(move || {
+        let old_abs = notebook::safe_note_path(&disk_root, &rel)
+            .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
+        let body = match recorded {
+            Some(b) => b,
+            None => std::fs::read_to_string(&old_abs)
+                .map_err(|e| AppError::Msg(format!("read failed: {e}")))?,
+        };
+        let dest = if target.is_empty() {
+            disk_root.clone()
+        } else {
+            notebook::safe_dir_path(&disk_root, &target).ok_or_else(|| {
+                AppError::Msg("destination is not a folder in the notebook".into())
+            })?
+        };
+        let current = old_abs.parent().unwrap_or(&disk_root);
+        if notebook::rel_path(&disk_root, current) == notebook::rel_path(&disk_root, &dest) {
+            let meta = notebook::parse_meta(rel.clone(), &body, notebook::mtime_millis(&old_abs));
+            return Ok((false, meta, body));
+        }
+        std::fs::create_dir_all(&dest)?;
+        let stem = Path::new(&rel)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("untitled");
+        // The hard-link move preserves the inode's mtime, so the note keeps its
+        // place in the updated-sort and echo verification stays byte-exact.
+        let new_abs = notebook::rename_unique(&old_abs, &dest, stem)
+            .map_err(|e| AppError::Msg(format!("move failed: {e}")))?;
+        let new_rel = notebook::rel_path(&disk_root, &new_abs);
+        let meta = notebook::parse_meta(new_rel, &body, notebook::mtime_millis(&new_abs));
+        Ok((true, meta, body))
+    })
+    .await?;
+    let snapshot = {
+        let mut g = state.notebook.lock().unwrap();
+        ensure_context(&g, &root, generation)?;
+        if moved {
+            g.record_own_rename(&path, meta.clone(), body, Instant::now());
+            g.add_folder(&dir);
+        }
+        g.frecency.clone()
+    };
+    if moved {
+        // The move migrated the note's frecency entry old→new path — persist so
+        // a crash before the next open doesn't strand the old key.
+        persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
+    }
+    Ok(meta)
+}
+
+/// Create a folder (possibly nested) under the notebook root and return its
+/// canonical relative path. Each user-typed segment is sanitized; an existing
+/// directory is an idempotent success, a FILE at the path errors. The folder
+/// registers in state immediately, so an empty folder shows in the sidebar
+/// without waiting for a note to land in it — and the pre-committed state is
+/// what makes the watcher treat our own mkdir event as an echo.
+#[tauri::command]
+pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<String> {
+    let (root, generation) = notebook_context(&state)?;
+    let segments: Vec<String> = dir
+        .split('/')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| sanitize_folder(s).ok_or_else(|| AppError::Msg("folder name is empty".into())))
+        .collect::<Result<_>>()?;
+    if segments.is_empty() {
+        return Err(AppError::Msg("folder name is empty".into()));
+    }
+    let rel = segments.join("/");
+    let disk_root = root.clone();
+    let target = rel.clone();
+    blocking(move || {
+        let abs = notebook::safe_dir_path(&disk_root, &target)
+            .ok_or_else(|| AppError::Msg("folder name is not allowed".into()))?;
+        if abs.exists() && !abs.is_dir() {
+            return Err(AppError::Msg("a file with that name already exists".into()));
+        }
+        std::fs::create_dir_all(&abs)?;
+        if let Some(parent) = abs.parent() {
+            let _ = notebook::sync_directory(parent);
+        }
+        Ok(())
+    })
+    .await?;
+    let mut g = state.notebook.lock().unwrap();
+    ensure_context(&g, &root, generation)?;
+    g.add_folder(&rel);
+    Ok(rel)
+}
+
+/// Rename a folder's LAST segment in place (`work/projects` + "archive" →
+/// `work/archive`) and return the new relative dir. The whole subtree moves
+/// atomically via fs::rename; the commit rewrites every contained path and
+/// migrates frecency keys. An occupied target errors — no silent `-N` for
+/// directories — except a case-only rename, where a case-insensitive
+/// filesystem (macOS/Windows) reports the target as existing because it IS
+/// the source.
+#[tauri::command]
+pub async fn rename_folder(
+    dir: String,
+    name: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    let (root, generation) = notebook_context(&state)?;
+    let segment =
+        sanitize_folder(&name).ok_or_else(|| AppError::Msg("folder name is empty".into()))?;
+    let new_rel = match dir.rfind('/') {
+        Some(i) => format!("{}/{segment}", &dir[..i]),
+        None => segment,
+    };
+    if new_rel == dir {
+        return Ok(dir);
+    }
+    let disk_root = root.clone();
+    let persist_root = root.clone();
+    let old_rel = dir.clone();
+    let target_rel = new_rel.clone();
+    blocking(move || {
+        let old_abs = notebook::safe_dir_path(&disk_root, &old_rel)
+            .ok_or_else(|| AppError::Msg("not a folder in the notebook".into()))?;
+        if !old_abs.is_dir() {
+            return Err(AppError::Msg("not a folder in the notebook".into()));
+        }
+        let new_abs = notebook::safe_dir_path(&disk_root, &target_rel)
+            .ok_or_else(|| AppError::Msg("folder name is not allowed".into()))?;
+        let case_only = old_rel.eq_ignore_ascii_case(&target_rel);
+        if new_abs.exists() && !case_only {
+            return Err(AppError::Msg(
+                "something with that name already exists".into(),
+            ));
+        }
+        std::fs::rename(&old_abs, &new_abs)?;
+        if let Some(parent) = new_abs.parent() {
+            let _ = notebook::sync_directory(parent);
+        }
+        Ok(())
+    })
+    .await?;
+    let snapshot = {
+        let mut g = state.notebook.lock().unwrap();
+        ensure_context(&g, &root, generation)?;
+        g.record_own_folder_rename(&dir, &new_rel, Instant::now());
+        g.frecency.clone()
+    };
+    // Many frecency keys just migrated — persist the whole map, as renames do.
+    persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
+    Ok(new_rel)
+}
+
+/// Delete a folder RECURSIVELY (the frontend confirms with the contained note
+/// count first — this is the permanent-delete precedent, folder-sized).
+/// `remove_dir_all` does not traverse symlink targets. The commit drops the
+/// subtree from the index and arms suppression per removed note, so the
+/// flurry of child Remove events disk-verifies as gone and is swallowed.
+#[tauri::command]
+pub async fn delete_folder(dir: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+    let (root, generation) = notebook_context(&state)?;
+    let disk_root = root.clone();
+    let persist_root = root.clone();
+    let rel = dir.clone();
+    blocking(move || {
+        let abs = notebook::safe_dir_path(&disk_root, &rel)
+            .ok_or_else(|| AppError::Msg("not a folder in the notebook".into()))?;
+        if !abs.is_dir() {
+            // Already gone: idempotent success, matching delete_note semantics.
+            return Ok(());
+        }
+        std::fs::remove_dir_all(&abs)?;
+        if let Some(parent) = abs.parent() {
+            let _ = notebook::sync_directory(parent);
+        }
+        Ok(())
+    })
+    .await?;
+    let snapshot = {
+        let mut g = state.notebook.lock().unwrap();
+        ensure_context(&g, &root, generation)?;
+        g.record_own_folder_delete(&dir, Instant::now());
+        g.frecency.clone()
+    };
+    // Entries under the folder were dropped — persist so they don't resurrect.
+    persist_frecency(&app, &persist_root, snapshot, now_ms()).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -612,13 +846,25 @@ mod tests {
         let mut state = NotebookState::default();
         let first = state.begin_load();
         let first_generation = state
-            .finish_load(first, PathBuf::from("/first"), vec![], HashMap::new())
+            .finish_load(
+                first,
+                PathBuf::from("/first"),
+                vec![],
+                vec![],
+                HashMap::new(),
+            )
             .unwrap();
         assert!(ensure_context(&state, Path::new("/first"), first_generation).is_ok());
 
         let second = state.begin_load();
         state
-            .finish_load(second, PathBuf::from("/second"), vec![], HashMap::new())
+            .finish_load(
+                second,
+                PathBuf::from("/second"),
+                vec![],
+                vec![],
+                HashMap::new(),
+            )
             .unwrap();
         assert!(ensure_context(&state, Path::new("/first"), first_generation).is_err());
     }

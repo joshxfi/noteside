@@ -174,6 +174,95 @@ describe("mock backend", () => {
   });
 });
 
+describe("mock backend — folders", () => {
+  it("lists seeded folders including the empty archive", async () => {
+    const dirs = await mockBackend.listFolders();
+    for (const d of ["archive", "ideas", "journal", "recipes", "work"]) {
+      expect(dirs).toContain(d);
+    }
+    expect(dirs).toEqual([...dirs].sort());
+  });
+
+  it("moveNote preserves the stem, keeps updated, and migrates frecency", async () => {
+    const a = await mockBackend.createNote("Movable");
+    await mockBackend.recordOpen(a.path);
+    const moved = await mockBackend.moveNote(a.path, "archive");
+    expect(moved.path).toBe("archive/movable.md");
+    expect(moved.updated).toBe(a.updated); // a move is not an edit — sort key untouched
+    expect((await mockBackend.listNotes()).some((n) => n.id === a.path)).toBe(false);
+    // Frecency followed the id: the empty-query recents still rank it.
+    const recents = await mockBackend.searchFiles("");
+    expect(recents[0]?.path).toBe("archive/movable.md");
+    await mockBackend.deleteNote(moved.path);
+  });
+
+  it("moveNote to the same folder is a no-op returning the current meta", async () => {
+    const a = await mockBackend.createNote("Stay Put", "archive");
+    const same = await mockBackend.moveNote(a.path, "archive");
+    expect(same.path).toBe(a.path);
+    expect(same.updated).toBe(a.updated);
+    await mockBackend.deleteNote(a.path);
+  });
+
+  it("moveNote resolves destination collisions with -N", async () => {
+    const a = await mockBackend.createNote("Clash");
+    const b = await mockBackend.createNote("Clash", "archive");
+    const moved = await mockBackend.moveNote(a.path, "archive");
+    expect(b.path).toBe("archive/clash.md");
+    expect(moved.path).toBe("archive/clash-2.md");
+    await mockBackend.deleteNote(b.path);
+    await mockBackend.deleteNote(moved.path);
+  });
+
+  it("createFolder sanitizes segments and registers ancestors", async () => {
+    const rel = await mockBackend.createFolder("pro/jects ");
+    expect(rel).toBe("pro/jects");
+    const dirs = await mockBackend.listFolders();
+    expect(dirs).toContain("pro");
+    expect(dirs).toContain("pro/jects");
+    await mockBackend.deleteFolder("pro");
+  });
+
+  it("renameFolder rewrites the subtree's ids, folders, and frecency", async () => {
+    await mockBackend.createFolder("box/inner");
+    const a = await mockBackend.createNote("Boxed", "box/inner");
+    await mockBackend.recordOpen(a.path);
+    const newDir = await mockBackend.renameFolder("box", "crate");
+    expect(newDir).toBe("crate");
+    const dirs = await mockBackend.listFolders();
+    expect(dirs).toContain("crate");
+    expect(dirs).toContain("crate/inner");
+    expect(dirs).not.toContain("box");
+    const notes = await mockBackend.listNotes();
+    expect(notes.some((n) => n.id === "crate/inner/boxed.md")).toBe(true);
+    expect(notes.some((n) => n.id === a.path)).toBe(false);
+    const recents = await mockBackend.searchFiles("");
+    expect(recents[0]?.path).toBe("crate/inner/boxed.md");
+    // An occupied target errors — no silent -N for directories.
+    await mockBackend.createFolder("other");
+    await expect(mockBackend.renameFolder("other", "crate")).rejects.toThrow();
+    await mockBackend.deleteFolder("crate");
+    await mockBackend.deleteFolder("other");
+  });
+
+  it("deleteFolder drops the subtree recursively", async () => {
+    await mockBackend.createFolder("junk/sub");
+    const a = await mockBackend.createNote("Junked", "junk/sub");
+    await mockBackend.recordOpen(a.path);
+    await mockBackend.deleteFolder("junk");
+    expect((await mockBackend.listFolders()).some((d) => d.startsWith("junk"))).toBe(false);
+    expect((await mockBackend.listNotes()).some((n) => n.id.startsWith("junk/"))).toBe(false);
+    expect((await mockBackend.searchFiles("")).some((h) => h.path.startsWith("junk/"))).toBe(false);
+  });
+
+  it("createNote in a folder lands there and registers the dir", async () => {
+    const a = await mockBackend.createNote("Filed", "cabinet");
+    expect(a.path).toBe("cabinet/filed.md");
+    expect(await mockBackend.listFolders()).toContain("cabinet");
+    await mockBackend.deleteFolder("cabinet");
+  });
+});
+
 // setPinnedBody mirrors Rust notebook::set_pinned — same cases as
 // notebook.rs's set_pinned_* tests, so the two adapters can't drift.
 describe("setPinnedBody (mirror of Rust set_pinned)", () => {

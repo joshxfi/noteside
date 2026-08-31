@@ -13,9 +13,17 @@ export interface NoteMenuActions {
   onOpen: (id: string) => void;
   onReveal: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onMove: (id: string, title: string) => void;
   onRename: (id: string, title: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onDelete: (id: string, title: string) => void;
+}
+
+export interface FolderMenuActions {
+  onNewNote: (dir: string) => void;
+  onNewSubfolder: (dir: string) => void;
+  onRename: (dir: string) => void;
+  onDelete: (dir: string) => void;
 }
 
 interface MenuContext {
@@ -59,6 +67,14 @@ async function noteMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
           id: "note-duplicate",
           text: "Duplicate",
           action: () => activeContext?.actions.onDuplicate(activeContext.id),
+        },
+        {
+          id: "note-move",
+          text: "Move to folder…",
+          action: () => {
+            const context = activeContext;
+            if (context) context.actions.onMove(context.id, context.title);
+          },
         },
         {
           id: "note-rename",
@@ -108,16 +124,75 @@ export async function showNoteContextMenu(
   await menu.popup(); // no position → at the cursor
 }
 
-/** Release the one reusable native resource during app teardown/HMR. */
-export async function disposeNoteContextMenu(): Promise<void> {
+// The folder header's menu — a second lazily-created retained Menu, same
+// lifecycle pattern as the note menu (no per-popup rebuild, no leak). Still
+// covered by `core:menu:default`; no new capability.
+interface FolderMenuContext {
+  dir: string;
+  actions: FolderMenuActions;
+}
+
+let activeFolderContext: FolderMenuContext | null = null;
+let folderMenuPromise: Promise<import("@tauri-apps/api/menu").Menu> | null = null;
+
+async function folderMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
+  if (folderMenuPromise) return folderMenuPromise;
+  folderMenuPromise = import("@tauri-apps/api/menu").then(({ Menu }) =>
+    Menu.new({
+      items: [
+        {
+          id: "folder-new-note",
+          text: "New note here",
+          action: () => activeFolderContext?.actions.onNewNote(activeFolderContext.dir),
+        },
+        {
+          id: "folder-new-subfolder",
+          text: "New subfolder…",
+          action: () => activeFolderContext?.actions.onNewSubfolder(activeFolderContext.dir),
+        },
+        {
+          id: "folder-rename",
+          text: "Rename folder…",
+          action: () => activeFolderContext?.actions.onRename(activeFolderContext.dir),
+        },
+        { item: "Separator" },
+        {
+          id: "folder-delete",
+          text: "Delete folder",
+          action: () => activeFolderContext?.actions.onDelete(activeFolderContext.dir),
+        },
+      ],
+    }),
+  );
+  return folderMenuPromise;
+}
+
+/** Pop up the native folder menu at the cursor. */
+export async function showFolderContextMenu(
+  dir: string,
+  actions: FolderMenuActions,
+): Promise<void> {
+  if (!isTauri()) return;
+  activeFolderContext = { dir, actions };
+  const menu = await folderMenu();
+  await menu.popup(); // no position → at the cursor
+}
+
+/** Release the reusable native resources during app teardown/HMR. */
+export async function disposeNativeMenus(): Promise<void> {
   activeContext = null;
+  activeFolderContext = null;
   const current = menuPromise;
+  const currentFolder = folderMenuPromise;
   menuPromise = null;
+  folderMenuPromise = null;
   pinItem = null; // owned by the menu being closed below
-  if (!current) return;
-  try {
-    await (await current).close();
-  } catch {
-    // Window teardown may have already dropped the resource table.
+  for (const p of [current, currentFolder]) {
+    if (!p) continue;
+    try {
+      await (await p).close();
+    } catch {
+      // Window teardown may have already dropped the resource table.
+    }
   }
 }

@@ -46,6 +46,13 @@ fn remove_by_path(records: &mut Vec<Arc<NoteRecord>>, path: &str) {
     }
 }
 
+/// Every prefix directory of `rel`: "a/b/c" → "a", "a/b", "a/b/c".
+fn dir_prefixes(rel: &str) -> impl Iterator<Item = &str> {
+    rel.match_indices('/')
+        .map(move |(i, _)| &rel[..i])
+        .chain(std::iter::once(rel))
+}
+
 /// The open notebook plus its in-memory index (rebuilt from files on open and kept
 /// in sync on save / external change). Plain in-memory structures are faster and
 /// simpler than a database here, and stay fast at any realistic notebook size.
@@ -65,6 +72,12 @@ pub struct NotebookState {
     /// Per-note open-frecency, keyed by notebook-relative path. Loaded with the
     /// notebook and snapshotted by search the same way `records` is.
     pub frecency: Arc<HashMap<String, FrecencyEntry>>,
+    /// Every directory under the root (notebook-relative, sorted — binary-
+    /// searchable like `records`). Folders are first-class: empties are listed
+    /// too. Own folder ops commit here BEFORE their debounced watcher events
+    /// arrive, which is what lets the watcher's folder-relevance check treat a
+    /// disk-vs-list agreement as "our own echo" without a suppression window.
+    pub folders: Arc<Vec<String>>,
     /// Successful notebook loads increment this. Disk work captured from an older
     /// generation may finish, but it is never allowed to mutate the new index.
     generation: u64,
@@ -96,6 +109,7 @@ impl NotebookState {
         token: u64,
         root: PathBuf,
         records: Vec<Arc<NoteRecord>>,
+        folders: Vec<String>,
         frecency: HashMap<String, FrecencyEntry>,
     ) -> Option<u64> {
         if token != self.latest_load {
@@ -105,6 +119,7 @@ impl NotebookState {
         self.revision = self.revision.wrapping_add(1);
         self.root = Some(root);
         self.records = Arc::new(records);
+        self.folders = Arc::new(folders);
         self.frecency = Arc::new(frecency);
         self.own_events.clear();
         Some(self.generation)
@@ -137,26 +152,141 @@ impl NotebookState {
     }
 
     /// Replace the index after an external change (the watcher's rescan).
-    pub fn set_records(&mut self, records: Vec<Arc<NoteRecord>>) {
+    pub fn set_index(&mut self, records: Vec<Arc<NoteRecord>>, folders: Vec<String>) {
         self.records = Arc::new(records);
+        self.folders = Arc::new(folders);
         self.revision = self.revision.wrapping_add(1);
     }
 
     /// Apply targeted external changes from the watcher without a full rescan:
     /// `Some(record)` upserts (new paths at their path-sorted position, since
     /// scan output is path-sorted), `None` removes. Ends in the same state a
-    /// full rescan would have produced for those paths.
+    /// full rescan would have produced for those paths. Upserted paths register
+    /// their directory chain too — cheap insurance so a targeted update can't
+    /// leave the folder list behind disk (removals leave folders alone: the
+    /// directory still exists).
     pub fn apply_external(&mut self, updates: Vec<(String, Option<NoteRecord>)>) {
-        let records = Arc::make_mut(&mut self.records);
-        for (path, rec) in updates {
-            match rec {
-                Some(rec) => upsert_sorted(records, rec),
-                None => {
-                    remove_by_path(records, &path);
-                    Arc::make_mut(&mut self.frecency).remove(&path);
+        let mut dirs: Vec<String> = Vec::new();
+        {
+            let records = Arc::make_mut(&mut self.records);
+            for (path, rec) in updates {
+                match rec {
+                    Some(rec) => {
+                        if let Some(i) = path.rfind('/') {
+                            dirs.push(path[..i].to_string());
+                        }
+                        upsert_sorted(records, rec);
+                    }
+                    None => {
+                        remove_by_path(records, &path);
+                        Arc::make_mut(&mut self.frecency).remove(&path);
+                    }
                 }
             }
         }
+        for dir in dirs {
+            self.add_folder(&dir);
+        }
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// True when `rel` is a known folder (O(log N) over the sorted list).
+    pub fn has_folder(&self, rel: &str) -> bool {
+        self.folders
+            .binary_search_by(|f| f.as_str().cmp(rel))
+            .is_ok()
+    }
+
+    /// Register a folder — and any missing ancestors — in the sorted folder
+    /// list. Idempotent; a full no-op does not bump `revision`, so redundant
+    /// registrations don't churn the watcher's optimistic fences.
+    pub fn add_folder(&mut self, rel: &str) {
+        if rel.is_empty() {
+            return;
+        }
+        let missing: Vec<String> = dir_prefixes(rel)
+            .filter(|p| {
+                self.folders
+                    .binary_search_by(|f| f.as_str().cmp(p))
+                    .is_err()
+            })
+            .map(str::to_string)
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+        let folders = Arc::make_mut(&mut self.folders);
+        for p in missing {
+            if let Err(at) = folders.binary_search(&p) {
+                folders.insert(at, p);
+            }
+        }
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Record our own recursive folder delete: drop the folder subtree from the
+    /// folder list, drop every record + frecency entry under it, and arm the
+    /// suppression window for each removed note path (the per-child Remove
+    /// events then disk-verify as absent and are swallowed; the directory's own
+    /// events self-suppress via the folder-relevance check, since this commit
+    /// lands before the debounced batch).
+    pub fn record_own_folder_delete(&mut self, dir: &str, now: Instant) {
+        let prefix = format!("{dir}/");
+        let until = now + SUPPRESS;
+        let folders = Arc::make_mut(&mut self.folders);
+        folders.retain(|f| f != dir && !f.starts_with(&prefix));
+        let records = Arc::make_mut(&mut self.records);
+        let frecency = Arc::make_mut(&mut self.frecency);
+        let own_events = &mut self.own_events;
+        records.retain(|r| {
+            let inside = r.meta.path.starts_with(&prefix);
+            if inside {
+                frecency.remove(&r.meta.path);
+                own_events.insert(r.meta.path.clone(), until);
+            }
+            !inside
+        });
+        self.revision = self.revision.wrapping_add(1);
+    }
+
+    /// Record our own folder rename: rewrite the folder subtree's prefixes,
+    /// rebuild every affected record with its rewritten id/path (fresh `Arc`s —
+    /// never mutated through existing ones, so live search snapshots keep their
+    /// exact data), migrate frecency keys, arm suppression for old+new child
+    /// paths, and re-sort (a prefix rewrite changes global path order).
+    pub fn record_own_folder_rename(&mut self, old_dir: &str, new_dir: &str, now: Instant) {
+        let old_prefix = format!("{old_dir}/");
+        let until = now + SUPPRESS;
+        let folders = Arc::make_mut(&mut self.folders);
+        for f in folders.iter_mut() {
+            if f == old_dir {
+                *f = new_dir.to_string();
+            } else if let Some(rest) = f.strip_prefix(&old_prefix) {
+                *f = format!("{new_dir}/{rest}");
+            }
+        }
+        folders.sort_unstable();
+        let records = Arc::make_mut(&mut self.records);
+        let frecency = Arc::make_mut(&mut self.frecency);
+        let own_events = &mut self.own_events;
+        for slot in records.iter_mut() {
+            if let Some(rest) = slot.meta.path.strip_prefix(&old_prefix) {
+                let new_path = format!("{new_dir}/{rest}");
+                if let Some(e) = frecency.remove(&slot.meta.path) {
+                    frecency.insert(new_path.clone(), e);
+                }
+                own_events.insert(slot.meta.path.clone(), until);
+                own_events.insert(new_path.clone(), until);
+                let mut rec = NoteRecord {
+                    meta: slot.meta.clone(),
+                    body: slot.body.clone(),
+                };
+                rec.meta.id = new_path.clone();
+                rec.meta.path = new_path;
+                *slot = Arc::new(rec);
+            }
+        }
+        records.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
         self.revision = self.revision.wrapping_add(1);
     }
 
@@ -261,7 +391,7 @@ mod tests {
     ) -> u64 {
         let token = state.begin_load();
         state
-            .finish_load(token, PathBuf::from(root), records, frecency)
+            .finish_load(token, PathBuf::from(root), records, vec![], frecency)
             .expect("latest test load should install")
     }
 
@@ -303,6 +433,7 @@ mod tests {
                 newer,
                 PathBuf::from("/newer"),
                 arcs(vec![rec("new.md", "new")]),
+                vec![],
                 HashMap::new(),
             )
             .expect("latest load installs");
@@ -311,6 +442,7 @@ mod tests {
                 older,
                 PathBuf::from("/older"),
                 arcs(vec![rec("old.md", "old")]),
+                vec![],
                 HashMap::new(),
             )
             .is_none());
@@ -510,5 +642,93 @@ mod tests {
         assert!(!s.frecency.contains_key("a.md"));
         s.apply_external(vec![("b.md".to_string(), None)]);
         assert!(!s.frecency.contains_key("b.md"));
+    }
+
+    #[test]
+    fn add_folder_inserts_ancestors_sorted_and_is_idempotent() {
+        let mut s = NotebookState::default();
+        load(&mut s, "/nb", vec![], HashMap::new());
+        s.add_folder("work/projects/deep");
+        assert_eq!(
+            s.folders.as_slice(),
+            ["work", "work/projects", "work/projects/deep"]
+        );
+        assert!(s.has_folder("work/projects"));
+        assert!(!s.has_folder("work/other"));
+        let before = s.revision();
+        s.add_folder("work/projects"); // fully present — a no-op, no revision churn
+        assert_eq!(s.revision(), before);
+        s.add_folder("archive");
+        assert_eq!(
+            s.folders.as_slice(),
+            ["archive", "work", "work/projects", "work/projects/deep"]
+        );
+    }
+
+    #[test]
+    fn apply_external_upserts_register_the_directory_chain() {
+        let mut s = NotebookState::default();
+        load(&mut s, "/nb", vec![], HashMap::new());
+        s.apply_external(vec![("a/b/n.md".to_string(), Some(rec("a/b/n.md", "x")))]);
+        assert_eq!(s.folders.as_slice(), ["a", "a/b"]);
+    }
+
+    #[test]
+    fn folder_delete_drops_subtree_records_frecency_and_arms_suppression() {
+        let mut s = NotebookState::default();
+        let t0 = Instant::now();
+        load(
+            &mut s,
+            "/nb",
+            arcs(vec![
+                rec("root.md", "r"),
+                rec("work/a.md", "a"),
+                rec("work/sub/b.md", "b"),
+                rec("worked/c.md", "c"), // prefix trap: NOT inside "work"
+            ]),
+            HashMap::new(),
+        );
+        s.add_folder("work/sub");
+        s.add_folder("worked");
+        s.record_open("work/a.md", 1_000);
+        s.record_own_folder_delete("work", t0);
+        let paths: Vec<&str> = s.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(paths, ["root.md", "worked/c.md"]);
+        assert_eq!(s.folders.as_slice(), ["worked"]);
+        assert!(!s.frecency.contains_key("work/a.md"));
+        assert!(s.should_ignore_event(&["work/a.md".into(), "work/sub/b.md".into()], t0));
+    }
+
+    #[test]
+    fn folder_rename_rewrites_prefixes_and_keeps_the_index_sorted() {
+        let mut s = NotebookState::default();
+        let t0 = Instant::now();
+        load(
+            &mut s,
+            "/nb",
+            arcs(vec![
+                rec("work/a.md", "a"),
+                rec("work/sub/b.md", "b"),
+                rec("worked/c.md", "c"),
+                // '/' sorts before letters; the rewrite must re-sort, not patch.
+                rec("zz.md", "z"),
+            ]),
+            HashMap::new(),
+        );
+        s.add_folder("work/sub");
+        s.add_folder("worked");
+        s.record_open("work/a.md", 1_000);
+        s.record_own_folder_rename("work", "archive", t0);
+        let paths: Vec<&str> = s.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            ["archive/a.md", "archive/sub/b.md", "worked/c.md", "zz.md"]
+        );
+        assert_eq!(find_record(&s.records, "archive/sub/b.md"), Some(1));
+        assert_eq!(s.records[0].meta.id, "archive/a.md");
+        assert_eq!(s.folders.as_slice(), ["archive", "archive/sub", "worked"]);
+        assert!(!s.frecency.contains_key("work/a.md"));
+        assert!(s.frecency.contains_key("archive/a.md"));
+        assert!(s.should_ignore_event(&["work/a.md".into(), "archive/a.md".into()], t0));
     }
 }

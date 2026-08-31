@@ -28,6 +28,10 @@ export const APP_COMMANDS = [
   "rename",
   "pin",
   "unpin",
+  "move",
+  "newFolder",
+  "renameFolder",
+  "deleteFolder",
   "palette",
   "commands",
   "reopen",
@@ -78,6 +82,9 @@ export interface Command {
   needsNote?: boolean;
   /** Only offer when the open note's pinned state matches (pin vs unpin). */
   needsPinned?: boolean;
+  /** Only offer when the open note lives in a folder (the command acts on the
+   *  active note's folder — empty folders are managed via their header). */
+  needsFolder?: boolean;
   /** Optional hint shown next to the label in the which-key leader palette. */
   paletteHint?: string;
   /** Show in the searchable command palette (default true). */
@@ -227,6 +234,46 @@ export const COMMANDS: Command[] = [
     command: "reveal",
     needsNote: true,
     paletteHint: ":reveal",
+  },
+  // ── folders: organize notes into real subdirectories of the notebook ──
+  {
+    id: "move",
+    title: "Move to folder…",
+    group: "Note",
+    ex: ["move", "mv"],
+    leader: "m",
+    command: "move",
+    needsNote: true,
+    paletteHint: ":mv",
+  },
+  {
+    id: "newFolder",
+    title: "New folder…",
+    group: "Note",
+    ex: ["mkdir", "folder"],
+    command: "newFolder",
+    paletteHint: ":mkdir",
+  },
+  // These two act on the ACTIVE note's folder (the keyboard path); a folder
+  // header's context menu covers every folder, empties included.
+  {
+    id: "renameFolder",
+    title: "Rename folder…",
+    group: "Note",
+    ex: ["renamefolder"],
+    command: "renameFolder",
+    needsNote: true,
+    needsFolder: true,
+  },
+  {
+    id: "deleteFolder",
+    title: "Delete folder",
+    group: "Note",
+    ex: ["rmdir"],
+    command: "deleteFolder",
+    needsNote: true,
+    needsFolder: true,
+    danger: true,
   },
   {
     id: "save",

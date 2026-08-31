@@ -22,9 +22,34 @@ type FrecencyMap = Map<string, { s: number; t: number }>;
 interface Notebook {
   recs: Map<string, Rec>;
   frecency: FrecencyMap;
+  /** Folders are first-class (empties included), mirroring the Rust scan. */
+  folders: Set<string>;
   lastOpened: number;
 }
 type Seed = { path: string; title: string; body: string; tag?: string };
+
+/** "a/b/c" → ["a", "a/b", "a/b/c"]; "" → []. */
+function dirPrefixes(dir: string): string[] {
+  if (!dir) return [];
+  const parts = dir.split("/");
+  return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+}
+
+/** Mirror Rust `sanitize_folder`: one safe path segment, or null. */
+function sanitizeSegment(name: string): string | null {
+  const cleaned = name.replace(/[/\\:*?"<>|]/g, "").replace(/^[.\s]+|[.\s]+$/g, "");
+  return cleaned || null;
+}
+
+function seedFolders(notes: Seed[], extra: string[] = []): Set<string> {
+  const dirs = new Set<string>(extra);
+  for (const n of notes) {
+    for (const p of dirPrefixes(n.path.slice(0, Math.max(0, n.path.lastIndexOf("/"))))) {
+      dirs.add(p);
+    }
+  }
+  return dirs;
+}
 
 function seedRecs(notes: Seed[], baseTime: number): Map<string, Rec> {
   const m = new Map<string, Rec>();
@@ -65,21 +90,35 @@ const JOURNAL: Seed[] = [
 
 const DEMO = "/demo-notebook";
 const NOW0 = Date.now();
-const demoNb: Notebook = { recs: seedRecs(NOTES, NOW0), frecency: new Map(), lastOpened: NOW0 };
+const demoNb: Notebook = {
+  recs: seedRecs(NOTES, NOW0),
+  frecency: new Map(),
+  // The seeded empty "archive" folder keeps empty-group rendering + drop
+  // targets exercisable in browser dev / the landing demo / e2e.
+  folders: seedFolders(NOTES, ["archive"]),
+  lastOpened: NOW0,
+};
 const notebooks = new Map<string, Notebook>([
   [DEMO, demoNb],
   [
     "/demo-journal",
-    { recs: seedRecs(JOURNAL, NOW0), frecency: new Map(), lastOpened: NOW0 - 3 * 86_400_000 },
+    {
+      recs: seedRecs(JOURNAL, NOW0),
+      frecency: new Map(),
+      folders: seedFolders(JOURNAL),
+      lastOpened: NOW0 - 3 * 86_400_000,
+    },
   ],
 ]);
 
-// `current` names the open notebook; `recs`/`frecency` are REBOUND (not copied) to
-// its maps when it switches, so every helper below reads the live notebook through
-// these bindings — mirroring the Rust `NotebookState::load` swap.
+// `current` names the open notebook; `recs`/`frecency`/`folders` are REBOUND
+// (not copied) to its maps when it switches, so every helper below reads the
+// live notebook through these bindings — mirroring the Rust
+// `NotebookState::load` swap.
 let current = DEMO;
 let recs = demoNb.recs;
 let frecency = demoNb.frecency;
+let folders = demoNb.folders;
 
 // MRU order of notebook paths (front = most recent), mirroring the tauri store's
 // `notebooks` array. `lastOpened` is display-only, so equal timestamps never
@@ -391,12 +430,13 @@ export const mockBackend: Backend = {
   async openNotebook(path) {
     let nb = notebooks.get(path);
     if (!nb) {
-      nb = { recs: new Map(), frecency: new Map(), lastOpened: Date.now() };
+      nb = { recs: new Map(), frecency: new Map(), folders: new Set(), lastOpened: Date.now() };
       notebooks.set(path, nb);
     }
     current = path;
     recs = nb.recs;
     frecency = nb.frecency;
+    folders = nb.folders;
     nb.lastOpened = Date.now();
     bump(path);
     return metas();
@@ -415,7 +455,14 @@ export const mockBackend: Backend = {
   async rememberNotebook(path) {
     const nb = notebooks.get(path);
     if (nb) nb.lastOpened = Date.now();
-    else notebooks.set(path, { recs: new Map(), frecency: new Map(), lastOpened: Date.now() });
+    else {
+      notebooks.set(path, {
+        recs: new Map(),
+        frecency: new Map(),
+        folders: new Set(),
+        lastOpened: Date.now(),
+      });
+    }
     bump(path);
   },
   async removeRecentNotebook(path) {
@@ -490,9 +537,9 @@ export const mockBackend: Backend = {
     }
     return meta;
   },
-  async createNote(title) {
+  async createNote(title, dir) {
     const display = (title ?? "").trim() || "Untitled";
-    const path = uniquePath("", slugifyTitle(display));
+    const path = uniquePath(dir ? `${dir}/` : "", slugifyTitle(display));
     const body = `# ${display}\n\n`;
     const meta: NoteMeta = {
       id: path,
@@ -504,7 +551,92 @@ export const mockBackend: Backend = {
       pinned: false,
     };
     recs.set(path, { meta, body });
+    if (dir) for (const p of dirPrefixes(dir)) folders.add(p);
     return meta;
+  },
+  async listFolders() {
+    return [...folders].sort();
+  },
+  async moveNote(path, dir) {
+    const r = recs.get(path);
+    if (!r) throw new Error(`no such note: ${path}`);
+    const dirEnd = path.lastIndexOf("/") + 1;
+    const currentDir = dirEnd > 0 ? path.slice(0, dirEnd - 1) : "";
+    // Same-folder move is a byte-free no-op: `updated` must not move (it is
+    // the sidebar's sort key) — the Rust command short-circuits identically.
+    if (currentDir === dir) return r.meta;
+    const stem = path.slice(dirEnd).replace(/\.md$/, "");
+    // A move preserves the filename STEM (it is a location change, not a
+    // rename) and keeps `updated` (the hard-link move preserves mtime).
+    const newPath = uniquePath(dir ? `${dir}/` : "", stem);
+    const meta: NoteMeta = { ...r.meta, id: newPath, path: newPath };
+    recs.delete(path);
+    recs.set(newPath, { meta, body: r.body });
+    const f = frecency.get(path);
+    if (f) {
+      frecency.delete(path);
+      frecency.set(newPath, f);
+    }
+    for (const p of dirPrefixes(dir)) folders.add(p);
+    return meta;
+  },
+  async createFolder(dir) {
+    const segments = dir
+      .split("/")
+      .filter((s) => s.trim())
+      .map((s) => {
+        const seg = sanitizeSegment(s);
+        if (!seg) throw new Error("folder name is empty");
+        if (seg.endsWith(".md")) throw new Error("folder name is not allowed");
+        return seg;
+      });
+    if (!segments.length) throw new Error("folder name is empty");
+    const rel = segments.join("/");
+    for (const p of dirPrefixes(rel)) folders.add(p);
+    return rel;
+  },
+  async renameFolder(dir, name) {
+    const seg = sanitizeSegment(name);
+    if (!seg) throw new Error("folder name is empty");
+    if (seg.endsWith(".md")) throw new Error("folder name is not allowed");
+    const i = dir.lastIndexOf("/");
+    const newDir = i >= 0 ? `${dir.slice(0, i)}/${seg}` : seg;
+    if (newDir === dir) return dir;
+    const caseOnly = newDir.toLowerCase() === dir.toLowerCase();
+    if (!caseOnly && folders.has(newDir)) {
+      throw new Error("something with that name already exists");
+    }
+    const prefix = `${dir}/`;
+    for (const f of [...folders]) {
+      const nf = f === dir ? newDir : f.startsWith(prefix) ? newDir + f.slice(dir.length) : f;
+      if (nf !== f) {
+        folders.delete(f);
+        folders.add(nf);
+      }
+    }
+    for (const [p, r] of [...recs]) {
+      if (!p.startsWith(prefix)) continue;
+      const np = newDir + p.slice(dir.length);
+      recs.delete(p);
+      recs.set(np, { meta: { ...r.meta, id: np, path: np }, body: r.body });
+      const f = frecency.get(p);
+      if (f) {
+        frecency.delete(p);
+        frecency.set(np, f);
+      }
+    }
+    return newDir;
+  },
+  async deleteFolder(dir) {
+    const prefix = `${dir}/`;
+    folders.delete(dir);
+    for (const f of [...folders]) if (f.startsWith(prefix)) folders.delete(f);
+    for (const p of [...recs.keys()]) {
+      if (p.startsWith(prefix)) {
+        recs.delete(p);
+        frecency.delete(p);
+      }
+    }
   },
   async duplicateNote(path) {
     const r = recs.get(path);

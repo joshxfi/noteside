@@ -89,6 +89,12 @@ export interface EditingSession {
   cancelAutosave(): Promise<void>;
   /** Resume a paused autosave after a destructive operation failed. */
   resumeAutosave(): void;
+  /** The backend moved/renamed the buffer's file (move-to-folder, folder
+   *  rename) — migrate its id in place. The rename-on-save tail without the
+   *  IPC: repins any queued autosave, rewrites lastNoteId, and (only when the
+   *  buffer is still active) activeId/title. No remount — editorKey excludes
+   *  activeId, so the cursor survives. The caller patches the sidebar list. */
+  migrateId(oldId: string, meta: NoteMeta): void;
 }
 
 export function createEditingSession(deps: EditingSessionDeps): EditingSession {
@@ -256,18 +262,25 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       return;
     }
     if (meta.id === id) return; // filename already matched the title
-    // A keystroke during the rename round-trip queued an autosave pinned to the old
-    // path — re-target it so it can't recreate the renamed-away file on disk.
-    autosaver.repin(id, meta.id);
-    if (latestSaveRequest?.id === id) latestSaveRequest.id = meta.id;
-    if (lastNoteId === id) lastNoteId = meta.id;
-    if (activeId === id) {
+    migrateId(id, meta);
+    onNoteRenamed(id, meta);
+  }
+
+  // Shared id-migration tail: rename-on-save and App's move/folder-rename flows
+  // both land here after the backend produced a new id for the same content.
+  function migrateId(oldId: string, meta: NoteMeta): void {
+    if (meta.id === oldId) return;
+    // A keystroke during the backend round-trip queued an autosave pinned to the
+    // old path — re-target it so it can't recreate the moved-away file on disk.
+    autosaver.repin(oldId, meta.id);
+    if (latestSaveRequest?.id === oldId) latestSaveRequest.id = meta.id;
+    if (lastNoteId === oldId) lastNoteId = meta.id;
+    if (activeId === oldId) {
       // Only the still-active buffer migrates its id/title; if the user switched
-      // away mid-rename, the new buffer's title must not be clobbered.
+      // away mid-operation, the new buffer's title must not be clobbered.
       activeId = meta.id;
       noteTitle = meta.title;
     }
-    onNoteRenamed(id, meta);
     commit();
   }
 
@@ -457,5 +470,6 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       autosavePausedFor = null;
       if (request) autosaver.schedule(request.id, request.text, request.seq);
     },
+    migrateId,
   };
 }
