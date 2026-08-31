@@ -16,14 +16,23 @@ pub struct NoteRecord {
     pub body: String,
 }
 
+/// A notebook scan: every Markdown record plus every non-hidden directory,
+/// both path-sorted. Folders are first-class — an empty directory is still a
+/// folder the sidebar shows — so the walk records them alongside the files.
+pub struct Scan {
+    pub records: Vec<Arc<NoteRecord>>,
+    pub folders: Vec<String>,
+}
+
 /// Walk a notebook folder and read every Markdown file into a record. Hidden
 /// directories (including `.noteside/` and `.git/`) are skipped. The reads fan
 /// out across threads, then the result is sorted by path so by-path lookups can
 /// binary-search and the ordering stays deterministic. Records come
 /// `Arc`-wrapped: the index treats them as immutable values, so state mutations
 /// shallow-copy the index instead of cloning note bodies.
-pub fn scan_notebook(root: &Path) -> std::io::Result<Vec<Arc<NoteRecord>>> {
+pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
     let mut paths = Vec::new();
+    let mut folders = Vec::new();
     for entry in WalkDir::new(root)
         .into_iter()
         // A dot-prefixed notebook root is a valid user choice; only descendants
@@ -31,12 +40,17 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Vec<Arc<NoteRecord>>> {
         .filter_entry(|e| e.depth() == 0 || !is_hidden(e.path()))
     {
         let entry = entry.map_err(walk_error)?;
-        if entry.file_type().is_file()
+        if entry.file_type().is_dir() {
+            if entry.depth() > 0 {
+                folders.push(rel_path(root, entry.path()));
+            }
+        } else if entry.file_type().is_file()
             && entry.path().extension().and_then(|x| x.to_str()) == Some("md")
         {
             paths.push(entry.into_path());
         }
     }
+    folders.sort_unstable();
 
     let workers = std::thread::available_parallelism()
         .map_or(1, |n| n.get())
@@ -67,7 +81,10 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Vec<Arc<NoteRecord>>> {
         })?
     };
     out.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
-    Ok(out)
+    Ok(Scan {
+        records: out,
+        folders,
+    })
 }
 
 fn walk_error(error: walkdir::Error) -> std::io::Error {
@@ -120,6 +137,48 @@ pub fn safe_note_path(root: &Path, rel: &str) -> Option<PathBuf> {
     } else {
         let parent = fs::canonicalize(abs.parent()?).ok()?;
         parent.join(abs.file_name()?)
+    };
+    resolved.starts_with(&canonical_root).then_some(abs)
+}
+
+/// Resolve a client-supplied folder path with the same escape rules as
+/// `safe_note_path` — reject absolute/`..` paths, hidden segments, and symlink
+/// escapes — minus the `.md` extension requirement. Additionally rejects
+/// `.md`-suffixed segments anywhere (a directory named `x.md` would satisfy
+/// note-path validation later and confuse every by-path code path) and `.`
+/// components, so an accepted rel is always in canonical segment form (the
+/// string-equality checks in the move/create commands rely on that). Unlike
+/// notes, a folder target may be several missing levels deep, so the symlink
+/// probe walks up to the nearest EXISTING ancestor before canonicalizing.
+pub fn safe_dir_path(root: &Path, rel: &str) -> Option<PathBuf> {
+    if rel.is_empty() {
+        return None;
+    }
+    let abs = safe_join(root, rel)?;
+    for c in Path::new(rel).components() {
+        match c {
+            Component::Normal(n)
+                if n.to_str()
+                    .is_some_and(|s| !s.starts_with('.') && !s.ends_with(".md")) => {}
+            _ => return None,
+        }
+    }
+    let canonical_root = fs::canonicalize(root).ok()?;
+    let resolved = if abs.exists() {
+        fs::canonicalize(&abs).ok()?
+    } else {
+        let mut probe = abs.as_path();
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        let canonical = loop {
+            match fs::canonicalize(probe) {
+                Ok(canonical) => break canonical,
+                Err(_) => {
+                    tail.push(probe.file_name()?.to_os_string());
+                    probe = probe.parent()?;
+                }
+            }
+        };
+        tail.iter().rev().fold(canonical, |acc, c| acc.join(c))
     };
     resolved.starts_with(&canonical_root).then_some(abs)
 }
@@ -434,12 +493,12 @@ fn create_unique_temp(abs: &Path) -> std::io::Result<(PathBuf, fs::File)> {
 }
 
 #[cfg(unix)]
-fn sync_directory(dir: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_directory(dir: &Path) -> std::io::Result<()> {
     fs::File::open(dir)?.sync_all()
 }
 
 #[cfg(not(unix))]
-fn sync_directory(_dir: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_directory(_dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -587,9 +646,12 @@ pub fn atomic_create_unique(root: &Path, slug: &str, text: &str) -> std::io::Res
     Ok(path)
 }
 
-/// Move `old_abs` to the first available slug without ever replacing an existing
-/// note. Linking then unlinking is same-directory and no-clobber; a failed unlink
-/// removes the new link again so the original remains authoritative.
+/// Move `old_abs` into `root` (any destination directory — same-dir renames and
+/// cross-directory moves alike) at the first available slug without ever
+/// replacing an existing note. Linking then unlinking is no-clobber; a failed
+/// unlink removes the new link again so the original remains authoritative.
+/// Both directory entries are synced — a cross-directory move must durably
+/// record the source unlink, not just the destination link.
 pub fn rename_unique(old_abs: &Path, root: &Path, slug: &str) -> std::io::Result<PathBuf> {
     let mut n = 1;
     loop {
@@ -607,6 +669,11 @@ pub fn rename_unique(old_abs: &Path, root: &Path, slug: &str) -> std::io::Result
                     return Err(error);
                 }
                 sync_directory(root)?;
+                if let Some(old_dir) = old_abs.parent() {
+                    if old_dir != root {
+                        sync_directory(old_dir)?;
+                    }
+                }
                 return Ok(candidate);
             }
             Ok(false) => n += 1,
@@ -686,6 +753,61 @@ mod tests {
         assert!(safe_note_path(&root, "linked/secret.md").is_none());
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn safe_dir_path_rules() {
+        let root = test_dir("safe-dir");
+        fs::create_dir_all(root.join("notes")).unwrap();
+        assert!(safe_dir_path(&root, "notes").is_some());
+        // Several missing levels resolve through the nearest existing ancestor.
+        assert!(safe_dir_path(&root, "notes/a/b").is_some());
+        assert!(safe_dir_path(&root, "").is_none());
+        assert!(safe_dir_path(&root, "../escape").is_none());
+        assert!(safe_dir_path(&root, "/abs").is_none());
+        assert!(safe_dir_path(&root, ".git").is_none());
+        assert!(safe_dir_path(&root, "a/.hidden/b").is_none());
+        // `.` components would break the canonical-form string comparisons.
+        assert!(safe_dir_path(&root, "./notes").is_none());
+        // A dir named like a note would confuse note-path validation.
+        assert!(safe_dir_path(&root, "x.md").is_none());
+        assert!(safe_dir_path(&root, "a.md/b").is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_dir_path_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_dir("safe-dir-symlink-root");
+        let outside = test_dir("safe-dir-symlink-outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("linked")).unwrap();
+        assert!(safe_dir_path(&root, "linked").is_none());
+        assert!(safe_dir_path(&root, "linked/sub").is_none());
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn rename_unique_moves_across_directories() {
+        let dir = test_dir("cross-move");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("dest")).unwrap();
+        fs::write(dir.join("note.md"), "# Body").unwrap();
+        // Occupy the first candidate so the move exercises the collision loop.
+        fs::write(dir.join("dest/note.md"), "occupied").unwrap();
+        let out = rename_unique(&dir.join("note.md"), &dir.join("dest"), "note").unwrap();
+        assert_eq!(out, dir.join("dest/note-2.md"));
+        assert_eq!(fs::read_to_string(&out).unwrap(), "# Body");
+        assert_eq!(
+            fs::read_to_string(dir.join("dest/note.md")).unwrap(),
+            "occupied"
+        );
+        assert!(!dir.join("note.md").exists());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     // set_title must make parse_meta derive the new title, whatever the source of
@@ -930,7 +1052,8 @@ mod tests {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(&p, body).unwrap();
         }
-        let recs = scan_notebook(&dir).unwrap();
+        let scan = scan_notebook(&dir).unwrap();
+        let recs = &scan.records;
         let paths: Vec<&str> = recs.iter().map(|r| r.meta.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -943,12 +1066,25 @@ mod tests {
     }
 
     #[test]
+    fn scan_reports_folders_including_empty_ones_but_not_hidden() {
+        let dir = test_dir("scan-folders");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub/deeper")).unwrap();
+        std::fs::create_dir_all(dir.join("empty")).unwrap();
+        std::fs::create_dir_all(dir.join(".hidden/inner")).unwrap();
+        std::fs::write(dir.join("sub/nested.md"), "# N").unwrap();
+        let scan = scan_notebook(&dir).unwrap();
+        assert_eq!(scan.folders, vec!["empty", "sub", "sub/deeper"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn scan_allows_a_dot_prefixed_notebook_root() {
         let base = test_dir("hidden-root");
         let root = base.join(".notes");
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("visible.md"), "# Visible").unwrap();
-        let recs = scan_notebook(&root).unwrap();
+        let recs = scan_notebook(&root).unwrap().records;
         assert_eq!(recs.len(), 1);
         assert_eq!(recs[0].meta.path, "visible.md");
         let _ = fs::remove_dir_all(base);

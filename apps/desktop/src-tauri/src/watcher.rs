@@ -9,7 +9,7 @@ use notify_debouncer_full::{
 };
 use tauri::{AppHandle, Emitter};
 
-use crate::notebook::{self, NoteRecord};
+use crate::notebook::{self, NoteRecord, Scan};
 use crate::state::{find_record, NotebookState};
 
 /// A per-path change a debounced batch unambiguously describes.
@@ -22,7 +22,7 @@ enum PathChange {
 /// or (whenever anything is ambiguous) rescan the whole notebook.
 enum Refresh {
     Targeted(Vec<(String, Option<NoteRecord>)>),
-    Full(Vec<Arc<NoteRecord>>),
+    Full(Scan),
 }
 
 fn compute_refresh(root: &Path, events: Option<&[DebouncedEvent]>) -> std::io::Result<Refresh> {
@@ -37,7 +37,7 @@ fn compute_refresh(root: &Path, events: Option<&[DebouncedEvent]>) -> std::io::R
 fn apply_refresh(state: &mut NotebookState, refresh: Refresh) {
     match refresh {
         Refresh::Targeted(updates) => state.apply_external(updates),
-        Refresh::Full(records) => state.set_records(records),
+        Refresh::Full(scan) => state.set_index(scan.records, scan.folders),
     }
 }
 
@@ -102,6 +102,51 @@ fn relevant_paths(root: &Path, events: &[DebouncedEvent]) -> Vec<String> {
     paths.sort();
     paths.dedup();
     paths
+}
+
+/// Non-hidden, under-root, non-`.md` rel paths in a batch — the candidates for
+/// the folder-relevance check. Dot-prefixed paths (our own atomic-write temp
+/// files included) are excluded, so `.md` echo suppression is untouched, and
+/// the root itself (rel "") is never a candidate.
+fn folder_candidate_paths(root: &Path, events: &[DebouncedEvent]) -> Vec<String> {
+    let mut out: Vec<String> = events
+        .iter()
+        .flat_map(|event| event.paths.iter())
+        .filter(|path| path.extension().and_then(|x| x.to_str()) != Some("md"))
+        .filter_map(|path| {
+            let rel = path.strip_prefix(root).ok()?;
+            if has_hidden_component(rel) {
+                return None;
+            }
+            Some(notebook::rel_path(root, path))
+        })
+        .filter(|rel| !rel.is_empty())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// True when any probed candidate (rel path, is-dir-on-disk) disagrees with the
+/// index: a directory on disk the folder list lacks, or a listed folder (or one
+/// with indexed notes under it) that is now gone. Own folder ops commit the
+/// list BEFORE their debounced events arrive, so agreement means our own echo
+/// — no suppression window needed — while any disagreement forces the full-
+/// rescan path (the safe direction). A plain non-`.md` FILE probes as
+/// not-a-dir and unknown, i.e. irrelevant.
+fn folders_disagree(state: &NotebookState, probes: &[(String, bool)]) -> bool {
+    probes.iter().any(|(rel, is_dir)| {
+        if *is_dir {
+            !state.has_folder(rel)
+        } else {
+            let prefix = format!("{rel}/");
+            state.has_folder(rel)
+                || state
+                    .records
+                    .iter()
+                    .any(|r| r.meta.path.starts_with(&prefix))
+        }
+    })
 }
 
 /// Map a debounced batch to targeted per-path changes, or `None` when only a
@@ -245,9 +290,21 @@ pub fn start_watcher(
                 }
             };
             let paths = relevant_paths(&watched_root, &events);
-            if paths.is_empty() {
+            let candidates = folder_candidate_paths(&watched_root, &events);
+            if paths.is_empty() && candidates.is_empty() {
                 return;
             }
+            // Probe disk per folder candidate before taking the lock (cheap
+            // stats; racy only in the direction of an extra full rescan).
+            let probes: Vec<(String, bool)> = candidates
+                .into_iter()
+                .map(|rel| {
+                    let is_dir = std::fs::symlink_metadata(watched_root.join(&rel))
+                        .map(|m| m.is_dir())
+                        .unwrap_or(false);
+                    (rel, is_dir)
+                })
+                .collect();
             let suppressed = {
                 let mut g = match notebook.lock() {
                     Ok(g) => g,
@@ -256,7 +313,13 @@ pub fn start_watcher(
                 if !g.matches_context(&watched_root, generation) {
                     return;
                 }
-                if !g.should_ignore_event(&paths, Instant::now()) {
+                if folders_disagree(&g, &probes) {
+                    // An external folder change (mkdir/rmdir/mv-dir) — always
+                    // refresh, even when every .md path would be suppressed.
+                    None
+                } else if paths.is_empty() {
+                    return; // only irrelevant non-.md noise in the batch
+                } else if !g.should_ignore_event(&paths, Instant::now()) {
                     None
                 } else {
                     // The time window alone can't tell our echo from an
@@ -458,6 +521,65 @@ mod tests {
     }
 
     #[test]
+    fn folder_candidates_skip_md_hidden_outside_and_the_root() {
+        let root = Path::new("/nb");
+        let events = [
+            ev(
+                EventKind::Create(CreateKind::Folder),
+                &[Path::new("/nb/work")],
+            ),
+            ev(
+                EventKind::Create(CreateKind::File),
+                &[Path::new("/nb/a.md")], // .md — never a folder candidate
+            ),
+            ev(
+                EventKind::Create(CreateKind::File),
+                &[Path::new("/nb/.a.md.tmp-1-2")], // our temp files are hidden
+            ),
+            ev(
+                EventKind::Create(CreateKind::Folder),
+                &[Path::new("/elsewhere/dir")],
+            ),
+            ev(EventKind::Modify(ModifyKind::Any), &[Path::new("/nb")]),
+            ev(
+                EventKind::Create(CreateKind::Folder),
+                &[Path::new("/nb/work")], // duplicate
+            ),
+        ];
+        assert_eq!(folder_candidate_paths(root, &events), vec!["work"]);
+    }
+
+    #[test]
+    fn folder_relevance_is_state_aware() {
+        let mut state = NotebookState::default();
+        let token = state.begin_load();
+        state
+            .finish_load(
+                token,
+                PathBuf::from("/nb"),
+                vec![record("orphan/n.md", "x")],
+                vec!["known".into()],
+                HashMap::new(),
+            )
+            .unwrap();
+        // A dir on disk the list already has = our own mkdir echo — irrelevant.
+        assert!(!folders_disagree(&state, &[("known".into(), true)]));
+        // A dir on disk the list lacks = external mkdir — refresh.
+        assert!(folders_disagree(&state, &[("fresh".into(), true)]));
+        // Absent but listed = external rmdir — refresh.
+        assert!(folders_disagree(&state, &[("known".into(), false)]));
+        // Absent, unlisted, but with indexed notes under it — refresh.
+        assert!(folders_disagree(&state, &[("orphan".into(), false)]));
+        // A stray non-.md FILE (probes as not-a-dir, unknown) — irrelevant.
+        assert!(!folders_disagree(&state, &[("notes.txt".into(), false)]));
+        // A mixed batch where one candidate disagrees — refresh.
+        assert!(folders_disagree(
+            &state,
+            &[("known".into(), true), ("fresh".into(), true)]
+        ));
+    }
+
+    #[test]
     fn failed_full_refresh_preserves_the_existing_index() {
         let root = std::env::temp_dir().join(format!(
             "noteside-watch-error-{}-{}",
@@ -477,6 +599,7 @@ mod tests {
                 token,
                 root.clone(),
                 vec![record("kept.md", "kept")],
+                vec![],
                 HashMap::new(),
             )
             .unwrap();

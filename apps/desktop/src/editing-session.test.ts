@@ -749,3 +749,65 @@ describe("editingSession", () => {
     expect(calls).not.toContain("rename:a.md"); // gated on save success
   });
 });
+
+// migrateId is the rename-on-save tail exposed for App's move-to-folder and
+// folder-rename flows: the backend already produced a new id for the same
+// content, and the session must follow it without a remount.
+describe("migrateId", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const movedMeta = (id: string, title = "a"): NoteMeta => ({
+    id,
+    path: id,
+    title,
+    tags: [],
+    created: null,
+    updated: 0,
+    pinned: false,
+  });
+
+  it("repins a queued autosave so it lands at the new id, and migrates the buffer", async () => {
+    const { session, bodies } = makeSession({ "a.md": "old" });
+    await session.open("a.md");
+    session.change("edited", true);
+    session.migrateId("a.md", movedMeta("work/a.md", "moved title"));
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("work/a.md");
+    expect(s.title).toBe("moved title");
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("work/a.md")).toBe("edited"); // the save followed the move
+    expect(bodies.get("a.md")).toBe("old"); // the old path was never rewritten
+  });
+
+  it("does not touch the active buffer when a DIFFERENT note migrated", async () => {
+    const { session } = makeSession({ "a.md": "# a", "b.md": "# b" });
+    await session.open("b.md");
+    session.migrateId("a.md", movedMeta("work/a.md"));
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("b.md");
+    expect(s.title).toBe("b");
+  });
+
+  it("migrates lastNoteId so reopenLast follows the move", async () => {
+    const { session, bodies } = makeSession({ "a.md": "# a" });
+    await session.open("a.md");
+    await session.quit();
+    expect(session.getSnapshot().status).toBe("empty");
+    bodies.set("work/a.md", "# a"); // "disk" after the move
+    session.migrateId("a.md", movedMeta("work/a.md"));
+    expect(session.getSnapshot().lastNoteId).toBe("work/a.md");
+    session.reopenLast();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.getSnapshot().activeId).toBe("work/a.md");
+  });
+
+  it("is a commit-free no-op when the id did not change", async () => {
+    const { session } = makeSession({ "a.md": "# a" });
+    await session.open("a.md");
+    let ticks = 0;
+    session.subscribe(() => ticks++);
+    session.migrateId("a.md", movedMeta("a.md"));
+    expect(ticks).toBe(0);
+  });
+});

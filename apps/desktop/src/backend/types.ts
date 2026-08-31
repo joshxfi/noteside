@@ -68,7 +68,24 @@ export interface Backend {
   /** Rename a note's file so its slug matches its title. No-op (returns the current
    *  meta) when the filename already represents the title. */
   renameNote(path: string): Promise<NoteMeta>;
-  createNote(title?: string): Promise<NoteMeta>;
+  /** Create a note, optionally inside a folder (`dir`; ""/undefined = the root). */
+  createNote(title?: string, dir?: string): Promise<NoteMeta>;
+  /** The notebook's folders: sorted relative dirs, empty folders included. */
+  listFolders(): Promise<string[]>;
+  /** Move a note into `dir` ("" = the notebook root), preserving the filename
+   *  stem (a move is a location change, not a rename; destination collisions
+   *  get the usual -N suffix). Moving into the note's current folder is a
+   *  byte-free no-op returning the current meta. Returns the new meta — the
+   *  id changes, callers must use the RETURNED meta, never compute the path. */
+  moveNote(path: string, dir: string): Promise<NoteMeta>;
+  /** Create a folder (nested paths allowed; each segment sanitized). Returns
+   *  the canonical relative dir. An existing folder is an idempotent success. */
+  createFolder(dir: string): Promise<string>;
+  /** Rename a folder's LAST segment ("work/projects" + "archive" →
+   *  "work/archive"); the subtree's note ids all change. Returns the new dir. */
+  renameFolder(dir: string, name: string): Promise<string>;
+  /** Delete a folder RECURSIVELY (callers confirm with the note count first). */
+  deleteFolder(dir: string): Promise<void>;
   /** Copy a note to a "<title> copy" sibling (same directory, retitled so the two
    *  don't share a title); returns the new note's meta. */
   duplicateNote(path: string): Promise<NoteMeta>;

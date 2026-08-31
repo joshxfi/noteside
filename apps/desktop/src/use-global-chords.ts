@@ -28,6 +28,13 @@ export function useGlobalChords(opts: {
     const onKeyDown = (e: KeyboardEvent) => {
       const { enabled, overrides, run } = ref.current;
       if (!enabled) return; // cheapest bail first — this handler sees every keystroke
+      // An already-claimed event must never dispatch AGAIN here. The editor's
+      // chord layer preventDefaults what it handles, but when that dispatch
+      // navigates (Mod-j) the editor REMOUNTS before this window-level
+      // listener runs (microtasks drain between listeners in the same bubble
+      // chain), so the activeElement guard below sees <body> and would
+      // re-dispatch the same keypress — one press, two steps.
+      if (e.defaultPrevented) return;
       const el = document.activeElement as HTMLElement | null;
       const editingTarget =
         !!el &&

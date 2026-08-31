@@ -13,13 +13,18 @@ const runCommand = async (page: import("@playwright/test").Page, title: string) 
 };
 
 test.describe("pin note", () => {
-  test("pin floats the note to the top of the sidebar and marks the row", async ({ page }) => {
+  // Pinned floats WITHIN its sidebar section (the folders feature groups notes
+  // by directory; a pinned foldered note must not jump to the root section).
+  test("pin floats the note to the top of its section and marks the row", async ({ page }) => {
     await boot(page);
 
-    // Open the LAST note so pinning has somewhere visible to move it from.
+    // Open the LAST root note so pinning has somewhere visible to move it from
+    // (root notes render before the folder groups, so its section starts at row 0).
     const rows = page.locator(".av-item");
+    const rootRows = page.locator('.av-item[data-dir=""]');
     const before = await rows.count();
-    await rows.nth(before - 1).click();
+    const rootCount = await rootRows.count();
+    await rootRows.nth(rootCount - 1).click();
     const title = await page.locator(".av-item.is-active .av-item-titletext").innerText();
     await expect(page.locator(".av-item-pin")).toHaveCount(0);
 
@@ -27,7 +32,7 @@ test.describe("pin note", () => {
 
     await expect(page.locator(".av-toast")).toContainText("note pinned");
     await expect(page.locator(".av-item")).toHaveCount(before); // nothing added/removed
-    // the pinned note is now first, and carries the marker
+    // the pinned note is now first in its (root) section, and carries the marker
     await expect(rows.first().locator(".av-item-titletext")).toHaveText(title);
     await expect(rows.first().locator(".av-item-pin")).toHaveCount(1);
     await expect(page.locator(".av-item-pin")).toHaveCount(1); // only that one row

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ChevronRight,
   Ellipsis,
   Library,
   PanelLeft,
@@ -63,8 +64,17 @@ import { useGlobalChords } from "./use-global-chords";
 import { isTauri } from "./use-window-controls";
 import { useAppVersion } from "./use-app-version";
 import { checkForUpdate, dueForCheck, isNewer, type UpdateCheck } from "./check-update";
-import { disposeNoteContextMenu, showNoteContextMenu } from "./native-menu";
+import { disposeNativeMenus, showFolderContextMenu, showNoteContextMenu } from "./native-menu";
 import { sanitizeChordOverrides } from "./shortcut";
+import {
+  allDirs,
+  buildSidebarRows,
+  noteDir,
+  rewritePrefix,
+  type SidebarRow,
+  visibleNoteIds,
+} from "./note-groups";
+import { MovePicker } from "./components/move-picker";
 
 // The editor chunk (Tiptap + ProseMirror) is the parse-heavy part of the bundle.
 // Loading it lazily keeps it off the first-paint path; kicking the import at
@@ -222,8 +232,14 @@ const NoteRow = memo(function NoteRow({
     <div
       ref={measureRef}
       data-index={index}
+      data-dir={noteDir(note.path)}
       role="button"
       tabIndex={0}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_TYPE, note.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       className={"av-item" + (active ? " is-active" : "")}
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
@@ -302,46 +318,279 @@ const NoteRow = memo(function NoteRow({
   );
 });
 
-// The plain list for typical notebooks. Keeps the active row on screen: Mod-j /
-// Mod-k step through notes without touching the scroll position, so without this
-// the selection walks off the fold (the virtual list below already handles it).
-function PlainNoteList({
-  notes,
-  activeId,
-  onPick,
+// A folder group header. The chevron rotation and the hover-revealed kebab are
+// CSS-driven (no per-row state — the pointer-affordance perf rule); the whole
+// row toggles collapse, Enter/Space mirror the click, right-click (or the
+// kebab) opens the folder menu. `data-dir` doubles as the drop target for the
+// note drag-and-drop below.
+const FolderRow = memo(function FolderRow({
+  dir,
+  count,
+  collapsed,
+  onToggle,
   onContext,
-  onTogglePin,
-  onRename,
-  now,
+  top,
+  index,
+  measureRef,
 }: {
-  notes: NoteMeta[];
+  dir: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: (dir: string) => void;
+  onContext: (dir: string, x: number, y: number) => void;
+  top?: number;
+  index?: number;
+  measureRef?: (el: HTMLElement | null) => void;
+}) {
+  return (
+    <div
+      ref={measureRef}
+      data-index={index}
+      data-dir={dir}
+      role="button"
+      tabIndex={0}
+      aria-expanded={!collapsed}
+      className={"av-grouphead" + (collapsed ? "" : " is-open")}
+      onClick={() => onToggle(dir)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle(dir);
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContext(dir, e.clientX, e.clientY);
+      }}
+      style={
+        top === undefined
+          ? undefined
+          : {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${top}px)`,
+            }
+      }
+    >
+      <ChevronRight className="av-chev" size={12} aria-hidden="true" />
+      <span className="av-group-name">{dir}</span>
+      <span className="av-group-count">{count}</span>
+      <span className="av-item-actions">
+        <button
+          type="button"
+          tabIndex={-1}
+          className="av-item-act"
+          title="folder actions"
+          aria-label="folder actions"
+          onClick={(e) => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            onContext(dir, r.left, r.bottom + 4);
+          }}
+        >
+          <Ellipsis size={13} aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+  );
+});
+
+// An expanded EMPTY group's body — one muted row that keeps the group visibly
+// a place (and, via data-dir, a drop target for the drag below).
+function BlankRow({
+  dir,
+  top,
+  index,
+  measureRef,
+}: {
+  dir: string;
+  top?: number;
+  index?: number;
+  measureRef?: (el: HTMLElement | null) => void;
+}) {
+  return (
+    <div
+      ref={measureRef}
+      data-index={index}
+      data-dir={dir}
+      className="av-group-blank"
+      style={
+        top === undefined
+          ? undefined
+          : {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${top}px)`,
+            }
+      }
+    >
+      no notes — drop one here
+    </div>
+  );
+}
+
+// One bundle for everything a sidebar row needs; the callbacks are stable in
+// App (useCallback + latest-refs), so only `now`'s minute tick and `activeId`
+// changes re-render the memoized rows.
+interface RowHandlers {
   activeId: string | null;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onRename: (id: string, title: string) => void;
+  onToggleFolder: (dir: string) => void;
+  onFolderContext: (dir: string, x: number, y: number) => void;
   now: number;
+}
+
+// Row keys must be unique across kinds (a folder named "x.md" can't collide
+// with a note, but a stable prefix keeps the invariant obvious).
+function rowKey(r: SidebarRow): string {
+  return r.kind === "note" ? r.note.id : (r.kind === "folder" ? "d:" : "b:") + r.dir;
+}
+
+function renderRow(
+  r: SidebarRow,
+  h: RowHandlers,
+  v?: { index: number; top: number; measureRef: (el: HTMLElement | null) => void },
+) {
+  if (r.kind === "folder") {
+    return (
+      <FolderRow
+        key={rowKey(r)}
+        dir={r.dir}
+        count={r.count}
+        collapsed={r.collapsed}
+        onToggle={h.onToggleFolder}
+        onContext={h.onFolderContext}
+        top={v?.top}
+        index={v?.index}
+        measureRef={v?.measureRef}
+      />
+    );
+  }
+  if (r.kind === "blank") {
+    return (
+      <BlankRow
+        key={rowKey(r)}
+        dir={r.dir}
+        top={v?.top}
+        index={v?.index}
+        measureRef={v?.measureRef}
+      />
+    );
+  }
+  return (
+    <NoteRow
+      key={r.note.id}
+      note={r.note}
+      active={r.note.id === h.activeId}
+      onPick={h.onPick}
+      onContext={h.onContext}
+      onTogglePin={h.onTogglePin}
+      onRename={h.onRename}
+      now={h.now}
+      top={v?.top}
+      index={v?.index}
+      measureRef={v?.measureRef}
+    />
+  );
+}
+
+// Delegated HTML5 drag-and-drop over the note list. Every row carries data-dir,
+// so ONE handler set on the nav resolves any drop target: a folder header, its
+// blank row, or a member note row targets that folder; anything else (a root
+// note, empty space) targets the notebook root. Zero React state and zero extra
+// DOM — the drop affordance toggles classes imperatively, which protects both
+// the row memoization and scrollRowIntoView's child-index mapping.
+const DRAG_TYPE = "application/x-noteside-note";
+
+type ListDnd = Pick<
+  React.DOMAttributes<HTMLElement>,
+  "onDragOver" | "onDrop" | "onDragLeave" | "onDragEnd"
+>;
+
+function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
+  const marked = useRef<Element | null>(null);
+  const onMoveRef = useRef(onMove);
+  useEffect(() => {
+    onMoveRef.current = onMove;
+  }, [onMove]);
+  return useMemo<ListDnd>(() => {
+    const targetDir = (e: React.DragEvent<HTMLElement>) =>
+      (e.target as Element).closest?.("[data-dir]")?.getAttribute("data-dir") ?? "";
+    const clear = (nav: Element | null) => {
+      marked.current?.classList.remove("is-drop");
+      marked.current = null;
+      nav?.classList.remove("is-dragging");
+    };
+    return {
+      onDragOver(e) {
+        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const nav = e.currentTarget;
+        nav.classList.add("is-dragging");
+        const dir = targetDir(e);
+        // Highlight the target group's header (querySelector finds the header
+        // before the blank row in DOM order); root drops tint the nav itself.
+        const head = dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
+        if (head !== marked.current) {
+          marked.current?.classList.remove("is-drop");
+          head?.classList.add("is-drop");
+          marked.current = head;
+        }
+      },
+      onDrop(e) {
+        const id = e.dataTransfer.getData(DRAG_TYPE);
+        if (!id) return;
+        e.preventDefault();
+        const dir = targetDir(e);
+        clear(e.currentTarget);
+        onMoveRef.current(id, dir);
+      },
+      onDragLeave(e) {
+        // Only when actually leaving the nav, not when moving between children.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        clear(e.currentTarget);
+      },
+      // dragend bubbles from the dragged row — covers an Esc-cancelled drag.
+      onDragEnd(e) {
+        clear(e.currentTarget);
+      },
+    };
+  }, []);
+}
+
+// The plain list for typical notebooks. Keeps the active row on screen: Mod-j /
+// Mod-k step through notes without touching the scroll position, so without this
+// the selection walks off the fold (the virtual list below already handles it).
+// Rows render as DIRECT children of the nav in row-model order — the invariant
+// scrollRowIntoView's container.children[index] mapping depends on.
+function PlainNoteList({
+  rows,
+  handlers,
+  dnd,
+}: {
+  rows: SidebarRow[];
+  handlers: RowHandlers;
+  dnd: ListDnd;
 }) {
   const listRef = useRef<HTMLElement>(null);
-  const activeIndex = activeId ? notes.findIndex((n) => n.id === activeId) : -1;
+  const activeIndex = handlers.activeId
+    ? rows.findIndex((r) => r.kind === "note" && r.note.id === handlers.activeId)
+    : -1;
   useEffect(() => {
     if (activeIndex >= 0) scrollRowIntoView(listRef.current, activeIndex);
   }, [activeIndex]);
 
   return (
-    <nav className="av-list" ref={listRef} aria-label="Notes">
-      {notes.map((n) => (
-        <NoteRow
-          key={n.id}
-          note={n}
-          active={n.id === activeId}
-          onPick={onPick}
-          onContext={onContext}
-          onTogglePin={onTogglePin}
-          onRename={onRename}
-          now={now}
-        />
-      ))}
+    <nav className="av-list" ref={listRef} aria-label="Notes" {...dnd}>
+      {rows.map((r) => renderRow(r, handlers))}
     </nav>
   );
 }
@@ -349,32 +598,30 @@ function PlainNoteList({
 // Windowed note list for large notebooks — measures real row heights (titles
 // may wrap), so the scrollbar stays accurate without assuming a fixed row size.
 function VirtualNoteList({
-  notes,
-  activeId,
-  onPick,
-  onContext,
-  onTogglePin,
-  onRename,
-  now,
+  rows,
+  handlers,
+  dnd,
 }: {
-  notes: NoteMeta[];
-  activeId: string | null;
-  onPick: (id: string) => void;
-  onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
-  onTogglePin: (id: string, pinned: boolean) => void;
-  onRename: (id: string, title: string) => void;
-  now: number;
+  rows: SidebarRow[];
+  handlers: RowHandlers;
+  dnd: ListDnd;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virt = useVirtualizer({
-    count: notes.length,
+    count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 52,
+    estimateSize: (i) => (rows[i].kind === "note" ? 52 : 30),
+    // Measurements cache by key, so a collapse (which shifts indices) doesn't
+    // re-measure every surviving row against the wrong cached height.
+    getItemKey: (i) => rowKey(rows[i]),
     overscan: 10,
   });
   const activeIndex = useMemo(
-    () => (activeId ? notes.findIndex((n) => n.id === activeId) : -1),
-    [notes, activeId],
+    () =>
+      handlers.activeId
+        ? rows.findIndex((r) => r.kind === "note" && r.note.id === handlers.activeId)
+        : -1,
+    [rows, handlers.activeId],
   );
   useEffect(() => {
     if (activeIndex >= 0) virt.scrollToIndex(activeIndex, { align: "auto" });
@@ -382,26 +629,15 @@ function VirtualNoteList({
   }, [activeIndex]);
 
   return (
-    <nav className="av-list" ref={scrollRef} aria-label="Notes">
+    <nav className="av-list" ref={scrollRef} aria-label="Notes" {...dnd}>
       <div style={{ height: virt.getTotalSize(), position: "relative", width: "100%" }}>
-        {virt.getVirtualItems().map((item) => {
-          const n = notes[item.index];
-          return (
-            <NoteRow
-              key={n.id}
-              note={n}
-              index={item.index}
-              measureRef={virt.measureElement}
-              active={n.id === activeId}
-              onPick={onPick}
-              onContext={onContext}
-              onTogglePin={onTogglePin}
-              onRename={onRename}
-              now={now}
-              top={item.start}
-            />
-          );
-        })}
+        {virt.getVirtualItems().map((item) =>
+          renderRow(rows[item.index], handlers, {
+            index: item.index,
+            top: item.start,
+            measureRef: virt.measureElement,
+          }),
+        )}
       </div>
     </nav>
   );
@@ -409,12 +645,15 @@ function VirtualNoteList({
 
 const Sidebar = memo(function Sidebar({
   open,
-  notes,
+  rows,
   activeId,
   onPick,
   onContext,
   onTogglePin,
   onRename,
+  onToggleFolder,
+  onFolderContext,
+  onMoveNote,
   onNew,
   onSettings,
   updateAvailable,
@@ -422,12 +661,16 @@ const Sidebar = memo(function Sidebar({
   onResizeEnd,
 }: {
   open: boolean;
-  notes: NoteMeta[];
+  rows: SidebarRow[];
   activeId: string | null;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onRename: (id: string, title: string) => void;
+  onToggleFolder: (dir: string) => void;
+  onFolderContext: (dir: string, x: number, y: number) => void;
+  /** Drop target for the row drag: move `id` into `dir` ("" = root). */
+  onMoveNote: (id: string, dir: string) => void;
   onNew: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
@@ -443,6 +686,17 @@ const Sidebar = memo(function Sidebar({
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(t);
   }, []);
+  const dnd = useListDnd(onMoveNote);
+  const handlers: RowHandlers = {
+    activeId,
+    onPick,
+    onContext,
+    onTogglePin,
+    onRename,
+    onToggleFolder,
+    onFolderContext,
+    now,
+  };
   // Drag-to-resize. The live drag writes the --sidebar-w var imperatively (no
   // React re-render per pointer move — the perf rule for pointer affordances);
   // React state only commits once, on pointer-up, through onResizeEnd.
@@ -490,26 +744,10 @@ const Sidebar = memo(function Sidebar({
           </div>
           <div className="av-brandsub">fast, minimalist notes</div>
         </div>
-        {notes.length <= VIRTUAL_THRESHOLD ? (
-          <PlainNoteList
-            notes={notes}
-            activeId={activeId}
-            onPick={onPick}
-            onContext={onContext}
-            onTogglePin={onTogglePin}
-            onRename={onRename}
-            now={now}
-          />
+        {rows.length <= VIRTUAL_THRESHOLD ? (
+          <PlainNoteList rows={rows} handlers={handlers} dnd={dnd} />
         ) : (
-          <VirtualNoteList
-            notes={notes}
-            activeId={activeId}
-            onPick={onPick}
-            onContext={onContext}
-            onTogglePin={onTogglePin}
-            onRename={onRename}
-            now={now}
-          />
+          <VirtualNoteList rows={rows} handlers={handlers} dnd={dnd} />
         )}
         <div className="av-sidefoot">
           <button className="av-config" onClick={onNew}>
@@ -653,12 +891,83 @@ export function App() {
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
+  // The notebook's folders (sorted rel dirs, empties included — first-class
+  // data from the backend scan). Mutating ops patch it locally; the watcher's
+  // refresh is the eventual-consistency backstop, identity-guarded so an
+  // unchanged list never re-renders the memoized sidebar.
+  const [folders, setFolders] = useState<string[]>([]);
+  const refreshFolders = useCallback(async () => {
+    try {
+      const dirs = await backend.listFolders();
+      setFolders((prev) =>
+        prev.length === dirs.length && prev.every((d, i) => d === dirs[i]) ? prev : dirs,
+      );
+    } catch {
+      /* the folder list self-heals from note paths (allDirs) */
+    }
+  }, []);
   const [navOpen, setNavOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [notebookSwitcherOpen, setNotebookSwitcherOpen] = useState(false);
   // The open notebook's path — drives the switcher's "current" marker + no-op guard.
   const [notebookPath, setNotebookPath] = useState<string | null>(null);
+  const notebookPathRef = useRef(notebookPath);
+  useEffect(() => {
+    notebookPathRef.current = notebookPath;
+  }, [notebookPath]);
+  // Collapsed folder groups — client MACHINE state in localStorage (the
+  // boot-theme / update-cache precedent, never the config file), per notebook.
+  // The ref mirror keeps the mutating helpers stable for the memoized rows.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const collapsedRef = useRef(collapsed);
+  const setAndPersistCollapsed = useCallback((mutate: (next: Set<string>) => void) => {
+    const next = new Set(collapsedRef.current);
+    mutate(next);
+    collapsedRef.current = next;
+    setCollapsed(next);
+    const nb = notebookPathRef.current;
+    if (!nb) return;
+    try {
+      localStorage.setItem(`noteside:folders-collapsed:${nb}`, JSON.stringify([...next]));
+    } catch {
+      /* private mode / quota — collapse just won't persist */
+    }
+  }, []);
+  const toggleFolder = useCallback(
+    (dir: string) => {
+      setAndPersistCollapsed((next) => {
+        if (!next.delete(dir)) next.add(dir);
+      });
+    },
+    [setAndPersistCollapsed],
+  );
+  const expandFolder = useCallback(
+    (dir: string) => {
+      if (!collapsedRef.current.has(dir)) return;
+      setAndPersistCollapsed((next) => {
+        next.delete(dir);
+      });
+    },
+    [setAndPersistCollapsed],
+  );
+  // Restore this notebook's collapse set when it opens/switches.
+  useEffect(() => {
+    let stored: unknown = [];
+    if (notebookPath) {
+      try {
+        const raw = localStorage.getItem(`noteside:folders-collapsed:${notebookPath}`);
+        if (raw) stored = JSON.parse(raw);
+      } catch {
+        /* corrupt / unavailable — start fully expanded */
+      }
+    }
+    const next = new Set(
+      Array.isArray(stored) ? stored.filter((d): d is string => typeof d === "string") : [],
+    );
+    collapsedRef.current = next;
+    setCollapsed(next);
+  }, [notebookPath]);
   const [finder, setFinder] = useState<{ mode: FinderMode } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cmdSearchOpen, setCmdSearchOpen] = useState(false);
@@ -692,6 +1001,18 @@ export function App() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
   // Note being renamed (the rename input modal is open); null when closed.
   const [pendingRename, setPendingRename] = useState<{ id: string; title: string } | null>(null);
+  // Note being moved (the move-to-folder picker is open); null when closed.
+  const [pendingMove, setPendingMove] = useState<{ id: string; title: string } | null>(null);
+  // Folder-name prompt (New folder / New subfolder); `parent` "" = the root.
+  const [pendingNewFolder, setPendingNewFolder] = useState<{ parent: string } | null>(null);
+  // Folder being renamed (last segment) / recursively deleted (with note count).
+  const [pendingFolderRename, setPendingFolderRename] = useState<{ dir: string } | null>(null);
+  const [pendingFolderDelete, setPendingFolderDelete] = useState<{
+    dir: string;
+    count: number;
+  } | null>(null);
+  // Open in-app folder context menu (web/demo only — Tauri pops the native one).
+  const [folderMenu, setFolderMenu] = useState<{ dir: string; x: number; y: number } | null>(null);
   // Open in-app note context menu (web/demo only — Tauri pops the native one).
   const [noteMenu, setNoteMenu] = useState<{
     id: string;
@@ -758,6 +1079,21 @@ export function App() {
     onNoteRenamed: (oldId, meta) => setNotes((ns) => ns.map((n) => (n.id === oldId ? meta : n))),
     onNotesChanged: (list) => setNotes((prev) => (sameMetaList(prev, list) ? prev : list)),
   });
+
+  // The sidebar's row model — ONE derivation shared by the lists and the
+  // Mod-j/k stepper, so what you see is exactly what you step through.
+  const rows = useMemo(
+    () => buildSidebarRows(notes, folders, collapsed),
+    [notes, folders, collapsed],
+  );
+
+  // Opening a note inside a collapsed group expands it — the active note must
+  // always be visible (it also keeps Mod-j/k's visual-order stepping defined).
+  useEffect(() => {
+    if (s.status !== "note" || !s.activeId) return;
+    const dir = noteDir(s.activeId);
+    if (dir) expandFolder(dir);
+  }, [s.status, s.activeId, expandFolder]);
 
   // Apply the theme: data-theme + inline palette vars + the boot-theme mirror.
   // Keyed on cfg.theme ONLY, so font/scale key-repeat doesn't recompute the
@@ -848,7 +1184,7 @@ export function App() {
       disposed = true;
       window.removeEventListener("pagehide", onPageHide);
       unlisten?.();
-      void disposeNoteContextMenu();
+      void disposeNativeMenus();
       void flushAll();
     };
   }, [flushConfig, session]);
@@ -867,8 +1203,12 @@ export function App() {
       if (token !== notebookLoad.current) return;
       throw e;
     }
+    // Folders ride along with the open (empty folders aren't derivable from
+    // note paths); a failure here degrades to the note-derived groups.
+    const dirs = await backend.listFolders().catch(() => []);
     if (token !== notebookLoad.current) return; // a newer open owns the UI
     setNotes(metas);
+    setFolders(dirs);
     void backend.setLastNotebook(path);
     void backend.rememberNotebook(path); // feed the switcher's recents (MRU)
     setNotebookPath(path);
@@ -988,7 +1328,10 @@ export function App() {
     let un: (() => void) | null = null;
     let cancelled = false;
     backend
-      .watchNotebook(() => void session.reconcile())
+      .watchNotebook(() => {
+        void session.reconcile();
+        void refreshFolders(); // external mkdir/rmdir/mv-dir refreshes the groups too
+      })
       .then((u) => {
         if (cancelled) u();
         else un = u;
@@ -998,7 +1341,7 @@ export function App() {
       cancelled = true;
       un?.();
     };
-  }, [session]);
+  }, [session, refreshFolders]);
 
   const pickNotebook = async () => {
     const path = await backend.pickNotebook();
@@ -1192,6 +1535,200 @@ export function App() {
     if (s.status === "note" && s.activeId) void setNotePinned(s.activeId, pinned);
   };
 
+  // ── folders ────────────────────────────────────────────────────────
+  // Sorted-insert a folder locally (allDirs completes any missing ancestors at
+  // render time; the backend registered them too).
+  const addFolderLocal = (dir: string) => {
+    if (!dir) return;
+    setFolders((prev) => (prev.includes(dir) ? prev : [...prev, dir].sort()));
+  };
+
+  // Move a note into another folder ("" = root). Moving the OPEN note migrates
+  // the buffer's id in place — a move never rewrites body bytes and editorKey
+  // excludes activeId, so there is NO remount and the cursor survives; autosave
+  // pauses across the IPC so a keystroke can't resurrect the old path.
+  const moveNote = async (id: string, dir: string) => {
+    if (noteDir(id) === dir) {
+      flash(`already in ${dir || "the notebook root"}`);
+      return;
+    }
+    const wasActive = s.status === "note" && s.activeId === id;
+    try {
+      if (wasActive) {
+        await session.flush();
+        await session.cancelAutosave();
+      }
+      const meta = await backend.moveNote(id, dir);
+      // Always the RETURNED meta — a destination collision may have -N'd the stem.
+      setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
+      if (dir) {
+        addFolderLocal(dir);
+        expandFolder(dir); // the note must land somewhere visible
+      }
+      if (wasActive) {
+        session.migrateId(id, meta);
+        session.resumeAutosave();
+      }
+      flash(`moved to ${dir || "notebook root"}`);
+    } catch (e) {
+      if (wasActive) session.resumeAutosave();
+      flash(`move failed: ${e}`, "error");
+    }
+  };
+  const moveNoteRef = useRef(moveNote);
+  useEffect(() => {
+    moveNoteRef.current = moveNote;
+  });
+  // The sidebar's drag-and-drop drop handler — ONE stable identity (the memo'd
+  // Sidebar), reading fresh state through the latest-ref.
+  const onMoveNote = useCallback(
+    (id: string, dir: string) => void moveNoteRef.current(id, dir),
+    [],
+  );
+
+  const requestMove = useCallback((id: string, title: string) => setPendingMove({ id, title }), []);
+  const moveActive = () => {
+    if (s.status === "note" && s.activeId) requestMove(s.activeId, s.title ?? "");
+  };
+
+  // Create a folder; resolves to its canonical rel dir, null on failure (the
+  // move picker's create-and-move keys off that).
+  const createFolder = async (dir: string): Promise<string | null> => {
+    try {
+      const rel = await backend.createFolder(dir);
+      addFolderLocal(rel);
+      return rel;
+    } catch (e) {
+      flash(`couldn't create folder: ${e}`, "error");
+      return null;
+    }
+  };
+  const createFolderRef = useRef(createFolder);
+  useEffect(() => {
+    createFolderRef.current = createFolder;
+  });
+  const onCreateFolder = useCallback((dir: string) => createFolderRef.current(dir), []);
+
+  // Create a note inside a folder (the folder header's "New note here").
+  const createNoteIn = async (dir: string) => {
+    try {
+      const meta = await backend.createNote(undefined, dir);
+      setNotes((ns) => insertMeta(ns, meta));
+      if (dir) {
+        addFolderLocal(dir);
+        expandFolder(dir);
+      }
+      await session.open(meta.id);
+    } catch (e) {
+      flash(`couldn't create note: ${e}`, "error");
+    }
+  };
+
+  // Rename a folder's last segment. Every contained note's id changes; the
+  // whole subtree is patched locally with rewritePrefix (collision-free by
+  // construction — the directory moved atomically), and the open buffer inside
+  // it migrates its id exactly like a move.
+  const renameFolder = async (dir: string, name: string) => {
+    const activeInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(dir + "/");
+    const activeId = s.activeId;
+    try {
+      if (activeInside) {
+        await session.flush();
+        await session.cancelAutosave();
+      }
+      const newDir = await backend.renameFolder(dir, name);
+      if (newDir !== dir) {
+        const oldMeta = activeInside ? notesRef.current.find((n) => n.id === activeId) : undefined;
+        setNotes((ns) =>
+          ns.map((n) => {
+            const np = rewritePrefix(n.path, dir, newDir);
+            return np === n.path ? n : { ...n, id: np, path: np };
+          }),
+        ); // order untouched: a folder rename changes no updated/pinned
+        setFolders((prev) => [...new Set(prev.map((f) => rewritePrefix(f, dir, newDir)))].sort());
+        setAndPersistCollapsed((next) => {
+          for (const d of [...next]) {
+            const nd = rewritePrefix(d, dir, newDir);
+            if (nd !== d) {
+              next.delete(d);
+              next.add(nd);
+            }
+          }
+        });
+        if (activeInside && oldMeta && activeId) {
+          const newId = rewritePrefix(activeId, dir, newDir);
+          session.migrateId(activeId, { ...oldMeta, id: newId, path: newId });
+        }
+      }
+      if (activeInside) session.resumeAutosave();
+      flash(`folder renamed to ${newDir}`);
+    } catch (e) {
+      if (activeInside) session.resumeAutosave();
+      flash(`rename failed: ${e}`, "error");
+    }
+  };
+
+  // Recursive folder delete, behind a ConfirmDialog stating the note count.
+  const requestFolderDelete = useCallback((dir: string) => {
+    const count = notesRef.current.filter((n) => n.path.startsWith(dir + "/")).length;
+    setPendingFolderDelete({ dir, count });
+  }, []);
+
+  const deleteFolder = async (dir: string) => {
+    const prefix = dir + "/";
+    const wasActiveInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(prefix);
+    try {
+      if (wasActiveInside) await session.cancelAutosave();
+      await backend.deleteFolder(dir);
+      setNotes((ns) => ns.filter((n) => !n.path.startsWith(prefix)).sort(metaOrder));
+      setFolders((prev) => prev.filter((f) => f !== dir && !f.startsWith(prefix)));
+      setAndPersistCollapsed((next) => {
+        for (const d of [...next]) if (d === dir || d.startsWith(prefix)) next.delete(d);
+      });
+      if (wasActiveInside) {
+        // Mirror deleteNoteById: navigate to the next surviving note (which
+        // discards the paused edits) or close to the empty state.
+        const remaining = notesRef.current
+          .filter((n) => !n.path.startsWith(prefix))
+          .sort(metaOrder);
+        const next = remaining[0]?.id ?? null;
+        if (next) await session.open(next);
+        else session.close();
+      }
+      flash("folder deleted");
+    } catch (e) {
+      if (wasActiveInside) session.resumeAutosave();
+      flash(`delete failed: ${e}`, "error");
+    }
+  };
+
+  // Right-click a folder header (or its ⋯ kebab) → the folder menu. Native OS
+  // menu in Tauri, the themed in-app ContextMenu in the web/demo build — thin
+  // dispatchers over the same handlers, like the note menu.
+  const createNoteInRef = useRef(createNoteIn);
+  useEffect(() => {
+    createNoteInRef.current = createNoteIn;
+  });
+  const openFolderMenu = useCallback(
+    (dir: string, x: number, y: number) => {
+      if (!isTauri()) {
+        setFolderMenu({ dir, x, y });
+        return;
+      }
+      void showFolderContextMenu(dir, {
+        onNewNote: (d) => void createNoteInRef.current(d),
+        onNewSubfolder: (d) => setPendingNewFolder({ parent: d }),
+        onRename: (d) => setPendingFolderRename({ dir: d }),
+        onDelete: requestFolderDelete,
+      });
+    },
+    [requestFolderDelete],
+  );
+  const closeFolderMenu = useCallback(() => {
+    setFolderMenu(null);
+    setRefocus((r) => r + 1);
+  }, []);
+
   const renameActive = () => {
     if (s.status === "note" && s.activeId) requestRename(s.activeId, s.title ?? "");
   };
@@ -1223,13 +1760,17 @@ export function App() {
     setRefocus((r) => r + 1);
   };
 
-  // Step to the adjacent note in the sidebar list (Mod-j / Mod-k). Clamps at the
-  // ends; opening flushes any pending save of the outgoing buffer.
+  // Step to the adjacent note in the sidebar (Mod-j / Mod-k) — VISUAL order:
+  // the flattened row model, skipping folder headers and notes hidden inside
+  // collapsed groups (the auto-expand effect keeps the active note visible, so
+  // stepping is always well-defined). Clamps at the ends; opening flushes any
+  // pending save of the outgoing buffer.
   const stepNote = (delta: number) => {
-    if (notes.length === 0) return;
-    const i = s.activeId ? notes.findIndex((n) => n.id === s.activeId) : -1;
-    const next = notes[Math.max(0, Math.min(notes.length - 1, i + delta))];
-    if (next && next.id !== s.activeId) void session.open(next.id);
+    const ids = visibleNoteIds(rows);
+    if (ids.length === 0) return;
+    const i = s.activeId ? ids.indexOf(s.activeId) : -1;
+    const next = ids[Math.max(0, Math.min(ids.length - 1, i + delta))];
+    if (next && next !== s.activeId) void session.open(next);
   };
 
   // Mod± / Mod-Shift± zoom. Clamps mirror the settings-panel steppers; the CSS
@@ -1266,7 +1807,17 @@ export function App() {
     else if (c === "rename") renameActive();
     else if (c === "pin") setActivePinned(true);
     else if (c === "unpin") setActivePinned(false);
-    else if (c === "reveal") revealActive();
+    else if (c === "move") moveActive();
+    else if (c === "newFolder") setPendingNewFolder({ parent: "" });
+    else if (c === "renameFolder") {
+      const dir = s.status === "note" && s.activeId ? noteDir(s.activeId) : "";
+      if (dir) setPendingFolderRename({ dir });
+      else flash("the open note isn't in a folder", "error");
+    } else if (c === "deleteFolder") {
+      const dir = s.status === "note" && s.activeId ? noteDir(s.activeId) : "";
+      if (dir) requestFolderDelete(dir);
+      else flash("the open note isn't in a folder", "error");
+    } else if (c === "reveal") revealActive();
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
     else if (c === "prevNote") stepNote(-1);
@@ -1306,7 +1857,12 @@ export function App() {
       notebookSwitcherOpen ||
       pendingDelete ||
       pendingRename ||
-      noteMenu
+      pendingMove ||
+      pendingNewFolder ||
+      pendingFolderRename ||
+      pendingFolderDelete ||
+      noteMenu ||
+      folderMenu
     ),
     overrides: cfg.chords,
     run: onCommand,
@@ -1363,6 +1919,7 @@ export function App() {
         onOpen: openNote,
         onReveal: revealNote,
         onDuplicate: (nid) => void duplicateNoteRef.current(nid),
+        onMove: requestMove,
         onRename: requestRename,
         onTogglePin: (nid, next) => void setNotePinnedRef.current(nid, next),
         onDelete: requestDelete,
@@ -1371,7 +1928,7 @@ export function App() {
     // revealNote only captures the stable `flash`; the state-reading handlers go
     // through the latest-refs above, so this memo can never serve stale closures.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [openNote, requestRename, requestDelete],
+    [openNote, requestMove, requestRename, requestDelete],
   );
   const closeNoteMenu = useCallback(() => {
     setNoteMenu(null);
@@ -1394,17 +1951,21 @@ export function App() {
         : false,
     [notes, s.activeId, s.status],
   );
+  // Whether the open note lives in a folder — gates the folder-scoped commands
+  // (renameFolder/deleteFolder act on the active note's folder).
+  const activeInFolder = s.status === "note" && !!s.activeId && noteDir(s.activeId) !== "";
   const searchableCommands = useMemo(
     () =>
       withChordOverrides(
         paletteCommands.filter(
           (c) =>
             (!c.needsNote || s.status === "note") &&
-            (c.needsPinned === undefined || c.needsPinned === activePinned),
+            (c.needsPinned === undefined || c.needsPinned === activePinned) &&
+            (c.needsFolder === undefined || c.needsFolder === activeInFolder),
         ),
         cfg.chords,
       ),
-    [cfg.chords, s.status, activePinned],
+    [cfg.chords, s.status, activePinned, activeInFolder],
   );
 
   const titleText = s.title;
@@ -1491,12 +2052,15 @@ export function App() {
           {status === "ready" && (
             <Sidebar
               open={navOpen}
-              notes={notes}
+              rows={rows}
               activeId={s.activeId}
               onPick={openNote}
               onContext={openNoteMenu}
               onTogglePin={onTogglePin}
               onRename={requestRename}
+              onToggleFolder={toggleFolder}
+              onFolderContext={openFolderMenu}
+              onMoveNote={onMoveNote}
               onNew={onNewNote}
               onSettings={openSettings}
               updateAvailable={update?.kind === "available"}
@@ -1660,6 +2224,10 @@ export function App() {
                 run: () => void setNotePinned(noteMenu.id, !noteMenu.pinned),
               },
               { label: "Duplicate", run: () => void duplicateNote(noteMenu.id) },
+              {
+                label: "Move to folder…",
+                run: () => requestMove(noteMenu.id, noteMenu.title),
+              },
               { label: "Rename…", run: () => requestRename(noteMenu.id, noteMenu.title) },
               "sep",
               {
@@ -1700,6 +2268,110 @@ export function App() {
             }}
             onCancel={() => {
               setPendingRename(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {pendingMove && (
+          <MovePicker
+            title={pendingMove.title}
+            currentDir={noteDir(pendingMove.id)}
+            dirs={allDirs(notes, folders)}
+            onMove={(dir) => {
+              const { id } = pendingMove;
+              setPendingMove(null);
+              setRefocus((r) => r + 1);
+              void moveNote(id, dir);
+            }}
+            onCreateFolder={onCreateFolder}
+            onClose={() => {
+              setPendingMove(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {folderMenu && (
+          <ContextMenu
+            x={folderMenu.x}
+            y={folderMenu.y}
+            onClose={closeFolderMenu}
+            items={[
+              { label: "New note here", run: () => void createNoteIn(folderMenu.dir) },
+              {
+                label: "New subfolder…",
+                run: () => setPendingNewFolder({ parent: folderMenu.dir }),
+              },
+              {
+                label: "Rename folder…",
+                run: () => setPendingFolderRename({ dir: folderMenu.dir }),
+              },
+              "sep",
+              {
+                label: "Delete folder",
+                danger: true,
+                run: () => requestFolderDelete(folderMenu.dir),
+              },
+            ]}
+          />
+        )}
+        {pendingNewFolder && (
+          <PromptDialog
+            title={
+              pendingNewFolder.parent ? `New folder in ${pendingNewFolder.parent}` : "New folder"
+            }
+            initialValue=""
+            placeholder="Folder name"
+            confirmLabel="Create"
+            onConfirm={(value) => {
+              const { parent } = pendingNewFolder;
+              setPendingNewFolder(null);
+              setRefocus((r) => r + 1);
+              void createFolder(parent ? `${parent}/${value}` : value).then((rel) => {
+                if (rel !== null) flash(`folder ${rel} created`);
+              });
+            }}
+            onCancel={() => {
+              setPendingNewFolder(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {pendingFolderRename && (
+          <PromptDialog
+            title={`Rename folder ${pendingFolderRename.dir}`}
+            initialValue={pendingFolderRename.dir.split("/").pop() ?? ""}
+            placeholder="Folder name"
+            confirmLabel="Rename"
+            onConfirm={(value) => {
+              const { dir } = pendingFolderRename;
+              setPendingFolderRename(null);
+              void renameFolder(dir, value);
+            }}
+            onCancel={() => {
+              setPendingFolderRename(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {pendingFolderDelete && (
+          <ConfirmDialog
+            title={`Delete folder “${pendingFolderDelete.dir}”?`}
+            message={
+              pendingFolderDelete.count > 0
+                ? `This permanently removes the folder and the ${pendingFolderDelete.count} ${
+                    pendingFolderDelete.count === 1 ? "note" : "notes"
+                  } inside it — it can't be undone.`
+                : "This permanently removes the (empty) folder."
+            }
+            confirmLabel="Delete"
+            danger
+            onConfirm={() => {
+              const { dir } = pendingFolderDelete;
+              setPendingFolderDelete(null);
+              void deleteFolder(dir);
+            }}
+            onCancel={() => {
+              setPendingFolderDelete(null);
               setRefocus((r) => r + 1);
             }}
           />
