@@ -1,3 +1,7 @@
+/// <reference types="node" />
+// TypeScript ≥6 no longer auto-includes @types/* (the default `types` is []),
+// and the app's tsconfig deliberately keeps Node globals out of browser code —
+// this node-env test pulls in @types/node for itself.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
