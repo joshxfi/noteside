@@ -265,7 +265,13 @@ impl NotebookState {
                 *f = format!("{new_dir}/{rest}");
             }
         }
+        // The list stays a SET: a case-only rename on a case-insensitive volume
+        // can land on a spelling the list already carried.
         folders.sort_unstable();
+        folders.dedup();
+        if let Err(at) = folders.binary_search_by(|f| f.as_str().cmp(new_dir)) {
+            folders.insert(at, new_dir.to_string()); // insurance against drift
+        }
         let records = Arc::make_mut(&mut self.records);
         let frecency = Arc::make_mut(&mut self.frecency);
         let own_events = &mut self.own_events;
@@ -287,6 +293,7 @@ impl NotebookState {
             }
         }
         records.sort_unstable_by(|a, b| a.meta.path.cmp(&b.meta.path));
+        records.dedup_by(|a, b| a.meta.path == b.meta.path);
         self.revision = self.revision.wrapping_add(1);
     }
 
@@ -697,6 +704,30 @@ mod tests {
         assert_eq!(s.folders.as_slice(), ["worked"]);
         assert!(!s.frecency.contains_key("work/a.md"));
         assert!(s.should_ignore_event(&["work/a.md".into(), "work/sub/b.md".into()], t0));
+    }
+
+    #[test]
+    fn folder_rename_onto_a_listed_spelling_keeps_the_list_a_set() {
+        // A case-only rename on a case-insensitive volume can land on a
+        // spelling the list already carried (drift from an earlier bug or an
+        // external tool) — the folder list must stay a set, the records unique.
+        let mut s = NotebookState::default();
+        let token = s.begin_load();
+        s.finish_load(
+            token,
+            PathBuf::from("/nb"),
+            arcs(vec![rec("Work/a.md", "a"), rec("work/a.md", "ghost")]),
+            vec!["Work".into(), "work".into()],
+            HashMap::new(),
+        )
+        .unwrap();
+        s.record_own_folder_rename("Work", "work", Instant::now());
+        assert_eq!(*s.folders, vec!["work".to_string()]);
+        let paths: Vec<&str> = s.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(paths, vec!["work/a.md"]);
+        // A rename whose source somehow wasn't listed still lists the target.
+        s.record_own_folder_rename("never", "listed", Instant::now());
+        assert!(s.has_folder("listed"));
     }
 
     #[test]

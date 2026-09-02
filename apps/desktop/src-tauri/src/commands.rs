@@ -281,12 +281,18 @@ pub async fn create_note(
             .ok_or_else(|| AppError::Msg("destination is not a folder in the notebook".into()))?
     };
     let disk_root = root.clone();
-    let (meta, initial) = blocking(move || {
+    let (meta, initial, folder) = blocking(move || {
+        // Resolve the folder's on-disk spelling first (a case-insensitive volume
+        // maps `work` onto an existing `Work`), so the note's id — and the
+        // folder we register — match what a rescan would produce.
+        std::fs::create_dir_all(&dest)?;
+        let folder = notebook::disk_rel_dir(&disk_root, &dest);
+        let dest = disk_root.join(&folder);
         let initial = format!("# {display}\n\n");
         let abs = notebook::atomic_create_unique(&dest, &notebook::slugify(&display), &initial)?;
         let rel = notebook::rel_path(&disk_root, &abs);
         let meta = notebook::parse_meta(rel, &initial, notebook::mtime_millis(&abs));
-        Ok((meta, initial))
+        Ok((meta, initial, folder))
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
@@ -399,7 +405,7 @@ pub async fn move_note(
     let disk_root = root.clone();
     let rel = path.clone();
     let target = dir.clone();
-    let (moved, meta, body) = blocking(move || {
+    let (moved, meta, body, dest_rel) = blocking(move || {
         let old_abs = notebook::safe_note_path(&disk_root, &rel)
             .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
         let body = match recorded {
@@ -414,12 +420,18 @@ pub async fn move_note(
                 AppError::Msg("destination is not a folder in the notebook".into())
             })?
         };
-        let current = old_abs.parent().unwrap_or(&disk_root);
-        if notebook::rel_path(&disk_root, current) == notebook::rel_path(&disk_root, &dest) {
-            let meta = notebook::parse_meta(rel.clone(), &body, notebook::mtime_millis(&old_abs));
-            return Ok((false, meta, body));
-        }
+        // Resolve both directories to their on-disk spelling before comparing:
+        // on a case-insensitive volume `work` and `Work` are ONE directory, and
+        // a string compare would "move" the note onto itself (the self hard-link
+        // collides, and the note came back renamed `-2` under a phantom group).
         std::fs::create_dir_all(&dest)?;
+        let dest_rel = notebook::disk_rel_dir(&disk_root, &dest);
+        let current = old_abs.parent().unwrap_or(&disk_root);
+        if notebook::disk_rel_dir(&disk_root, current) == dest_rel {
+            let meta = notebook::parse_meta(rel.clone(), &body, notebook::mtime_millis(&old_abs));
+            return Ok((false, meta, body, dest_rel));
+        }
+        let dest = disk_root.join(&dest_rel);
         let stem = Path::new(&rel)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -430,7 +442,7 @@ pub async fn move_note(
             .map_err(|e| AppError::Msg(format!("move failed: {e}")))?;
         let new_rel = notebook::rel_path(&disk_root, &new_abs);
         let meta = notebook::parse_meta(new_rel, &body, notebook::mtime_millis(&new_abs));
-        Ok((true, meta, body))
+        Ok((true, meta, body, dest_rel))
     })
     .await?;
     let snapshot = {
@@ -438,7 +450,7 @@ pub async fn move_note(
         ensure_context(&g, &root, generation)?;
         if moved {
             g.record_own_rename(&path, meta.clone(), body, Instant::now());
-            g.add_folder(&dir);
+            g.add_folder(&dest_rel);
         }
         g.frecency.clone()
     };
@@ -470,7 +482,7 @@ pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<St
     let rel = segments.join("/");
     let disk_root = root.clone();
     let target = rel.clone();
-    blocking(move || {
+    let rel = blocking(move || {
         let abs = notebook::safe_dir_path(&disk_root, &target)
             .ok_or_else(|| AppError::Msg("folder name is not allowed".into()))?;
         if abs.exists() && !abs.is_dir() {
@@ -480,7 +492,9 @@ pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<St
         if let Some(parent) = abs.parent() {
             let _ = notebook::sync_directory(parent);
         }
-        Ok(())
+        // Report the folder as the disk spells it: typing `work` where `Work`
+        // exists on a case-insensitive volume is that folder, not a second one.
+        Ok(notebook::disk_rel_dir(&disk_root, &abs))
     })
     .await?;
     let mut g = state.notebook.lock().unwrap();
@@ -493,9 +507,12 @@ pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<St
 /// `work/archive`) and return the new relative dir. The whole subtree moves
 /// atomically via fs::rename; the commit rewrites every contained path and
 /// migrates frecency keys. An occupied target errors — no silent `-N` for
-/// directories — except a case-only rename, where a case-insensitive
-/// filesystem (macOS/Windows) reports the target as existing because it IS
-/// the source.
+/// directories — unless the "occupant" IS the source: a case-insensitive
+/// filesystem (macOS/Windows) reports `work` as existing when renaming
+/// `Work`. That is decided by identity (both paths canonicalize to the same
+/// directory), never by comparing spellings — on a case-sensitive filesystem
+/// `Work` and `work` can be two real directories, and POSIX rename would
+/// silently replace an empty one.
 #[tauri::command]
 pub async fn rename_folder(
     dir: String,
@@ -525,13 +542,17 @@ pub async fn rename_folder(
         }
         let new_abs = notebook::safe_dir_path(&disk_root, &target_rel)
             .ok_or_else(|| AppError::Msg("folder name is not allowed".into()))?;
-        let case_only = old_rel.eq_ignore_ascii_case(&target_rel);
-        if new_abs.exists() && !case_only {
-            return Err(AppError::Msg(
-                "something with that name already exists".into(),
-            ));
+        if new_abs.exists() {
+            let same_dir =
+                std::fs::canonicalize(&new_abs).ok() == std::fs::canonicalize(&old_abs).ok();
+            if !same_dir {
+                return Err(AppError::Msg(
+                    "something with that name already exists".into(),
+                ));
+            }
         }
-        std::fs::rename(&old_abs, &new_abs)?;
+        std::fs::rename(&old_abs, &new_abs)
+            .map_err(|e| AppError::Msg(format!("rename failed: {e}")))?;
         if let Some(parent) = new_abs.parent() {
             let _ = notebook::sync_directory(parent);
         }

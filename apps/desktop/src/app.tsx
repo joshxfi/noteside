@@ -15,6 +15,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ChevronRight,
   Ellipsis,
+  FolderPlus,
   Library,
   PanelLeft,
   Pin,
@@ -72,7 +73,7 @@ import {
   noteDir,
   rewritePrefix,
   type SidebarRow,
-  visibleNoteIds,
+  stepVisibleNote,
 } from "./note-groups";
 import { MovePicker } from "./components/move-picker";
 
@@ -504,18 +505,22 @@ function renderRow(
 // Delegated HTML5 drag-and-drop over the note list. Every row carries data-dir,
 // so ONE handler set on the nav resolves any drop target: a folder header, its
 // blank row, or a member note row targets that folder; anything else (a root
-// note, empty space) targets the notebook root. Zero React state and zero extra
-// DOM — the drop affordance toggles classes imperatively, which protects both
-// the row memoization and scrollRowIntoView's child-index mapping.
+// note, empty space, the root drop zone) targets the notebook root. Zero React
+// state and zero extra DOM — the affordances are classes toggled imperatively
+// (the root zone is a CSS pseudo-element), which protects both the row
+// memoization and scrollRowIntoView's child-index mapping.
 const DRAG_TYPE = "application/x-noteside-note";
 
 type ListDnd = Pick<
   React.DOMAttributes<HTMLElement>,
-  "onDragOver" | "onDrop" | "onDragLeave" | "onDragEnd"
+  "onDragStart" | "onDragOver" | "onDrop" | "onDragLeave" | "onDragEnd"
 >;
 
 function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
   const marked = useRef<Element | null>(null);
+  // The dragged note's folder while a drag from OUR list is in flight (null
+  // otherwise) — hovering that same folder reads as "nothing to do", not "move".
+  const fromDir = useRef<string | null>(null);
   const onMoveRef = useRef(onMove);
   useEffect(() => {
     onMoveRef.current = onMove;
@@ -526,24 +531,40 @@ function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
     const clear = (nav: Element | null) => {
       marked.current?.classList.remove("is-drop");
       marked.current = null;
-      nav?.classList.remove("is-dragging");
+      fromDir.current = null;
+      nav?.classList.remove("is-dragging", "is-drag-nested", "is-drop-root");
     };
     return {
+      // dragstart bubbles from the row (which already set the payload).
+      onDragStart(e) {
+        const row = (e.target as Element).closest?.(".av-item");
+        if (!row) return;
+        const dir = row.getAttribute("data-dir") ?? "";
+        fromDir.current = dir;
+        e.currentTarget.classList.add("is-dragging");
+        // A note leaving a folder needs somewhere to land at the root even when
+        // no root note is on screen — reveal the root drop zone (::after).
+        if (dir) e.currentTarget.classList.add("is-drag-nested");
+      },
       onDragOver(e) {
         if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
         const nav = e.currentTarget;
         nav.classList.add("is-dragging");
         const dir = targetDir(e);
+        const same = fromDir.current !== null && dir === fromDir.current;
+        // "none" shows the no-drop cursor and suppresses the drop event.
+        e.dataTransfer.dropEffect = same ? "none" : "move";
         // Highlight the target group's header (querySelector finds the header
-        // before the blank row in DOM order); root drops tint the nav itself.
-        const head = dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
+        // before the blank row in DOM order); a root target rings the root zone.
+        const head =
+          !same && dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
         if (head !== marked.current) {
           marked.current?.classList.remove("is-drop");
           head?.classList.add("is-drop");
           marked.current = head;
         }
+        nav.classList.toggle("is-drop-root", !same && dir === "");
       },
       onDrop(e) {
         const id = e.dataTransfer.getData(DRAG_TYPE);
@@ -551,12 +572,28 @@ function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
         e.preventDefault();
         const dir = targetDir(e);
         clear(e.currentTarget);
+        if (noteDir(id) === dir) return; // dropped back where it came from
         onMoveRef.current(id, dir);
       },
       onDragLeave(e) {
         // Only when actually leaving the nav, not when moving between children.
-        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-        clear(e.currentTarget);
+        // WebKit reports relatedTarget as null on drag events, so fall back to
+        // the pointer position against the nav's box (a row-to-row transition
+        // would otherwise blink the affordances off and on every frame).
+        const nav = e.currentTarget;
+        const related = e.relatedTarget as Node | null;
+        if (related) {
+          if (nav.contains(related)) return;
+        } else {
+          const r = nav.getBoundingClientRect();
+          const inside =
+            e.clientX >= r.left &&
+            e.clientX < r.right &&
+            e.clientY >= r.top &&
+            e.clientY < r.bottom;
+          if (inside) return;
+        }
+        clear(nav);
       },
       // dragend bubbles from the dragged row — covers an Esc-cancelled drag.
       onDragEnd(e) {
@@ -655,6 +692,7 @@ const Sidebar = memo(function Sidebar({
   onFolderContext,
   onMoveNote,
   onNew,
+  onNewFolder,
   onSettings,
   updateAvailable,
   width,
@@ -672,6 +710,7 @@ const Sidebar = memo(function Sidebar({
   /** Drop target for the row drag: move `id` into `dir` ("" = root). */
   onMoveNote: (id: string, dir: string) => void;
   onNew: () => void;
+  onNewFolder: () => void;
   onSettings: () => void;
   /** Show the "update available" dot on the Settings button. */
   updateAvailable: boolean;
@@ -750,10 +789,23 @@ const Sidebar = memo(function Sidebar({
           <VirtualNoteList rows={rows} handlers={handlers} dnd={dnd} />
         )}
         <div className="av-sidefoot">
-          <button className="av-config" onClick={onNew}>
-            <Plus className="av-cfg-glyph" size={15} aria-hidden="true" />
-            New note
-          </button>
+          {/* New folder rides beside New note — the one always-visible pointer
+              path to a FIRST folder (every other one hangs off an existing
+              folder header or a note's menu). */}
+          <div className="av-sidefoot-row">
+            <button className="av-config" onClick={onNew}>
+              <Plus className="av-cfg-glyph" size={15} aria-hidden="true" />
+              New note
+            </button>
+            <button
+              className="av-config av-config-icon"
+              title="New folder"
+              aria-label="New folder"
+              onClick={onNewFolder}
+            >
+              <FolderPlus className="av-cfg-glyph" size={15} aria-hidden="true" />
+            </button>
+          </div>
           <button className="av-config" onClick={onSettings}>
             <SlidersHorizontal className="av-cfg-glyph" size={15} aria-hidden="true" />
             Settings
@@ -1086,6 +1138,7 @@ export function App() {
     () => buildSidebarRows(notes, folders, collapsed),
     [notes, folders, collapsed],
   );
+  const dirs = useMemo(() => allDirs(notes, folders), [notes, folders]);
 
   // Opening a note inside a collapsed group expands it — the active note must
   // always be visible (it also keeps Mod-j/k's visual-order stepping defined).
@@ -1193,6 +1246,12 @@ export function App() {
   // LATEST user pick (mirrors the Rust side's own latest-request-wins fence), so
   // a slow older open can't land its notes/path/state after a newer one.
   const notebookLoad = useRef(0);
+  // Every mutating op captures the generation before its IPC and drops its UI
+  // patches if a notebook switch landed meanwhile — the new notebook's scan is
+  // authoritative, and patching it with the old notebook's result would plant
+  // phantom rows/folders (Rust's ensure_context already fails a mid-switch
+  // COMMIT; this covers a commit that landed just before the swap).
+  const notebookChangedSince = (gen: number) => gen !== notebookLoad.current;
   const openNotebook = async (path: string, token = ++notebookLoad.current) => {
     let metas: NoteMeta[];
     try {
@@ -1205,10 +1264,10 @@ export function App() {
     }
     // Folders ride along with the open (empty folders aren't derivable from
     // note paths); a failure here degrades to the note-derived groups.
-    const dirs = await backend.listFolders().catch(() => []);
+    const folderList = await backend.listFolders().catch(() => []);
     if (token !== notebookLoad.current) return; // a newer open owns the UI
     setNotes(metas);
-    setFolders(dirs);
+    setFolders(folderList);
     void backend.setLastNotebook(path);
     void backend.rememberNotebook(path); // feed the switcher's recents (MRU)
     setNotebookPath(path);
@@ -1404,16 +1463,8 @@ export function App() {
   };
   // Create/delete patch the sidebar list locally — the meta (or the removal) is
   // already known, so refetching all N metas over IPC is wasted; the watcher's
-  // reconcile() remains the eventual-consistency backstop.
-  const createNote = useCallback(async () => {
-    try {
-      const meta = await backend.createNote();
-      setNotes((ns) => insertMeta(ns, meta));
-      await session.open(meta.id);
-    } catch (e) {
-      flash(`couldn't create note: ${e}`, "error");
-    }
-  }, [session, flash]);
+  // reconcile() remains the eventual-consistency backstop. (Create lives in the
+  // folders block below — a new note lands in the open note's folder.)
 
   // Delete any note by id — the active buffer (via :rm / <Space>d) or a
   // right-clicked sidebar row. Deleting the active note drops its queued save (so
@@ -1421,9 +1472,11 @@ export function App() {
   // note leaves the current buffer untouched.
   const deleteNoteById = async (id: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
+    const gen = notebookLoad.current;
     try {
       if (wasActive) await session.cancelAutosave();
       await backend.deleteNote(id);
+      if (notebookChangedSince(gen)) return;
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
       // Functional + ref-based: a row patched during the delete IPC (autosave
       // meta, rename swap) must not be reverted by a pre-await snapshot.
@@ -1453,9 +1506,11 @@ export function App() {
 
   // Duplicate a note → a "<title> copy" sibling; open the copy so it's ready to edit.
   const duplicateNote = async (id: string) => {
+    const gen = notebookLoad.current;
     try {
       if (s.status === "note" && s.activeId === id) await session.flush();
       const meta = await backend.duplicateNote(id);
+      if (notebookChangedSince(gen)) return;
       setNotes((ns) => insertMeta(ns, meta));
       await session.open(meta.id);
       flash("note duplicated");
@@ -1479,6 +1534,7 @@ export function App() {
   // at the new id so the editor reflects the new title.
   const renameNote = async (id: string, newTitle: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
+    const gen = notebookLoad.current;
     try {
       if (wasActive) {
         await session.flush();
@@ -1489,6 +1545,7 @@ export function App() {
         await session.cancelAutosave();
       }
       const meta = await backend.retitleNote(id, newTitle);
+      if (notebookChangedSince(gen)) return;
       setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
       if (wasActive) await session.open(meta.id);
       flash("note renamed");
@@ -1512,6 +1569,7 @@ export function App() {
       return;
     }
     const wasActive = s.status === "note" && s.activeId === id;
+    const gen = notebookLoad.current;
     try {
       if (wasActive) {
         await session.flush();
@@ -1522,6 +1580,7 @@ export function App() {
         await session.cancelAutosave();
       }
       const meta = await backend.setPinned(id, pinned);
+      if (notebookChangedSince(gen)) return;
       setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
       if (wasActive) await session.open(meta.id);
       flash(pinned ? "note pinned" : "note unpinned");
@@ -1543,6 +1602,12 @@ export function App() {
     setFolders((prev) => (prev.includes(dir) ? prev : [...prev, dir].sort()));
   };
 
+  // The note whose buffer an id-changing op must protect: the OPEN note, or the
+  // note parked under the config overlay / closed by :q — its queued autosave
+  // and the "reopen" target still point at the old id. (session.migrateId is
+  // a no-op for unrelated ids, so it always runs on success.)
+  const heldNoteId = (): string | null => (s.status === "note" ? s.activeId : s.lastNoteId);
+
   // Move a note into another folder ("" = root). Moving the OPEN note migrates
   // the buffer's id in place — a move never rewrites body bytes and editorKey
   // excludes activeId, so there is NO remount and the cursor survives; autosave
@@ -1552,26 +1617,28 @@ export function App() {
       flash(`already in ${dir || "the notebook root"}`);
       return;
     }
-    const wasActive = s.status === "note" && s.activeId === id;
+    const gen = notebookLoad.current;
+    const held = heldNoteId() === id;
     try {
-      if (wasActive) {
+      if (held) {
         await session.flush();
         await session.cancelAutosave();
       }
       const meta = await backend.moveNote(id, dir);
-      // Always the RETURNED meta — a destination collision may have -N'd the stem.
+      if (notebookChangedSince(gen)) return;
+      // Always the RETURNED meta — a destination collision may have -N'd the
+      // stem, and the folder comes back spelled the way the disk has it.
+      const landed = noteDir(meta.path);
       setNotes((ns) => ns.map((n) => (n.id === id ? meta : n)).sort(metaOrder));
-      if (dir) {
-        addFolderLocal(dir);
-        expandFolder(dir); // the note must land somewhere visible
+      if (landed) {
+        addFolderLocal(landed);
+        expandFolder(landed); // the note must land somewhere visible
       }
-      if (wasActive) {
-        session.migrateId(id, meta);
-        session.resumeAutosave();
-      }
-      flash(`moved to ${dir || "notebook root"}`);
+      session.migrateId(id, meta);
+      if (held) session.resumeAutosave();
+      flash(`moved to ${landed || "notebook root"}`);
     } catch (e) {
-      if (wasActive) session.resumeAutosave();
+      if (held && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`move failed: ${e}`, "error");
     }
   };
@@ -1594,8 +1661,10 @@ export function App() {
   // Create a folder; resolves to its canonical rel dir, null on failure (the
   // move picker's create-and-move keys off that).
   const createFolder = async (dir: string): Promise<string | null> => {
+    const gen = notebookLoad.current;
     try {
       const rel = await backend.createFolder(dir);
+      if (notebookChangedSince(gen)) return null;
       addFolderLocal(rel);
       return rel;
     } catch (e) {
@@ -1609,36 +1678,46 @@ export function App() {
   });
   const onCreateFolder = useCallback((dir: string) => createFolderRef.current(dir), []);
 
-  // Create a note inside a folder (the folder header's "New note here").
-  const createNoteIn = async (dir: string) => {
+  // Create a note. `dir` names the folder ("" = root); omitted = the OPEN note's
+  // folder — a note started while working inside `journal/` belongs beside its
+  // siblings, not at the root (New note button, Mod-n, :new). The folder
+  // header's "New note here" passes its dir explicitly.
+  const createNoteIn = async (dir?: string) => {
+    const target = dir ?? (s.status === "note" && s.activeId ? noteDir(s.activeId) : "");
+    const gen = notebookLoad.current;
     try {
-      const meta = await backend.createNote(undefined, dir);
+      const meta = await backend.createNote(undefined, target || undefined);
+      if (notebookChangedSince(gen)) return;
+      const landed = noteDir(meta.path); // the disk's spelling of the folder
       setNotes((ns) => insertMeta(ns, meta));
-      if (dir) {
-        addFolderLocal(dir);
-        expandFolder(dir);
+      if (landed) {
+        addFolderLocal(landed);
+        expandFolder(landed);
       }
       await session.open(meta.id);
+      if (landed) flash(`new note in ${landed}`);
     } catch (e) {
       flash(`couldn't create note: ${e}`, "error");
     }
   };
+  const createNote = () => createNoteIn();
 
   // Rename a folder's last segment. Every contained note's id changes; the
   // whole subtree is patched locally with rewritePrefix (collision-free by
   // construction — the directory moved atomically), and the open buffer inside
   // it migrates its id exactly like a move.
   const renameFolder = async (dir: string, name: string) => {
-    const activeInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(dir + "/");
-    const activeId = s.activeId;
+    const heldId = heldNoteId();
+    const held = !!heldId && heldId.startsWith(dir + "/");
+    const gen = notebookLoad.current;
     try {
-      if (activeInside) {
+      if (held) {
         await session.flush();
         await session.cancelAutosave();
       }
       const newDir = await backend.renameFolder(dir, name);
+      if (notebookChangedSince(gen)) return;
       if (newDir !== dir) {
-        const oldMeta = activeInside ? notesRef.current.find((n) => n.id === activeId) : undefined;
         setNotes((ns) =>
           ns.map((n) => {
             const np = rewritePrefix(n.path, dir, newDir);
@@ -1655,15 +1734,27 @@ export function App() {
             }
           }
         });
-        if (activeInside && oldMeta && activeId) {
-          const newId = rewritePrefix(activeId, dir, newDir);
-          session.migrateId(activeId, { ...oldMeta, id: newId, path: newId });
+        if (held && heldId) {
+          const newId = rewritePrefix(heldId, dir, newDir);
+          // migrateId needs the id (plus the title for the on-screen buffer);
+          // a meta missing from the list (a watcher reload racing us) must not
+          // strand the buffer on a dead id, so synthesize one in that case.
+          const old = notesRef.current.find((n) => n.id === heldId) ?? {
+            id: heldId,
+            path: heldId,
+            title: s.title ?? "",
+            tags: [],
+            created: null,
+            updated: 0,
+            pinned: false,
+          };
+          session.migrateId(heldId, { ...old, id: newId, path: newId });
         }
       }
-      if (activeInside) session.resumeAutosave();
+      if (held) session.resumeAutosave();
       flash(`folder renamed to ${newDir}`);
     } catch (e) {
-      if (activeInside) session.resumeAutosave();
+      if (held && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`rename failed: ${e}`, "error");
     }
   };
@@ -1677,9 +1768,11 @@ export function App() {
   const deleteFolder = async (dir: string) => {
     const prefix = dir + "/";
     const wasActiveInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(prefix);
+    const gen = notebookLoad.current;
     try {
       if (wasActiveInside) await session.cancelAutosave();
       await backend.deleteFolder(dir);
+      if (notebookChangedSince(gen)) return;
       setNotes((ns) => ns.filter((n) => !n.path.startsWith(prefix)).sort(metaOrder));
       setFolders((prev) => prev.filter((f) => f !== dir && !f.startsWith(prefix)));
       setAndPersistCollapsed((next) => {
@@ -1697,7 +1790,7 @@ export function App() {
       }
       flash("folder deleted");
     } catch (e) {
-      if (wasActiveInside) session.resumeAutosave();
+      if (wasActiveInside && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`delete failed: ${e}`, "error");
     }
   };
@@ -1762,15 +1855,19 @@ export function App() {
 
   // Step to the adjacent note in the sidebar (Mod-j / Mod-k) — VISUAL order:
   // the flattened row model, skipping folder headers and notes hidden inside
-  // collapsed groups (the auto-expand effect keeps the active note visible, so
-  // stepping is always well-defined). Clamps at the ends; opening flushes any
-  // pending save of the outgoing buffer.
+  // collapsed groups; if the open note's own group was collapsed under it, the
+  // step resumes from that group's position. Clamps at the ends; opening
+  // flushes any pending save of the outgoing buffer.
   const stepNote = (delta: number) => {
-    const ids = visibleNoteIds(rows);
-    if (ids.length === 0) return;
-    const i = s.activeId ? ids.indexOf(s.activeId) : -1;
-    const next = ids[Math.max(0, Math.min(ids.length - 1, i + delta))];
-    if (next && next !== s.activeId) void session.open(next);
+    const next = stepVisibleNote(rows, s.activeId, delta);
+    if (next) void session.open(next);
+  };
+
+  // The folder-scoped commands act on the OPEN note's folder.
+  const withActiveFolder = (run: (dir: string) => void) => {
+    const dir = s.status === "note" && s.activeId ? noteDir(s.activeId) : "";
+    if (dir) run(dir);
+    else flash("the open note isn't in a folder", "error");
   };
 
   // Mod± / Mod-Shift± zoom. Clamps mirror the settings-panel steppers; the CSS
@@ -1809,15 +1906,10 @@ export function App() {
     else if (c === "unpin") setActivePinned(false);
     else if (c === "move") moveActive();
     else if (c === "newFolder") setPendingNewFolder({ parent: "" });
-    else if (c === "renameFolder") {
-      const dir = s.status === "note" && s.activeId ? noteDir(s.activeId) : "";
-      if (dir) setPendingFolderRename({ dir });
-      else flash("the open note isn't in a folder", "error");
-    } else if (c === "deleteFolder") {
-      const dir = s.status === "note" && s.activeId ? noteDir(s.activeId) : "";
-      if (dir) requestFolderDelete(dir);
-      else flash("the open note isn't in a folder", "error");
-    } else if (c === "reveal") revealActive();
+    else if (c === "renameFolder") withActiveFolder((dir) => setPendingFolderRename({ dir }));
+    else if (c === "deleteFolder") withActiveFolder(requestFolderDelete);
+    else if (c === "toggleFolder") withActiveFolder(toggleFolder);
+    else if (c === "reveal") revealActive();
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
     else if (c === "prevNote") stepNote(-1);
@@ -1888,7 +1980,8 @@ export function App() {
     },
     [session],
   );
-  const onNewNote = useCallback(() => void createNote(), [createNote]);
+  const onNewNote = useCallback(() => void createNoteInRef.current(), []);
+  const onNewFolder = useCallback(() => setPendingNewFolder({ parent: "" }), []);
   // setNotePinned/duplicateNote close over fresh notes/session state each
   // render, but their consumers (the memo'd rows' pin toggle AND the
   // once-created native context menu) need ONE stable identity — so both are
@@ -2062,6 +2155,7 @@ export function App() {
               onFolderContext={openFolderMenu}
               onMoveNote={onMoveNote}
               onNew={onNewNote}
+              onNewFolder={onNewFolder}
               onSettings={openSettings}
               updateAvailable={update?.kind === "available"}
               width={cfg.sidebarWidth}
@@ -2276,7 +2370,7 @@ export function App() {
           <MovePicker
             title={pendingMove.title}
             currentDir={noteDir(pendingMove.id)}
-            dirs={allDirs(notes, folders)}
+            dirs={dirs}
             onMove={(dir) => {
               const { id } = pendingMove;
               setPendingMove(null);
@@ -2320,12 +2414,18 @@ export function App() {
               pendingNewFolder.parent ? `New folder in ${pendingNewFolder.parent}` : "New folder"
             }
             initialValue=""
-            placeholder="Folder name"
+            placeholder="Folder name (a/b nests)"
             confirmLabel="Create"
             onConfirm={(value) => {
               const { parent } = pendingNewFolder;
               setPendingNewFolder(null);
               setRefocus((r) => r + 1);
+              // A name made only of separators would sanitize down to the
+              // parent and report "created" for a folder that already existed.
+              if (!value.split("/").some((seg) => seg.trim())) {
+                flash("folder name is empty", "error");
+                return;
+              }
               void createFolder(parent ? `${parent}/${value}` : value).then((rel) => {
                 if (rel !== null) flash(`folder ${rel} created`);
               });

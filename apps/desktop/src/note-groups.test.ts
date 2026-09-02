@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { NoteMeta } from "./backend/types";
-import { allDirs, buildSidebarRows, noteDir, rewritePrefix, visibleNoteIds } from "./note-groups";
+import {
+  allDirs,
+  buildSidebarRows,
+  noteDir,
+  rewritePrefix,
+  stepVisibleNote,
+  visibleNoteIds,
+} from "./note-groups";
 
 function meta(path: string, opts: { updated?: number; pinned?: boolean } = {}): NoteMeta {
   return {
@@ -78,6 +85,46 @@ describe("buildSidebarRows", () => {
   it("visibleNoteIds skips headers and collapsed members", () => {
     const rows = buildSidebarRows(notes, [], new Set(["journal"]));
     expect(visibleNoteIds(rows)).toEqual(["keymap.md", "welcome.md", "work/projects/roadmap.md"]);
+  });
+});
+
+describe("stepVisibleNote", () => {
+  const notes = sorted([
+    meta("welcome.md", { updated: 50 }),
+    meta("keymap.md", { updated: 40, pinned: true }),
+    meta("journal/morning.md", { updated: 90 }),
+    meta("journal/night.md", { updated: 95, pinned: true }),
+    meta("work/projects/roadmap.md", { updated: 10 }),
+  ]);
+  // visual order: keymap, welcome, [journal] night, morning, [work] (work/projects) roadmap
+
+  it("steps through visible notes in visual order and clamps at the ends", () => {
+    const rows = buildSidebarRows(notes, [], new Set());
+    expect(stepVisibleNote(rows, "welcome.md", 1)).toBe("journal/night.md");
+    expect(stepVisibleNote(rows, "journal/night.md", -1)).toBe("welcome.md");
+    expect(stepVisibleNote(rows, "keymap.md", -1)).toBeNull(); // top: nowhere to go
+    expect(stepVisibleNote(rows, "work/projects/roadmap.md", 1)).toBeNull();
+  });
+
+  it("skips the members of collapsed groups", () => {
+    const rows = buildSidebarRows(notes, [], new Set(["journal"]));
+    expect(stepVisibleNote(rows, "welcome.md", 1)).toBe("work/projects/roadmap.md");
+    expect(stepVisibleNote(rows, "work/projects/roadmap.md", -1)).toBe("welcome.md");
+  });
+
+  it("resumes from the hidden note's group when its own group was collapsed", () => {
+    const rows = buildSidebarRows(notes, [], new Set(["journal"]));
+    // morning is hidden under [journal]: down → first note after the header,
+    // up → last note before it (not a jump to the top of the list).
+    expect(stepVisibleNote(rows, "journal/morning.md", 1)).toBe("work/projects/roadmap.md");
+    expect(stepVisibleNote(rows, "journal/morning.md", -1)).toBe("welcome.md");
+  });
+
+  it("starts at the top with no note open, and is null on an empty list", () => {
+    const rows = buildSidebarRows(notes, [], new Set());
+    expect(stepVisibleNote(rows, null, 1)).toBe("keymap.md");
+    expect(stepVisibleNote(rows, "config", -1)).toBe("keymap.md");
+    expect(stepVisibleNote(buildSidebarRows([], ["archive"], new Set()), null, 1)).toBeNull();
   });
 });
 

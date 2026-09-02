@@ -317,7 +317,17 @@ function RichEditor(props: EditorProps) {
           ? Selection.near(ed.state.doc.resolve(gotoPos))
           : Selection.atStart(ed.state.doc);
       ed.view.dispatch(ed.state.tr.setSelection(sel).scrollIntoView());
-      ed.view.focus();
+      // The mount focus yields to an overlay that already owns focus: a pin,
+      // rename, or delete remounts the editor asynchronously, and a palette or
+      // finder the user opened in that window must keep its input (its close
+      // hands focus back through refocusToken). Stealing it here left the
+      // user typing a command into a note.
+      const active = document.activeElement;
+      const overlayOwnsFocus =
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA") &&
+        !ed.view.dom.contains(active);
+      if (!overlayOwnsFocus) ed.view.focus();
       setCursorStat(ed);
     },
     onUpdate({ editor: ed, transaction }) {
