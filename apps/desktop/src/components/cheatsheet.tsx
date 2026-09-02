@@ -75,11 +75,6 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     return { groups: gs, flat: gs.flatMap((grp) => grp.rows.map((r) => r.c)) };
   }, [commands, q]);
 
-  // A shrinking filter can leave focus past the end — clamp it back into range.
-  useEffect(() => {
-    setFocus((f) => (f >= flat.length ? Math.max(0, flat.length - 1) : f));
-  }, [flat.length]);
-
   // Pointer-driven focus must not auto-scroll (see finder.tsx: scrolling under
   // a stationary cursor re-fires the hover — a feedback loop).
   const focusByPointer = useRef(false);
@@ -88,6 +83,14 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
     if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     focusByPointer.current = true;
     setFocus(i);
+  };
+  // Typing re-filters the flat list, so the focused index would point at a
+  // different row anyway — reset to the top match in the change handler itself
+  // (the other pickers' behavior; no clamp-in-an-effect second render).
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    focusByPointer.current = false;
+    setFocus(0);
   };
   useEffect(() => {
     if (!focusByPointer.current) rowRefs.current[focus]?.scrollIntoView({ block: "nearest" });
@@ -222,7 +225,7 @@ export function Cheatsheet({ commands, overrides, onSetOverrides, onClose }: Che
             spellCheck={false}
             placeholder="search shortcuts…"
             aria-label="Search shortcuts"
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={onKeyDown}
           />
         </div>

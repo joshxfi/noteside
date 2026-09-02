@@ -14,7 +14,7 @@
 //   else (chords, tabWidth) reconfigures live through refs.
 // - Typing must never re-render React beyond this component's own status bar:
 //   shouldRerenderOnTransaction is false and all node views are plain DOM.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -136,10 +136,16 @@ export function Editor(props: EditorProps) {
 }
 
 function RichEditor(props: EditorProps) {
+  // Latest-value mirrors for the editor's long-lived closures (extension
+  // callbacks, onUpdate, the command dispatcher). Written from an effect, never
+  // during render: a render React discards must not leak its props into a live
+  // closure, and every reader runs at event time — after the commit.
   const propsRef = useRef(props);
-  propsRef.current = props;
   const savedRef = useRef(props.savedText);
-  savedRef.current = props.savedText;
+  useEffect(() => {
+    propsRef.current = props;
+    savedRef.current = props.savedText;
+  });
 
   // Mount-stable: the session remounts this component (editorKey) per open.
   const [io] = useState<NoteIO>(() => splitNote(props.initialText));
@@ -240,6 +246,10 @@ function RichEditor(props: EditorProps) {
   };
 
   const editor = useEditor({
+    // The callbacks below read the latest-props ref at EVENT time (keydown,
+    // click, image resolve) — the extension factory only stores them. The
+    // lint rule can't see past the render-time call and flags the reads.
+    // oxlint-disable-next-line react/refs
     extensions: buildExtensions({
       chords: {
         getOverrides: () => propsRef.current.chordOverrides,
@@ -353,7 +363,12 @@ function RichEditor(props: EditorProps) {
       editorRef.current = null;
     },
   });
-  editorRef.current = editor;
+  // useEditor builds the instance in its own effect (immediatelyRender: false)
+  // and re-renders once it exists; mirror it for the event-time readers
+  // (dispatch, vim hooks, the refocus effect below — declared after this).
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   useEffect(() => {
     // Plain DOM focus — the selection is wherever the user left it, and a
@@ -363,15 +378,24 @@ function RichEditor(props: EditorProps) {
   }, [props.refocusToken]);
 
   // A save landed (savedText caught up with what we serialized): advance the
-  // dirtiness baseline to that doc. Note buffers also carry session-tracked
-  // dirtiness for the status bar.
+  // dirtiness baseline to that doc.
   useEffect(() => {
     const last = lastSerializedRef.current;
     if (last && props.savedText === last.text) savedDocRef.current = last.doc;
-    if (props.dirty !== undefined) {
-      setStat((s) => (s.dirty === props.dirty ? s : { ...s, dirty: props.dirty as boolean }));
-    }
-  }, [props.savedText, props.dirty]);
+  }, [props.savedText]);
+
+  // Note buffers carry session-tracked dirtiness; it overrides the editor's
+  // own doc.eq reading in the status bar (they agree in steady state — the
+  // session's flag is what a landed save clears, with no transaction to
+  // re-derive from). Derived, not synced through state, so a prop change
+  // never costs a second render.
+  const shownStat = useMemo(
+    () =>
+      props.dirty === undefined || props.dirty === stat.dirty
+        ? stat
+        : { ...stat, dirty: props.dirty },
+    [stat, props.dirty],
+  );
 
   return (
     <div
@@ -411,7 +435,7 @@ function RichEditor(props: EditorProps) {
         modeClass={props.vimMode ? "mode-" + mode : "mode-text"}
         modeLabel={props.vimMode ? (MODE_LABEL[mode] ?? mode.toUpperCase()) : "TEXT"}
         fileLabel={props.fileLabel}
-        stat={stat}
+        stat={shownStat}
         onSave={() => {
           const ed = editorRef.current;
           if (ed) props.onSave(serializeNow(ed));

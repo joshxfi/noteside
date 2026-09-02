@@ -21,8 +21,12 @@ export function useGlobalChords(opts: {
   overrides?: ChordOverrides;
   run: (c: AppCommand) => void;
 }) {
+  // Latest-value mirror for the one window listener — written from an effect,
+  // not during render, so a discarded render can't leak into the live handler.
   const ref = useRef(opts);
-  ref.current = opts;
+  useEffect(() => {
+    ref.current = opts;
+  });
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
