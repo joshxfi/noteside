@@ -204,25 +204,123 @@ test.describe("folder groups", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("vim :fold collapses and re-expands the open note's group", async ({ page }) => {
+    await boot(page, { vimMode: true });
+    await page.locator('.av-item[data-dir="journal"]').first().click();
+    await page.locator(".av-cm .tiptap").click();
+    await page.keyboard.press("Escape"); // normal mode
+    await page.keyboard.press(":");
+    await page.keyboard.type("fold");
+    await page.keyboard.press("Enter");
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(0);
+    await expect(page.locator('.av-grouphead[data-dir="journal"]')).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await page.keyboard.press(":");
+    await page.keyboard.type("fold");
+    await page.keyboard.press("Enter");
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
+  });
+
+  test("Mod-k/j from a note hidden by collapsing its OWN group resume from the group", async ({
+    page,
+  }) => {
+    await boot(page);
+    await page.locator('.av-item[data-dir="journal"]').last().click(); // Thursday
+    await page.locator('.av-grouphead[data-dir="journal"]').click(); // collapse the active group
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(0);
+    // Up: the last visible note BEFORE the collapsed header (ideas), not the top.
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "ideas");
+    // Back into the hidden group via the finder (auto-expands), collapse again…
+    await page.keyboard.press("ControlOrMeta+p");
+    await expect(page.locator(".fnd-input")).toBeFocused();
+    await page.keyboard.type("thursday");
+    await expect(page.locator(".fnd-row").first()).toContainText("Thursday");
+    await page.keyboard.press("Enter");
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
+    await page.locator('.av-grouphead[data-dir="journal"]').click();
+    // …and down lands on the first visible note AFTER the header (recipes).
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "recipes");
+  });
+
+  test("New note lands in the open note's folder", async ({ page }) => {
+    await boot(page);
+    await page.locator('.av-item[data-dir="journal"]').first().click();
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
+    await expect(page.locator(".av-toast")).toContainText("new note in journal");
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(3);
+    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "journal");
+  });
+
+  test("the footer's New folder button creates a root folder (and rejects an empty name)", async ({
+    page,
+  }) => {
+    await boot(page);
+    const newFolder = page.locator(".av-sidefoot").getByRole("button", { name: "New folder" });
+    await newFolder.click();
+    const input = page.locator(".cfm-input");
+    await expect(input).toBeFocused();
+    await input.fill("inbox");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".av-toast")).toContainText("folder inbox created");
+    await expect(page.locator('.av-grouphead[data-dir="inbox"]')).toBeVisible();
+    await expect(page.locator('.av-group-blank[data-dir="inbox"]')).toBeVisible();
+    // A separators-only name must not report "created" for a folder that
+    // already existed (it would sanitize down to the parent).
+    await newFolder.click();
+    await page.locator(".cfm-input").fill("/");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".av-toast")).toContainText("folder name is empty");
+  });
+
   // Chromium-only: WebKit's synthetic HTML5 drag events are unreliable in
   // Playwright (the hover-grip drag precedent) — verify manually there.
-  test("dragging a note row onto a group header moves it", async ({ page, browserName }) => {
+  test("dragging a note row onto a group header moves it; onto its own folder is a no-op", async ({
+    page,
+    browserName,
+  }) => {
     test.skip(browserName !== "chromium", "synthetic DnD is chromium-only");
     await boot(page);
-    await page.evaluate(() => {
-      const src = [...document.querySelectorAll('.av-item[data-dir=""]')].at(-1) as HTMLElement;
-      const target = document.querySelector('.av-grouphead[data-dir="archive"]') as HTMLElement;
-      const dataTransfer = new DataTransfer();
-      src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
-      target.dispatchEvent(
-        new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }),
+    const drag = (srcSel: string, srcIndex: number, targetSel: string) =>
+      page.evaluate(
+        ([srcSelector, index, targetSelector]) => {
+          const src = [...document.querySelectorAll(srcSelector)].at(index) as HTMLElement;
+          const target = document.querySelector(targetSelector) as HTMLElement;
+          const nav = document.querySelector(".av-list") as HTMLElement;
+          // (A constructed DataTransfer doesn't persist dropEffect outside a
+          // real drag session, so the no-drop cursor isn't probed here — the
+          // behavior is: nothing moves and no toast.)
+          const dataTransfer = new DataTransfer();
+          src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
+          const nested = nav.classList.contains("is-drag-nested");
+          target.dispatchEvent(
+            new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }),
+          );
+          const ringed = target.classList.contains("is-drop");
+          target.dispatchEvent(
+            new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }),
+          );
+          src.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer }));
+          return { nested, ringed, cleared: nav.className === "av-list" };
+        },
+        [srcSel, srcIndex, targetSel] as const,
       );
-      target.dispatchEvent(
-        new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }),
-      );
-      src.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer }));
-    });
+    // A root note onto the archive header: the header rings, the note moves,
+    // and no root drop zone was offered (the note was already at the root).
+    const first = await drag('.av-item[data-dir=""]', -1, '.av-grouphead[data-dir="archive"]');
+    expect(first).toEqual({ nested: false, ringed: true, cleared: true });
     await expect(page.locator(".av-toast")).toContainText("moved to archive");
     await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(1);
+    // A journal note onto its OWN header: no ring, nothing moves, no toast —
+    // but the root drop zone WAS offered, since the note came from a folder.
+    await page.waitForTimeout(1800); // let the first toast expire
+    const same = await drag('.av-item[data-dir="journal"]', 0, '.av-grouphead[data-dir="journal"]');
+    expect(same).toEqual({ nested: true, ringed: false, cleared: true });
+    await page.waitForTimeout(300);
+    await expect(page.locator(".av-toast")).toHaveCount(0);
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
   });
 });

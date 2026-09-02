@@ -32,6 +32,7 @@ export const APP_COMMANDS = [
   "newFolder",
   "renameFolder",
   "deleteFolder",
+  "toggleFolder",
   "palette",
   "commands",
   "reopen",
@@ -254,8 +255,17 @@ export const COMMANDS: Command[] = [
     command: "newFolder",
     paletteHint: ":mkdir",
   },
-  // These two act on the ACTIVE note's folder (the keyboard path); a folder
-  // header's context menu covers every folder, empties included.
+  // These act on the ACTIVE note's folder (the keyboard path); a folder
+  // header's context menu + click cover every folder, empties included.
+  {
+    id: "toggleFolder",
+    title: "Collapse / expand folder",
+    group: "Note",
+    ex: ["fold", "collapse"],
+    command: "toggleFolder",
+    needsNote: true,
+    needsFolder: true,
+  },
   {
     id: "renameFolder",
     title: "Rename folder…",

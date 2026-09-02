@@ -75,6 +75,38 @@ export function visibleNoteIds(rows: SidebarRow[]): string[] {
   return ids;
 }
 
+/** The note Mod-j/k (`delta` ±1) lands on from `activeId`: the adjacent VISIBLE
+ *  note in visual order, clamped at the ends. When the active note is hidden
+ *  inside a collapsed group (its header was collapsed under it), stepping
+ *  resumes from that group's position — down lands on the first visible note
+ *  after the header, up on the last one before it — instead of teleporting to
+ *  the top of the list. Null when there is nothing to move to. */
+export function stepVisibleNote(
+  rows: SidebarRow[],
+  activeId: string | null,
+  delta: number,
+): string | null {
+  const ids: string[] = [];
+  let at = -1; // the active note's index in `ids`
+  let hiddenAfter = -1; // visible notes preceding the collapsed header hiding it
+  const activeDir = activeId ? noteDir(activeId) : null;
+  for (const r of rows) {
+    if (r.kind === "note") {
+      if (r.note.id === activeId) at = ids.length;
+      ids.push(r.note.id);
+    } else if (r.kind === "folder" && r.collapsed && r.dir === activeDir) {
+      hiddenAfter = ids.length;
+    }
+  }
+  if (ids.length === 0) return null;
+  let target: number;
+  if (at >= 0) target = at + delta;
+  else if (hiddenAfter >= 0) target = delta > 0 ? hiddenAfter : hiddenAfter - 1;
+  else target = 0; // no note open (config buffer, empty state): start at the top
+  const next = ids[Math.max(0, Math.min(ids.length - 1, target))];
+  return next === activeId ? null : next;
+}
+
 /** Rewrite `path` for a folder rename: "work/a.md" with work→archive becomes
  *  "archive/a.md". Paths outside the renamed dir come back unchanged. */
 export function rewritePrefix(path: string, oldDir: string, newDir: string): string {

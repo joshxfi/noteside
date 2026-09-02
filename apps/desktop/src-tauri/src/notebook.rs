@@ -36,8 +36,15 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
     for entry in WalkDir::new(root)
         .into_iter()
         // A dot-prefixed notebook root is a valid user choice; only descendants
-        // are hidden entries that should prune their subtree.
-        .filter_entry(|e| e.depth() == 0 || !is_hidden(e.path()))
+        // are hidden entries that should prune their subtree. A DIRECTORY named
+        // like a note (`drafts.md/`) is pruned too: every by-path code path keys
+        // on the extension and `safe_dir_path` refuses such folders, so listing
+        // one would show a group the app can neither manage nor tell apart from
+        // a note (the watcher mirrors this in `targeted_updates`).
+        .filter_entry(|e| {
+            e.depth() == 0
+                || (!is_hidden(e.path()) && !(e.file_type().is_dir() && has_md_extension(e.path())))
+        })
     {
         let entry = entry.map_err(walk_error)?;
         if entry.file_type().is_dir() {
@@ -100,6 +107,23 @@ fn is_hidden(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+pub(crate) fn has_md_extension(path: &Path) -> bool {
+    path.extension().and_then(|x| x.to_str()) == Some("md")
+}
+
+/// The on-disk relative path of an EXISTING directory under `root`, spelled
+/// the way the filesystem stores it. On a case-insensitive volume (macOS,
+/// Windows) `work` resolves to an existing `Work`, so string-keyed folder
+/// state never splits one directory into two entries — and a same-dir check
+/// on the returned rels is an identity check. Falls back to the lexical rel
+/// when canonicalization fails (the caller validated containment already).
+pub fn disk_rel_dir(root: &Path, abs: &Path) -> String {
+    match (fs::canonicalize(root), fs::canonicalize(abs)) {
+        (Ok(r), Ok(a)) if a.starts_with(&r) => rel_path(&r, &a),
+        _ => rel_path(root, abs),
+    }
+}
+
 /// Join a client-supplied relative note path onto the notebook root, rejecting any
 /// path that is absolute or contains `..` so it can't escape the notebook.
 pub fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
@@ -146,22 +170,33 @@ pub fn safe_note_path(root: &Path, rel: &str) -> Option<PathBuf> {
 /// escapes — minus the `.md` extension requirement. Additionally rejects
 /// `.md`-suffixed segments anywhere (a directory named `x.md` would satisfy
 /// note-path validation later and confuse every by-path code path) and `.`
-/// components, so an accepted rel is always in canonical segment form (the
-/// string-equality checks in the move/create commands rely on that). Unlike
-/// notes, a folder target may be several missing levels deep, so the symlink
-/// probe walks up to the nearest EXISTING ancestor before canonicalizing.
+/// components, so an accepted rel is always in canonical segment form — the
+/// string itself must equal its `/`-joined components (no `a//b`, `a/b/`,
+/// `./a`, or backslashes), because the string-prefix logic in `state.rs` and
+/// the same-dir checks in the commands rely on one spelling per directory.
+/// Unlike notes, a folder target may be several missing levels deep, so the
+/// symlink probe walks up to the nearest EXISTING ancestor before
+/// canonicalizing.
 pub fn safe_dir_path(root: &Path, rel: &str) -> Option<PathBuf> {
     if rel.is_empty() {
         return None;
     }
     let abs = safe_join(root, rel)?;
+    let mut segments: Vec<&str> = Vec::new();
     for c in Path::new(rel).components() {
         match c {
-            Component::Normal(n)
-                if n.to_str()
-                    .is_some_and(|s| !s.starts_with('.') && !s.ends_with(".md")) => {}
+            Component::Normal(n) => {
+                let s = n.to_str()?;
+                if s.starts_with('.') || s.ends_with(".md") {
+                    return None;
+                }
+                segments.push(s);
+            }
             _ => return None,
         }
+    }
+    if segments.join("/") != rel {
+        return None;
     }
     let canonical_root = fs::canonicalize(root).ok()?;
     let resolved = if abs.exists() {
@@ -772,6 +807,28 @@ mod tests {
         // A dir named like a note would confuse note-path validation.
         assert!(safe_dir_path(&root, "x.md").is_none());
         assert!(safe_dir_path(&root, "a.md/b").is_none());
+        // Only the canonical spelling is accepted — ONE string per directory,
+        // or the string-prefix state logic would see two folders.
+        assert!(safe_dir_path(&root, "notes//a").is_none());
+        assert!(safe_dir_path(&root, "notes/").is_none());
+        assert!(safe_dir_path(&root, "notes/a/").is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn disk_rel_dir_spells_a_folder_the_way_the_disk_does() {
+        let root = test_dir("disk-rel-dir");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("Work/inner")).unwrap();
+        assert_eq!(disk_rel_dir(&root, &root.join("Work/inner")), "Work/inner");
+        assert_eq!(disk_rel_dir(&root, &root), "");
+        // On a case-insensitive volume (macOS/Windows) `work` IS `Work` — the
+        // disk spelling wins so folder state can't split one dir in two.
+        if root.join("work").is_dir() {
+            assert_eq!(disk_rel_dir(&root, &root.join("work/inner")), "Work/inner");
+        }
+        // A missing path falls back to the lexical rel.
+        assert_eq!(disk_rel_dir(&root, &root.join("nope/x")), "nope/x");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1073,8 +1130,14 @@ mod tests {
         std::fs::create_dir_all(dir.join("empty")).unwrap();
         std::fs::create_dir_all(dir.join(".hidden/inner")).unwrap();
         std::fs::write(dir.join("sub/nested.md"), "# N").unwrap();
+        // A DIRECTORY named like a note is pruned with its subtree: the app
+        // could neither manage it (safe_dir_path) nor tell it from a note.
+        std::fs::create_dir_all(dir.join("drafts.md/deeper")).unwrap();
+        std::fs::write(dir.join("drafts.md/inside.md"), "# I").unwrap();
         let scan = scan_notebook(&dir).unwrap();
         assert_eq!(scan.folders, vec!["empty", "sub", "sub/deeper"]);
+        assert_eq!(scan.records.len(), 1);
+        assert_eq!(scan.records[0].meta.path, "sub/nested.md");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

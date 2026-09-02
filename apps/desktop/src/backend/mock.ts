@@ -602,8 +602,10 @@ export const mockBackend: Backend = {
     const i = dir.lastIndexOf("/");
     const newDir = i >= 0 ? `${dir.slice(0, i)}/${seg}` : seg;
     if (newDir === dir) return dir;
-    const caseOnly = newDir.toLowerCase() === dir.toLowerCase();
-    if (!caseOnly && folders.has(newDir)) {
+    // The mock's folder set is exact-spelling (a case-sensitive filesystem),
+    // so an existing target is occupied whatever its casing — Rust decides the
+    // same question by directory identity, never by comparing spellings.
+    if (folders.has(newDir)) {
       throw new Error("something with that name already exists");
     }
     const prefix = `${dir}/`;

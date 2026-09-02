@@ -139,12 +139,18 @@ fn folders_disagree(state: &NotebookState, probes: &[(String, bool)]) -> bool {
         if *is_dir {
             !state.has_folder(rel)
         } else {
+            // Records are path-sorted, so every path under `rel/` is contiguous
+            // and the first path ≥ the prefix decides — O(log N) under the lock,
+            // even for a batch of hundreds of pasted attachments at 10k notes.
             let prefix = format!("{rel}/");
+            let at = state
+                .records
+                .partition_point(|r| r.meta.path.as_str() < prefix.as_str());
             state.has_folder(rel)
                 || state
                     .records
-                    .iter()
-                    .any(|r| r.meta.path.starts_with(&prefix))
+                    .get(at)
+                    .is_some_and(|r| r.meta.path.starts_with(&prefix))
         }
     })
 }
@@ -183,6 +189,22 @@ fn has_hidden_component(path: &Path) -> bool {
     )
 }
 
+/// True if a DIRECTORY component (anything but the last) is named like a note
+/// (`drafts.md/x.md`) — `scan_notebook` prunes such directories, so a targeted
+/// update must not index through one either (see the scanner's filter_entry).
+fn has_note_named_dir_component(rel: &Path) -> bool {
+    let mut comps = rel.components().peekable();
+    while let Some(c) = comps.next() {
+        if comps.peek().is_none() {
+            break;
+        }
+        if matches!(c, Component::Normal(n) if n.to_str().is_some_and(|s| s.ends_with(".md"))) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Read the targeted paths into upsert/remove entries mirroring exactly what a
 /// full rescan would record for them. `None` (any surprise: path outside the
 /// root, non-UTF-8 name, read error, a "removed" file that still exists) makes
@@ -208,7 +230,7 @@ fn targeted_updates(
         {
             return None;
         }
-        if has_hidden_component(rel) {
+        if has_hidden_component(rel) || has_note_named_dir_component(rel) {
             continue; // the scanner never indexes these; nothing to update
         }
         let key = notebook::rel_path(root, abs);
@@ -518,6 +540,34 @@ mod tests {
             ),
         ];
         assert_eq!(relevant_paths(root, &events), vec!["a.md"]);
+    }
+
+    #[test]
+    fn targeted_updates_skip_note_named_directories_like_the_scanner() {
+        let dir = std::env::temp_dir().join(format!("noteside-watch-mddir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("drafts.md")).unwrap();
+        std::fs::write(dir.join("drafts.md/inside.md"), "# Inside").unwrap();
+        std::fs::write(dir.join("top.md"), "# Top").unwrap();
+        let got = targeted_updates(
+            &dir,
+            &[
+                PathChange::Upsert(dir.join("drafts.md/inside.md")),
+                PathChange::Upsert(dir.join("top.md")),
+            ],
+        )
+        .unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].0, "top.md");
+        assert!(has_note_named_dir_component(Path::new(
+            "drafts.md/inside.md"
+        )));
+        assert!(has_note_named_dir_component(Path::new(
+            "a/drafts.md/b/c.md"
+        )));
+        assert!(!has_note_named_dir_component(Path::new("drafts/inside.md")));
+        assert!(!has_note_named_dir_component(Path::new("inside.md")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
