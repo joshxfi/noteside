@@ -97,26 +97,23 @@ export function SettingsPanel({
     ESC_PRESETS.some((p) => p.value === cfg.escMap) ? "" : cfg.escMap,
   );
   const version = useAppVersion();
-  // Seed from App's boot-check result (an auto-check may already have found an
-  // update while Settings was closed); the manual button re-checks through App.
-  const [about, setAbout] = useState<{ kind: "idle" | "checking" } | UpdateCheck>(
-    update ?? { kind: "idle" },
-  );
+  // The About row shows App's boot/auto-check result (`update` — it may have
+  // resolved while Settings was closed, or resolve while the panel is open)
+  // unless a MANUAL check owns the row: in flight, or when App has no result
+  // yet. Derived at render, never synced into state (the manual check runs
+  // through App too, so both agree once it settles).
+  const [manual, setManual] = useState<{ kind: "idle" | "checking" } | UpdateCheck>({
+    kind: "idle",
+  });
+  const about = manual.kind === "checking" ? manual : (update ?? manual);
 
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
 
-  // If App's boot/auto check resolves while the panel is already open, reflect it
-  // in the About row too (not just the sidebar dot) — unless a manual check is
-  // mid-flight, which owns the row until it settles.
-  useEffect(() => {
-    if (update) setAbout((a) => (a.kind === "checking" ? a : update));
-  }, [update]);
-
   const runCheck = async () => {
-    setAbout({ kind: "checking" });
-    setAbout(await onCheckUpdate());
+    setManual({ kind: "checking" });
+    setManual(await onCheckUpdate());
   };
   // The About row's keyboard/click action: once an update is found (or the check
   // failed) it opens the landing's OS-aware download section; otherwise it

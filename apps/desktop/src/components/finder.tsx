@@ -228,7 +228,10 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
   const [preview, setPreview] = useState<{ path: string; lines: string[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const previewCacheRef = useRef(new Map<string, string[]>());
+  // Preview text per path for this overlay session (moving across many hits in
+  // one file stays cheap). A stable Map held in state — mutated only when a
+  // fetch lands — so render may read it: a cache hit shows synchronously.
+  const [previewCache] = useState(() => new Map<string, string[]>());
   // True while the selection was last moved by the pointer. Auto-scroll must
   // only chase keyboard-driven selection — scrolling under a hovering pointer
   // would move a new row under the cursor and re-fire the hover (a feedback loop).
@@ -287,21 +290,12 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
     setSel(i);
   }, []);
 
-  // Lazily load preview text from the backend's cached path, then memoize it for
-  // this overlay session so moving across many hits in the same file stays cheap.
-  // Cache misses debounce ~40ms so key-repeat across many files coalesces into
-  // one IPC for the file the selection lands on; the cleanup's alive flag drops
+  // Lazily load preview text from the backend's cached path on a cache MISS.
+  // Misses debounce ~40ms so key-repeat across many files coalesces into one
+  // IPC for the file the selection lands on; the cleanup's alive flag drops
   // late responses for a file that is no longer selected.
   useEffect(() => {
-    if (!selPath) {
-      setPreview(null);
-      return;
-    }
-    const cached = previewCacheRef.current.get(selPath);
-    if (cached) {
-      setPreview({ path: selPath, lines: cached });
-      return;
-    }
+    if (!selPath || previewCache.has(selPath)) return;
     let alive = true;
     const id = setTimeout(() => {
       backend
@@ -309,7 +303,7 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
         .then((doc) => {
           if (!alive) return;
           const lines = doc.body.split("\n");
-          previewCacheRef.current.set(selPath, lines);
+          previewCache.set(selPath, lines);
           setPreview({ path: selPath, lines });
         })
         .catch(() => alive && setPreview(null));
@@ -318,7 +312,17 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
       alive = false;
       clearTimeout(id);
     };
-  }, [selPath]);
+  }, [selPath, previewCache]);
+  // What the pane shows for the CURRENT selection — a cache hit at once, the
+  // last fetched preview when it belongs to this path, else nothing (loading).
+  // Derived at render rather than synced through state on every selection move.
+  const cachedLines = selPath ? previewCache.get(selPath) : undefined;
+  const shownPreview =
+    selPath && cachedLines
+      ? { path: selPath, lines: cachedLines }
+      : preview?.path === selPath
+        ? preview
+        : null;
 
   const pick = useCallback(
     (item: FileHit | ContentHit) => onOpen(item.path, "lineNumber" in item ? item.lineNumber : 0),
@@ -454,8 +458,8 @@ export function Finder({ initialMode, onClose, onOpen }: FinderProps) {
             )}
           </div>
           <Preview
-            path={preview?.path ?? null}
-            lines={preview?.lines ?? null}
+            path={shownPreview?.path ?? null}
+            lines={shownPreview?.lines ?? null}
             activeLine={selGrep ? selGrep.lineNumber : null}
             ranges={selGrep ? selGrep.ranges : null}
           />
