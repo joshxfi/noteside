@@ -34,10 +34,13 @@ export function CommandSearch({
     () => commands.filter((c) => subseq(q, c.title) || subseq(q, c.group)),
     [commands, q],
   );
-  useEffect(() => {
+  // Typing resets the selection to the top match — in the change handler
+  // itself, not an effect (no second render per keystroke).
+  const onQueryChange = (value: string) => {
+    setQuery(value);
     selByPointer.current = false;
     setSel(0);
-  }, [q]);
+  };
 
   // keep the selection in view (keyboard moves only)
   useEffect(() => {
@@ -48,6 +51,16 @@ export function CommandSearch({
     if (!moved.current(e)) return; // synthetic hover under a stationary cursor
     selByPointer.current = true;
     setSel(i);
+  };
+
+  // Leaving the confirm view remounts the rows under a pointer that may have
+  // moved while they were gone (the click on "No", say). Re-seed the motion
+  // guard from the live pointer position first, or the remount's synthetic
+  // hover selects whatever row now sits under the cursor — and the next Enter
+  // runs THAT command instead of the one the user was confirming.
+  const backToList = () => {
+    moved.current = pointerMoved();
+    setConfirm(null);
   };
 
   const choose = (cmd: Command | undefined) => {
@@ -64,7 +77,7 @@ export function CommandSearch({
     selByPointer.current = false;
     if (e.key === "Escape") {
       e.preventDefault();
-      if (confirm) setConfirm(null);
+      if (confirm) backToList();
       else onClose();
     } else if (confirm) {
       e.preventDefault();
@@ -72,7 +85,7 @@ export function CommandSearch({
         onRun(confirm);
         onClose();
       } else if (e.key === "n") {
-        setConfirm(null);
+        backToList();
       }
     } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
       e.preventDefault();
@@ -97,7 +110,7 @@ export function CommandSearch({
             value={query}
             spellCheck={false}
             placeholder="run a command…"
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={onKeyDown}
           />
           <button
@@ -135,7 +148,7 @@ export function CommandSearch({
                     type="button"
                     className="cfm-btn"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => setConfirm(null)}
+                    onClick={() => backToList()}
                   >
                     No <b>n</b>
                   </button>

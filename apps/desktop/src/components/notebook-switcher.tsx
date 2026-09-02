@@ -45,7 +45,8 @@ export function NotebookSwitcher({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [sel, setSel] = useState(0);
+  // null = "the default pick" (derived below); a number once the user moved it.
+  const [sel, setSel] = useState<number | null>(null);
   const [notebooks, setNotebooks] = useState<NotebookRef[]>([]);
   const [now] = useState(() => Date.now());
   // create mode: an in-overlay form for a new notebook (name + parent location).
@@ -81,18 +82,23 @@ export function NotebookSwitcher({
     [notebooks, q],
   );
 
-  // Empty query → default to the most-recent OTHER notebook (alt-tab); while
-  // filtering → the top match. (Skipped in create mode.)
-  useEffect(() => {
-    if (creating) return;
+  // The default pick: while filtering, the top match; with an empty query, the
+  // most-recent OTHER notebook (alt-tab). Derived at render — so it re-derives
+  // as the notebook list loads, with no effect and no extra render — until the
+  // user moves the selection (arrows/hover); typing or toggling create mode
+  // hands it back to the default.
+  const defaultSel = q
+    ? 0
+    : Math.max(
+        0,
+        filtered.findIndex((n) => n.path !== current),
+      );
+  const selIdx = sel ?? defaultSel;
+  const onQueryChange = (value: string) => {
+    setQuery(value);
     selByPointer.current = false;
-    if (q) {
-      setSel(0);
-      return;
-    }
-    const i = filtered.findIndex((n) => n.path !== current);
-    setSel(i >= 0 ? i : 0);
-  }, [q, filtered, current, creating]);
+    setSel(null);
+  };
 
   // Focus the shared input: the filter (list mode) or the name field (create mode).
   useEffect(() => {
@@ -100,8 +106,8 @@ export function NotebookSwitcher({
   }, [creating]);
 
   useEffect(() => {
-    if (!creating && !selByPointer.current) scrollRowIntoView(listRef.current, sel);
-  }, [sel, filtered, creating]);
+    if (!creating && !selByPointer.current) scrollRowIntoView(listRef.current, selIdx);
+  }, [selIdx, filtered, creating]);
 
   // Action rows live just past the notebook rows: [notebooks…, New, Open folder].
   const newIndex = filtered.length;
@@ -111,6 +117,7 @@ export function NotebookSwitcher({
   const enterCreate = () => {
     setName("");
     setParent(dirname(current));
+    setSel(null);
     setCreating(true);
   };
   const pickParent = async () => {
@@ -148,6 +155,11 @@ export function NotebookSwitcher({
     if (creating) {
       if (e.key === "Escape") {
         e.preventDefault();
+        setSel(null); // the list reopens on its default pick
+        // The rows remount under a pointer that may have moved while they were
+        // gone — re-seed the motion guard so the remount's synthetic hover
+        // can't steal the selection.
+        moved.current = pointerMoved();
         setCreating(false); // back to the list, not all the way out
       } else if (e.key === "Enter") {
         e.preventDefault();
@@ -160,13 +172,13 @@ export function NotebookSwitcher({
       onClose();
     } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
       e.preventDefault();
-      setSel((s) => Math.min(count - 1, s + 1));
+      setSel(Math.min(count - 1, selIdx + 1));
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       e.preventDefault();
-      setSel((s) => Math.max(0, s - 1));
+      setSel(Math.max(0, selIdx - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      run(sel);
+      run(selIdx);
     }
   };
 
@@ -181,7 +193,7 @@ export function NotebookSwitcher({
             value={creating ? name : query}
             spellCheck={false}
             placeholder={creating ? "notebook name…" : "switch or open a notebook…"}
-            onChange={(e) => (creating ? setName(e.target.value) : setQuery(e.target.value))}
+            onChange={(e) => (creating ? setName(e.target.value) : onQueryChange(e.target.value))}
             onKeyDown={onKeyDown}
           />
           <button
@@ -233,9 +245,9 @@ export function NotebookSwitcher({
             {filtered.map((nb, i) => (
               <div
                 key={nb.path}
-                className={"fnd-row" + (i === sel ? " is-sel" : "")}
-                onMouseEnter={(e) => i !== sel && hoverSel(i, e)}
-                onMouseMove={(e) => i !== sel && hoverSel(i, e)}
+                className={"fnd-row" + (i === selIdx ? " is-sel" : "")}
+                onMouseEnter={(e) => i !== selIdx && hoverSel(i, e)}
+                onMouseMove={(e) => i !== selIdx && hoverSel(i, e)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => run(i)}
               >
@@ -247,9 +259,9 @@ export function NotebookSwitcher({
               </div>
             ))}
             <div
-              className={"fnd-row nb-open" + (sel === newIndex ? " is-sel" : "")}
-              onMouseEnter={(e) => sel !== newIndex && hoverSel(newIndex, e)}
-              onMouseMove={(e) => sel !== newIndex && hoverSel(newIndex, e)}
+              className={"fnd-row nb-open" + (selIdx === newIndex ? " is-sel" : "")}
+              onMouseEnter={(e) => selIdx !== newIndex && hoverSel(newIndex, e)}
+              onMouseMove={(e) => selIdx !== newIndex && hoverSel(newIndex, e)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(newIndex)}
             >
@@ -257,9 +269,9 @@ export function NotebookSwitcher({
               <span className="fnd-name">New notebook…</span>
             </div>
             <div
-              className={"fnd-row nb-open" + (sel === openIndex ? " is-sel" : "")}
-              onMouseEnter={(e) => sel !== openIndex && hoverSel(openIndex, e)}
-              onMouseMove={(e) => sel !== openIndex && hoverSel(openIndex, e)}
+              className={"fnd-row nb-open" + (selIdx === openIndex ? " is-sel" : "")}
+              onMouseEnter={(e) => selIdx !== openIndex && hoverSel(openIndex, e)}
+              onMouseMove={(e) => selIdx !== openIndex && hoverSel(openIndex, e)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(openIndex)}
             >
