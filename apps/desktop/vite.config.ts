@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import pkg from "./package.json";
+import pkg from "./package.json" with { type: "json" };
 
 // @tauri-apps/cli sets TAURI_DEV_HOST when developing over the network.
 const host = process.env.TAURI_DEV_HOST;
@@ -16,36 +16,38 @@ export default defineConfig({
   base: "./",
   build: {
     chunkSizeWarningLimit: 1200,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         // Split the heavy editor + react vendors so they cache independently
         // (mainly helps the landing demo, which loads over the network).
-        manualChunks(id) {
-          // Vite's preload helper is imported by every chunk that has a
-          // dynamic import(). Left to rollup it can get hoisted INTO the lazy
-          // editor chunk, which the entry then imports statically — silently
-          // re-eagering the whole editor at first paint (the exact invariant
-          // this config protects). Pin it to its own tiny chunk.
-          if (id.includes("vite/preload-helper")) return "preload";
-          // KaTeX is statically imported by the math extension, so it can't be
-          // fully lazy — but it gets its own cache-isolated chunk that loads
-          // WITH the editor chunk, still off the first paint.
-          if (id.includes("/katex/")) return "katex";
-          // Per-language highlight.js grammars are loaded on demand by
-          // code-block.ts when a fenced block names them — each must stay its
-          // own lazy chunk, NOT join the editor chunk (the successor of the
-          // CM-era codeLanguages contract).
-          if (id.includes("highlight.js/lib/languages/")) return undefined;
-          if (
-            id.includes("@tiptap") ||
-            id.includes("prosemirror-") ||
-            id.includes("/lowlight/") ||
-            id.includes("highlight.js/lib/core") ||
-            id.includes("/marked/")
-          )
-            return "editor";
-          if (id.includes("/react-dom/") || id.includes("/react/")) return "react";
-          return undefined;
+        // Rolldown's native chunking API — groups are matched in ORDER, and a
+        // group pulls its matched modules' static dependencies in with them
+        // (includeDependenciesRecursively), so the order below is load-bearing:
+        // React must be claimed BEFORE the editor group, or @tiptap/react's
+        // dependency on react drags React into the editor chunk and the entry
+        // then imports that chunk statically — the whole editor eager at first
+        // paint, the exact invariant scripts/check-editor-lazy.mjs pins. (The
+        // old function-form manualChunks silently did just that under Rolldown.)
+        advancedChunks: {
+          groups: [
+            // Vite's preload helper is imported by every chunk that has a
+            // dynamic import(); left alone it can be hoisted INTO the lazy
+            // editor chunk, re-eagering it. Pin it to its own tiny chunk.
+            { name: "preload", test: /vite\/preload-helper/ },
+            { name: "react", test: /node_modules\/(react|react-dom|scheduler)\// },
+            // KaTeX is statically imported by the math extension, so it can't
+            // be fully lazy — but it gets its own cache-isolated chunk that
+            // loads WITH the editor chunk, still off the first paint.
+            { name: "katex", test: /node_modules\/katex\// },
+            // Per-language highlight.js grammars are dynamic imports from
+            // code-block.ts — no group claims them, so each stays its own lazy
+            // chunk (the successor of the CM-era codeLanguages contract); only
+            // the core joins the editor chunk.
+            {
+              name: "editor",
+              test: /node_modules\/(@tiptap\/|prosemirror-|lowlight\/|highlight\.js\/lib\/core|marked\/)/,
+            },
+          ],
         },
       },
     },

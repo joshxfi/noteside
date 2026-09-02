@@ -6,7 +6,8 @@
     "lib": ["ES2023"],
     "noEmit": false,
     "emitDeclarationOnly": true,
-    "outDir": "./node_modules/.tmp"
+    "outDir": "./node_modules/.tmp",
+    "types": ["node"]
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "package.json"]
 }

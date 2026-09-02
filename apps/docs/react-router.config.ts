@@ -9,9 +9,7 @@ export default {
   // Emit to dist/ so Turborepo's `dist/**` output glob caches it, matching the
   // other apps. SPA client build lands in dist/client.
   buildDirectory: "dist",
-  future: {
-    v8_middleware: true,
-  },
+  // (React Router 8 lifted every v8 future flag — middleware is the default.)
   async prerender({ getStaticPaths }) {
     const paths: string[] = [];
     const excluded: string[] = [];

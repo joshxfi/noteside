@@ -11,24 +11,17 @@ import {
   type SharedProps,
 } from "fumadocs-ui/components/dialog/search";
 import { useDocsSearch } from "fumadocs-core/search/client";
-import { oramaStaticClient } from "fumadocs-core/search/client/orama-static";
-import { create } from "@orama/orama";
+import { staticClient } from "fumadocs-core/search/client/orama-static";
 import { useI18n } from "fumadocs-ui/contexts/i18n";
 
-function initOrama() {
-  return create({
-    schema: { _: "string" },
-    language: "english",
-  });
-}
-
+// Static search: the client downloads the index the `api/search` route exports
+// at build time (routes/search.ts → server.staticGET()) and searches it in the
+// browser. fumadocs-core ≥16.15 runs on its own engine (ZBSearch), so there is
+// no Orama instance to hand it any more.
 export default function DefaultSearchDialog(props: SharedProps) {
   const { locale } = useI18n();
   const { search, setSearch, query } = useDocsSearch({
-    client: oramaStaticClient({
-      initOrama,
-      locale,
-    }),
+    client: staticClient({ locale }),
   });
 
   return (
