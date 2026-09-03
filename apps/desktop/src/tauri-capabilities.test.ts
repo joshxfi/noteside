@@ -45,3 +45,20 @@ describe("tauri capabilities", () => {
     expect(conf.app.security.assetProtocol.scope).toEqual([]);
   });
 });
+
+// The sidebar's note drag-and-drop is HTML5 DnD inside the webview. Tauri's
+// own file drag-drop handler (dragDropEnabled, default ON) claims EVERY drag —
+// tauri-runtime-wry's handler returns `true` unconditionally — and on macOS
+// wry's WKWebView draggingEntered/draggingUpdated/performDragOperation
+// overrides then never forward to WebKit, so the page sees dragstart and
+// nothing else: no dragover, no drop, no ring, no dialog (the same on
+// Windows, which the Tauri docs do call out). The app never listens for
+// native file drops (no onDragDropEvent anywhere), so the handler is pure
+// cost; a future "drop an image into the editor" feature should use the
+// HTML5 drop event's dataTransfer.files, which WebKit delivers with this off.
+describe("tauri window", () => {
+  it("disables Tauri's native drag-drop interception (HTML5 DnD needs the webview to see drags)", () => {
+    const main = conf.app.windows.find((w) => w.label === "main");
+    expect(main?.dragDropEnabled).toBe(false);
+  });
+});
