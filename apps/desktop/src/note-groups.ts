@@ -1,18 +1,22 @@
 // Pure sidebar-grouping helpers — no React, no backend (node-testable).
 //
-// Folders render as FLAT COLLAPSIBLE GROUPS: root notes first (no header),
-// then one section per directory in lexicographic order. A nested dir like
-// "work/projects" is ONE group labeled with its full relative path, not a
-// tree. Empty folders are first-class: they render as a header plus a blank
-// drop-target row. The row model is exhaustive on purpose — both sidebar list
-// variants render rows as direct children in row order, which is what keeps
-// scrollRowIntoView's child-index mapping and the virtualizer's count exact.
+// Folders render as FLAT COLLAPSIBLE GROUPS, folders FIRST (the Obsidian /
+// file-explorer convention — a folder is a place you navigate to, so it sits
+// where the eye starts): one section per directory in lexicographic order,
+// then a hairline divider, then the loose root notes (no header). A nested
+// dir like "work/projects" is ONE group labeled with its full relative path,
+// not a tree. Empty folders are first-class: they render as a header plus a
+// blank drop-target row. The row model is exhaustive on purpose — both
+// sidebar list variants render rows as direct children in row order, which is
+// what keeps scrollRowIntoView's child-index mapping and the virtualizer's
+// count exact (the divider is a row for the same reason).
 import type { NoteMeta } from "./backend/types";
 
 export type SidebarRow =
   | { kind: "note"; note: NoteMeta; dir: string }
   | { kind: "folder"; dir: string; count: number; collapsed: boolean }
-  | { kind: "blank"; dir: string }; // an expanded empty group's drop target
+  | { kind: "blank"; dir: string } // an expanded empty group's drop target
+  | { kind: "divider" }; // the hairline between the last group and the root notes
 
 /** The directory a note path lives in ("" for a root note). */
 export function noteDir(path: string): string {
@@ -37,11 +41,12 @@ export function allDirs(notes: NoteMeta[], folders: string[]): string[] {
   return [...dirs].sort();
 }
 
-/** Flatten notes + folders into the sidebar's row model. `notes` must already
- *  be in display order (pinned desc, updated desc — the backend sort); the
- *  grouping is a stable partition of it, so pinned-first-then-updated holds
- *  within each group for free. A collapsed group keeps its header row and
- *  hides its members. */
+/** Flatten notes + folders into the sidebar's row model: every folder group
+ *  first, then (when both exist) a divider, then the root notes. `notes` must
+ *  already be in display order (pinned desc, updated desc — the backend
+ *  sort); the grouping is a stable partition of it, so pinned-first-then-
+ *  updated holds within each group for free. A collapsed group keeps its
+ *  header row and hides its members. */
 export function buildSidebarRows(
   notes: NoteMeta[],
   folders: string[],
@@ -55,8 +60,8 @@ export function buildSidebarRows(
     else byDir.set(dir, [n]);
   }
   const rows: SidebarRow[] = [];
-  for (const n of byDir.get("") ?? []) rows.push({ kind: "note", note: n, dir: "" });
-  for (const dir of allDirs(notes, folders)) {
+  const dirs = allDirs(notes, folders);
+  for (const dir of dirs) {
     const members = byDir.get(dir) ?? [];
     const isCollapsed = collapsed.has(dir);
     rows.push({ kind: "folder", dir, count: members.length, collapsed: isCollapsed });
@@ -64,6 +69,9 @@ export function buildSidebarRows(
     if (members.length === 0) rows.push({ kind: "blank", dir });
     for (const n of members) rows.push({ kind: "note", note: n, dir });
   }
+  const root = byDir.get("") ?? [];
+  if (dirs.length > 0 && root.length > 0) rows.push({ kind: "divider" });
+  for (const n of root) rows.push({ kind: "note", note: n, dir: "" });
   return rows;
 }
 

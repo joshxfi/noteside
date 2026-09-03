@@ -19,7 +19,8 @@ test.describe("pin note", () => {
     await boot(page);
 
     // Open the LAST root note so pinning has somewhere visible to move it from
-    // (root notes render before the folder groups, so its section starts at row 0).
+    // (the root notes render after the folder groups; the pin floats it to the
+    // top of THAT section).
     const rows = page.locator(".av-item");
     const rootRows = page.locator('.av-item[data-dir=""]');
     const before = await rows.count();
@@ -33,8 +34,8 @@ test.describe("pin note", () => {
     await expect(page.locator(".av-toast")).toContainText("note pinned");
     await expect(page.locator(".av-item")).toHaveCount(before); // nothing added/removed
     // the pinned note is now first in its (root) section, and carries the marker
-    await expect(rows.first().locator(".av-item-titletext")).toHaveText(title);
-    await expect(rows.first().locator(".av-item-pin")).toHaveCount(1);
+    await expect(rootRows.first().locator(".av-item-titletext")).toHaveText(title);
+    await expect(rootRows.first().locator(".av-item-pin")).toHaveCount(1);
     await expect(page.locator(".av-item-pin")).toHaveCount(1); // only that one row
   });
 

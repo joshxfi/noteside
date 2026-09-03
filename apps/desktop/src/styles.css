@@ -323,6 +323,35 @@ body {
   letter-spacing: 0.04em;
   color: var(--ink-faint);
 }
+/* the subline as the open notebook's name — a quiet button that opens the
+   switcher (hover lifts it to ink so it reads as clickable) */
+.av-notebook {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin-left: -6px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.av-notebook:hover {
+  background: color-mix(in oklab, var(--paper-2), var(--ink) 5%);
+  color: var(--ink);
+}
+.av-notebook svg {
+  flex: none;
+}
+.av-notebook-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .av-list {
   flex: 1;
   overflow-y: auto;
@@ -448,47 +477,92 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px 5px;
-  margin-top: 4px;
-  border-radius: 7px;
+  gap: 5px;
+  padding: 7px 8px 7px 6px;
+  margin-top: 3px;
+  border-radius: 8px;
   font-family: var(--mono);
-  font-size: calc(10.5px * var(--ui-scale));
-  letter-spacing: 0.06em;
-  color: var(--ink-faint);
+  font-size: calc(12.5px * var(--ui-scale));
+  letter-spacing: -0.01em;
+  color: var(--ink-soft);
   cursor: pointer;
   user-select: none;
 }
 .av-grouphead:hover {
   background: color-mix(in oklab, var(--paper-2), var(--ink) 5%);
-  color: var(--ink-soft);
+  color: var(--ink);
 }
 .av-grouphead .av-chev {
   flex: none;
+  color: var(--ink-faint);
   transition: transform 0.12s ease;
 }
 .av-grouphead.is-open .av-chev {
   transform: rotate(90deg);
 }
+/* the folder glyph carries the accent — folders are the sidebar's landmarks */
+.av-group-icon {
+  flex: none;
+  margin-right: 1px;
+  color: var(--accent);
+}
 .av-group-name {
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  font-weight: 500;
 }
 .av-group-count {
   flex: none;
-  font-size: calc(9.5px * var(--ui-scale));
+  margin-left: auto;
+  min-width: 1.7em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--paper-2), var(--ink) 6%);
+  font-size: calc(10px * var(--ui-scale));
+  text-align: center;
   color: var(--ink-faint);
-  opacity: 0.8;
+}
+/* the OPEN note's folder — "where am I", even when the note row is off screen */
+.av-grouphead.is-here .av-group-name {
+  color: var(--accent);
 }
 .av-grouphead:hover .av-item-actions,
 .av-grouphead:focus-within .av-item-actions {
   opacity: 1;
   pointer-events: auto;
 }
+/* the kebab replaces the count on hover (both sit at the right edge) */
+.av-grouphead:hover .av-group-count,
+.av-grouphead:focus-within .av-group-count {
+  display: none;
+}
+.av-grouphead .av-item-actions {
+  margin-left: auto;
+}
+/* Members indent under their header with a guide line — the note title starts
+   where the folder name does (chevron 12 + icon 14 + gaps), so the hierarchy
+   reads as a tree without being one. The line rides each row's ::before and
+   bridges the 2px row gap; the last member of a group stops at its own edge. */
+.av-item.is-nested {
+  padding-left: 32px;
+}
+.av-item.is-nested::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: -2px;
+  width: 1px;
+  background: var(--rule-soft);
+}
+.av-item.is-nested:not(:has(+ .av-item.is-nested))::before {
+  bottom: 0;
+}
 /* the expanded EMPTY group's body — also the drop target for the drag below */
 .av-group-blank {
-  margin: 0 2px;
+  margin: 0 2px 0 24px;
   padding: 8px 10px;
   border: 1px dashed color-mix(in oklab, var(--ink-faint), transparent 55%);
   border-radius: 8px;
@@ -496,6 +570,13 @@ body {
   font-size: calc(10.5px * var(--ui-scale));
   color: var(--ink-faint);
   opacity: 0.75;
+}
+/* the hairline between the last group and the loose root notes */
+.av-divider {
+  flex: none;
+  height: 1px;
+  margin: 8px 6px 6px;
+  background: var(--rule-soft);
 }
 /* drag-and-drop affordances: the nav tints while a note row is dragged over it
    ("anywhere not in a group = root"), the resolved group header gets a ring */
@@ -507,6 +588,40 @@ body {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   color: var(--ink);
   background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);
+}
+/* A NOTE row as the target groups the two notes into a new folder (the drop
+   prompts for its name) — the ring carries that label so the gesture reads
+   before it's tried. A pill, so it covers the end of a long title cleanly. */
+.av-item.is-drop {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);
+}
+/* the pill overlays the (hidden) action cluster and then some — reserve the
+   rest so the title's ellipsis lands before it instead of under it */
+.av-item.is-drop .av-item-main {
+  margin-right: calc(48px * var(--ui-scale));
+}
+.av-item.is-drop::after {
+  content: "new folder";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--paper), var(--accent) 14%);
+  font-family: var(--mono);
+  font-size: calc(10px * var(--ui-scale));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  pointer-events: none;
+}
+/* the hover-revealed row actions are noise under a drag (and would sit where
+   the group label lands) */
+.av-list.is-dragging .av-item-actions {
+  opacity: 0;
+  pointer-events: none;
 }
 /* A note dragged OUT of a folder gets an explicit place to land at the root —
    a pseudo-element at the list's end, so the row model's child-index mapping

@@ -33,6 +33,8 @@ export const APP_COMMANDS = [
   "renameFolder",
   "deleteFolder",
   "toggleFolder",
+  "collapseAll",
+  "expandAll",
   "palette",
   "commands",
   "reopen",
@@ -265,6 +267,25 @@ export const COMMANDS: Command[] = [
     command: "toggleFolder",
     needsNote: true,
     needsFolder: true,
+  },
+  // Whole-sidebar folds (folders sit above the loose notes, so with many of
+  // them open the root notes are a long scroll away — fold everything, then
+  // open the one you want). Pointer path: the folder header's menu.
+  {
+    id: "collapseAll",
+    title: "Collapse all folders",
+    group: "Note",
+    ex: ["foldall"],
+    command: "collapseAll",
+    paletteHint: ":foldall",
+  },
+  {
+    id: "expandAll",
+    title: "Expand all folders",
+    group: "Note",
+    ex: ["unfoldall", "expandall"],
+    command: "expandAll",
+    paletteHint: ":unfoldall",
   },
   {
     id: "renameFolder",

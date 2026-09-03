@@ -13,8 +13,11 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ChevronDown,
   ChevronRight,
   Ellipsis,
+  Folder,
+  FolderOpen,
   FolderPlus,
   Library,
   PanelLeft,
@@ -233,6 +236,7 @@ const NoteRow = memo(function NoteRow({
     <div
       ref={measureRef}
       data-index={index}
+      data-id={note.id}
       data-dir={noteDir(note.path)}
       role="button"
       tabIndex={0}
@@ -241,7 +245,9 @@ const NoteRow = memo(function NoteRow({
         e.dataTransfer.setData(DRAG_TYPE, note.id);
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={"av-item" + (active ? " is-active" : "")}
+      className={
+        "av-item" + (active ? " is-active" : "") + (noteDir(note.path) ? " is-nested" : "")
+      }
       aria-current={active ? "page" : undefined}
       onClick={() => onPick(note.id)}
       onKeyDown={(e) => {
@@ -319,15 +325,18 @@ const NoteRow = memo(function NoteRow({
   );
 });
 
-// A folder group header. The chevron rotation and the hover-revealed kebab are
-// CSS-driven (no per-row state — the pointer-affordance perf rule); the whole
-// row toggles collapse, Enter/Space mirror the click, right-click (or the
-// kebab) opens the folder menu. `data-dir` doubles as the drop target for the
-// note drag-and-drop below.
+// A folder group header: chevron · folder icon (open/closed) · name · count.
+// The chevron rotation and the hover-revealed kebab are CSS-driven (no per-row
+// state — the pointer-affordance perf rule); the whole row toggles collapse,
+// Enter/Space mirror the click, right-click (or the kebab) opens the folder
+// menu. `here` marks the OPEN note's folder (the name takes the accent — a
+// "where am I" cue that survives scrolling the note itself out of view).
+// `data-dir` doubles as the drop target for the note drag-and-drop below.
 const FolderRow = memo(function FolderRow({
   dir,
   count,
   collapsed,
+  here,
   onToggle,
   onContext,
   top,
@@ -337,6 +346,7 @@ const FolderRow = memo(function FolderRow({
   dir: string;
   count: number;
   collapsed: boolean;
+  here: boolean;
   onToggle: (dir: string) => void;
   onContext: (dir: string, x: number, y: number) => void;
   top?: number;
@@ -351,7 +361,7 @@ const FolderRow = memo(function FolderRow({
       role="button"
       tabIndex={0}
       aria-expanded={!collapsed}
-      className={"av-grouphead" + (collapsed ? "" : " is-open")}
+      className={"av-grouphead" + (collapsed ? "" : " is-open") + (here ? " is-here" : "")}
       onClick={() => onToggle(dir)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -376,6 +386,11 @@ const FolderRow = memo(function FolderRow({
       }
     >
       <ChevronRight className="av-chev" size={12} aria-hidden="true" />
+      {collapsed ? (
+        <Folder className="av-group-icon" size={14} aria-hidden="true" />
+      ) : (
+        <FolderOpen className="av-group-icon" size={14} aria-hidden="true" />
+      )}
       <span className="av-group-name">{dir}</span>
       <span className="av-group-count">{count}</span>
       <span className="av-item-actions">
@@ -397,6 +412,40 @@ const FolderRow = memo(function FolderRow({
     </div>
   );
 });
+
+// The hairline between the last folder group and the loose root notes. A row
+// (not a CSS margin) so the row model stays exhaustive; data-dir="" makes it a
+// root drop target like the empty space around it.
+function DividerRow({
+  top,
+  index,
+  measureRef,
+}: {
+  top?: number;
+  index?: number;
+  measureRef?: (el: HTMLElement | null) => void;
+}) {
+  return (
+    <div
+      ref={measureRef}
+      data-index={index}
+      data-dir=""
+      role="separator"
+      className="av-divider"
+      style={
+        top === undefined
+          ? undefined
+          : {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${top}px)`,
+            }
+      }
+    />
+  );
+}
 
 // An expanded EMPTY group's body — one muted row that keeps the group visibly
 // a place (and, via data-dir, a drop target for the drag below).
@@ -451,6 +500,7 @@ interface RowHandlers {
 // Row keys must be unique across kinds (a folder named "x.md" can't collide
 // with a note, but a stable prefix keeps the invariant obvious).
 function rowKey(r: SidebarRow): string {
+  if (r.kind === "divider") return "divider";
   return r.kind === "note" ? r.note.id : (r.kind === "folder" ? "d:" : "b:") + r.dir;
 }
 
@@ -466,6 +516,7 @@ function renderRow(
         dir={r.dir}
         count={r.count}
         collapsed={r.collapsed}
+        here={!!h.activeId && noteDir(h.activeId) === r.dir}
         onToggle={h.onToggleFolder}
         onContext={h.onFolderContext}
         top={v?.top}
@@ -473,6 +524,9 @@ function renderRow(
         measureRef={v?.measureRef}
       />
     );
+  }
+  if (r.kind === "divider") {
+    return <DividerRow key="divider" top={v?.top} index={v?.index} measureRef={v?.measureRef} />;
   }
   if (r.kind === "blank") {
     return (
@@ -502,36 +556,69 @@ function renderRow(
   );
 }
 
-// Delegated HTML5 drag-and-drop over the note list. Every row carries data-dir,
-// so ONE handler set on the nav resolves any drop target: a folder header, its
-// blank row, or a member note row targets that folder; anything else (a root
-// note, empty space, the root drop zone) targets the notebook root. Zero React
-// state and zero extra DOM — the affordances are classes toggled imperatively
-// (the root zone is a CSS pseudo-element), which protects both the row
-// memoization and scrollRowIntoView's child-index mapping.
+// Delegated HTML5 drag-and-drop over the note list. Every row carries data-dir
+// (note rows also data-id), so ONE handler set on the nav resolves any drop
+// target. Two gestures: dropping on a FOLDER (its header, its blank row, or
+// the root zone / empty space for the notebook root) MOVES the note there;
+// dropping on another NOTE GROUPS the two — a new folder beside the target
+// note, both notes moved in. Neither runs on the drop itself: the hook only
+// reports what was asked (`NoteDrop`) and App confirms — a modal with Enter as
+// the go-ahead for a move, a name prompt for a group — because a slip while
+// clicking a row must never silently relocate a file. Zero React state and
+// zero extra DOM — the affordances are classes toggled imperatively (the root
+// zone is a CSS pseudo-element), which protects both the row memoization and
+// scrollRowIntoView's child-index mapping.
 const DRAG_TYPE = "application/x-noteside-note";
+
+/** What a completed sidebar drag asks for (App confirms before acting). */
+export type NoteDrop =
+  | { kind: "move"; id: string; dir: string }
+  | { kind: "group"; id: string; targetId: string };
 
 type ListDnd = Pick<
   React.DOMAttributes<HTMLElement>,
   "onDragStart" | "onDragOver" | "onDrop" | "onDragLeave" | "onDragEnd"
 >;
 
-function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
+/** The dragged note while a drag from OUR list is in flight. */
+interface DragSource {
+  id: string;
+  dir: string;
+}
+
+/** A resolved drop target, or null for "nothing to do" (no-drop cursor). */
+type DropHit =
+  | { kind: "move"; dir: string; el: Element | null }
+  | { kind: "group"; targetId: string; el: Element };
+
+function resolveDrop(nav: Element, target: Element, from: DragSource): DropHit | null {
+  // A note row groups; the row's own kebab/pin buttons resolve to their row.
+  const row = target.closest?.(".av-item");
+  if (row) {
+    const targetId = row.getAttribute("data-id") ?? "";
+    return targetId && targetId !== from.id ? { kind: "group", targetId, el: row } : null;
+  }
+  // A folder header / blank row moves into that folder; anything else = root.
+  const dir = target.closest?.("[data-dir]")?.getAttribute("data-dir") ?? "";
+  if (dir === from.dir) return null; // its own folder (or the root, for a root note)
+  // Ring the group's header (querySelector finds it before the blank row in
+  // DOM order); a root target rings the root zone instead (nav class).
+  const el = dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
+  return { kind: "move", dir, el };
+}
+
+function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
   const marked = useRef<Element | null>(null);
-  // The dragged note's folder while a drag from OUR list is in flight (null
-  // otherwise) — hovering that same folder reads as "nothing to do", not "move".
-  const fromDir = useRef<string | null>(null);
-  const onMoveRef = useRef(onMove);
+  const from = useRef<DragSource | null>(null);
+  const onDropRef = useRef(onDrop);
   useEffect(() => {
-    onMoveRef.current = onMove;
-  }, [onMove]);
+    onDropRef.current = onDrop;
+  }, [onDrop]);
   return useMemo<ListDnd>(() => {
-    const targetDir = (e: React.DragEvent<HTMLElement>) =>
-      (e.target as Element).closest?.("[data-dir]")?.getAttribute("data-dir") ?? "";
     const clear = (nav: Element | null) => {
       marked.current?.classList.remove("is-drop");
       marked.current = null;
-      fromDir.current = null;
+      from.current = null;
       nav?.classList.remove("is-dragging", "is-drag-nested", "is-drop-root");
     };
     return {
@@ -540,40 +627,43 @@ function useListDnd(onMove: (id: string, dir: string) => void): ListDnd {
         const row = (e.target as Element).closest?.(".av-item");
         if (!row) return;
         const dir = row.getAttribute("data-dir") ?? "";
-        fromDir.current = dir;
+        from.current = { id: row.getAttribute("data-id") ?? "", dir };
         e.currentTarget.classList.add("is-dragging");
         // A note leaving a folder needs somewhere to land at the root even when
         // no root note is on screen — reveal the root drop zone (::after).
         if (dir) e.currentTarget.classList.add("is-drag-nested");
       },
       onDragOver(e) {
-        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        if (!e.dataTransfer.types.includes(DRAG_TYPE) || !from.current) return;
         e.preventDefault();
         const nav = e.currentTarget;
         nav.classList.add("is-dragging");
-        const dir = targetDir(e);
-        const same = fromDir.current !== null && dir === fromDir.current;
+        const hit = resolveDrop(nav, e.target as Element, from.current);
         // "none" shows the no-drop cursor and suppresses the drop event.
-        e.dataTransfer.dropEffect = same ? "none" : "move";
-        // Highlight the target group's header (querySelector finds the header
-        // before the blank row in DOM order); a root target rings the root zone.
-        const head =
-          !same && dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
-        if (head !== marked.current) {
+        e.dataTransfer.dropEffect = hit ? "move" : "none";
+        const el = hit?.el ?? null;
+        if (el !== marked.current) {
           marked.current?.classList.remove("is-drop");
-          head?.classList.add("is-drop");
-          marked.current = head;
+          el?.classList.add("is-drop");
+          marked.current = el;
         }
-        nav.classList.toggle("is-drop-root", !same && dir === "");
+        nav.classList.toggle("is-drop-root", hit?.kind === "move" && hit.dir === "");
       },
       onDrop(e) {
         const id = e.dataTransfer.getData(DRAG_TYPE);
         if (!id) return;
         e.preventDefault();
-        const dir = targetDir(e);
-        clear(e.currentTarget);
-        if (noteDir(id) === dir) return; // dropped back where it came from
-        onMoveRef.current(id, dir);
+        const nav = e.currentTarget;
+        // Resolve against the payload, not the dragstart ref — the ref is what
+        // dragover used, but the payload is authoritative for the id.
+        const hit = resolveDrop(nav, e.target as Element, { id, dir: noteDir(id) });
+        clear(nav);
+        if (!hit) return; // dropped back where it came from / onto itself
+        onDropRef.current(
+          hit.kind === "group"
+            ? { kind: "group", id, targetId: hit.targetId }
+            : { kind: "move", id, dir: hit.dir },
+        );
       },
       onDragLeave(e) {
         // Only when actually leaving the nav, not when moving between children.
@@ -647,7 +737,10 @@ function VirtualNoteList({
   const virt = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => (rows[i].kind === "note" ? 52 : 30),
+    estimateSize: (i) => {
+      const k = rows[i].kind;
+      return k === "note" ? 52 : k === "divider" ? 15 : 30;
+    },
     // Measurements cache by key, so a collapse (which shifts indices) doesn't
     // re-measure every surviving row against the wrong cached height.
     getItemKey: (i) => rowKey(rows[i]),
@@ -690,10 +783,12 @@ const Sidebar = memo(function Sidebar({
   onRename,
   onToggleFolder,
   onFolderContext,
-  onMoveNote,
+  onDropNote,
   onNew,
   onNewFolder,
   onSettings,
+  notebookName,
+  onSwitchNotebook,
   updateAvailable,
   width,
   onResizeEnd,
@@ -701,14 +796,17 @@ const Sidebar = memo(function Sidebar({
   open: boolean;
   rows: SidebarRow[];
   activeId: string | null;
+  /** The open notebook's folder name (null before one loads) — the brand's subline. */
+  notebookName: string | null;
+  onSwitchNotebook: () => void;
   onPick: (id: string) => void;
   onContext: (id: string, title: string, pinned: boolean, x: number, y: number) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onRename: (id: string, title: string) => void;
   onToggleFolder: (dir: string) => void;
   onFolderContext: (dir: string, x: number, y: number) => void;
-  /** Drop target for the row drag: move `id` into `dir` ("" = root). */
-  onMoveNote: (id: string, dir: string) => void;
+  /** A completed row drag (move onto a folder / group onto a note); App confirms. */
+  onDropNote: (drop: NoteDrop) => void;
   onNew: () => void;
   onNewFolder: () => void;
   onSettings: () => void;
@@ -725,7 +823,7 @@ const Sidebar = memo(function Sidebar({
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(t);
   }, []);
-  const dnd = useListDnd(onMoveNote);
+  const dnd = useListDnd(onDropNote);
   const handlers: RowHandlers = {
     activeId,
     onPick,
@@ -781,7 +879,23 @@ const Sidebar = memo(function Sidebar({
             Noteside
             <span className="av-brandcur" />
           </div>
-          <div className="av-brandsub">fast, minimalist notes</div>
+          {/* The subline names the OPEN notebook (a multi-notebook user should
+              never wonder which one they're in) and opens the switcher — the
+              pointer twin of Mod-o / :notebook beside the titlebar button. */}
+          {notebookName ? (
+            <button
+              type="button"
+              className="av-brandsub av-notebook"
+              title="switch notebook (⌘O)"
+              onClick={onSwitchNotebook}
+            >
+              <FolderOpen size={11} aria-hidden="true" />
+              <span className="av-notebook-name">{notebookName}</span>
+              <ChevronDown size={11} aria-hidden="true" />
+            </button>
+          ) : (
+            <div className="av-brandsub">fast, minimalist notes</div>
+          )}
         </div>
         {rows.length <= VIRTUAL_THRESHOLD ? (
           <PlainNoteList rows={rows} handlers={handlers} dnd={dnd} />
@@ -1003,6 +1117,18 @@ export function App() {
     },
     [setAndPersistCollapsed],
   );
+  // Whole-sidebar folds (:foldall / :unfoldall, the folder menu). Stable
+  // identities (the memoized header rows receive the menu opener), reading
+  // the folder list through a latest-ref written below once `dirs` exists.
+  const dirsRef = useRef<string[]>([]);
+  const collapseAll = useCallback(() => {
+    setAndPersistCollapsed((next) => {
+      for (const d of dirsRef.current) next.add(d);
+    });
+  }, [setAndPersistCollapsed]);
+  const expandAll = useCallback(() => {
+    setAndPersistCollapsed((next) => next.clear());
+  }, [setAndPersistCollapsed]);
   // Restore this notebook's collapse set when it opens/switches.
   useEffect(() => {
     let stored: unknown = [];
@@ -1139,6 +1265,9 @@ export function App() {
     [notes, folders, collapsed],
   );
   const dirs = useMemo(() => allDirs(notes, folders), [notes, folders]);
+  useEffect(() => {
+    dirsRef.current = dirs;
+  }, [dirs]);
 
   // Opening a note inside a collapsed group expands it — the active note must
   // always be visible (it also keeps Mod-j/k's visual-order stepping defined).
@@ -1443,6 +1572,7 @@ export function App() {
     session.openConfig(serializeConfig(cfg));
   };
   const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const openNotebookSwitcher = useCallback(() => setNotebookSwitcherOpen(true), []);
   const closeSettings = () => {
     setSettingsOpen(false);
     setRefocus((r) => r + 1);
@@ -1612,11 +1742,10 @@ export function App() {
   // the buffer's id in place — a move never rewrites body bytes and editorKey
   // excludes activeId, so there is NO remount and the cursor survives; autosave
   // pauses across the IPC so a keystroke can't resurrect the old path.
-  const moveNote = async (id: string, dir: string) => {
-    if (noteDir(id) === dir) {
-      flash(`already in ${dir || "the notebook root"}`);
-      return;
-    }
+  // Resolves to the folder the note landed in (the disk's spelling), or null
+  // on failure (already toasted). Toasts nothing on success — the callers say
+  // what happened (one move, or a group of them).
+  const moveNoteTo = async (id: string, dir: string): Promise<string | null> => {
     const gen = notebookLoad.current;
     const held = heldNoteId() === id;
     try {
@@ -1625,7 +1754,7 @@ export function App() {
         await session.cancelAutosave();
       }
       const meta = await backend.moveNote(id, dir);
-      if (notebookChangedSince(gen)) return;
+      if (notebookChangedSince(gen)) return null;
       // Always the RETURNED meta — a destination collision may have -N'd the
       // stem, and the folder comes back spelled the way the disk has it.
       const landed = noteDir(meta.path);
@@ -1636,22 +1765,60 @@ export function App() {
       }
       session.migrateId(id, meta);
       if (held) session.resumeAutosave();
-      flash(`moved to ${landed || "notebook root"}`);
+      return landed;
     } catch (e) {
       if (held && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`move failed: ${e}`, "error");
+      return null;
     }
   };
-  const moveNoteRef = useRef(moveNote);
-  useEffect(() => {
-    moveNoteRef.current = moveNote;
-  });
-  // The sidebar's drag-and-drop drop handler — ONE stable identity (the memo'd
-  // Sidebar), reading fresh state through the latest-ref.
-  const onMoveNote = useCallback(
-    (id: string, dir: string) => void moveNoteRef.current(id, dir),
-    [],
-  );
+  const moveNote = async (id: string, dir: string) => {
+    if (noteDir(id) === dir) {
+      flash(`already in ${dir || "the notebook root"}`);
+      return;
+    }
+    const landed = await moveNoteTo(id, dir);
+    if (landed !== null) flash(`moved to ${landed || "notebook root"}`);
+  };
+
+  // Drop-on-note: a NEW folder (`folder` is the full rel, parent included)
+  // and every listed note moved into it — sequentially, since one of them may
+  // be the open buffer (moveNoteTo pauses its autosave across the IPC). The
+  // folder is created first so a failed move still leaves the place the user
+  // named; createFolder is idempotent, so naming an EXISTING folder just
+  // gathers the notes there.
+  const groupNotes = async (ids: string[], folder: string) => {
+    const rel = await createFolder(folder);
+    if (rel === null) return;
+    let moved = 0;
+    for (const id of ids) if ((await moveNoteTo(id, rel)) !== null) moved++;
+    if (moved === ids.length) flash(`${moved} notes moved to ${rel}`);
+    else if (moved) flash(`${moved} of ${ids.length} notes moved to ${rel}`, "error");
+  };
+
+  // A completed sidebar drag — ONE stable identity (the memo'd Sidebar). The
+  // drop itself only ASKS: a move confirms in a modal (Enter is the
+  // go-ahead), a group prompts for the new folder's name. Titles come from
+  // the live list, so the dialogs can name both notes.
+  const [pendingDrop, setPendingDrop] = useState<
+    | { kind: "move"; id: string; title: string; dir: string }
+    | { kind: "group"; id: string; title: string; targetId: string; targetTitle: string }
+    | null
+  >(null);
+  const onDropNote = useCallback((drop: NoteDrop) => {
+    const titleOf = (id: string) => notesRef.current.find((n) => n.id === id)?.title ?? id;
+    if (drop.kind === "move") {
+      setPendingDrop({ kind: "move", id: drop.id, title: titleOf(drop.id), dir: drop.dir });
+    } else {
+      setPendingDrop({
+        kind: "group",
+        id: drop.id,
+        title: titleOf(drop.id),
+        targetId: drop.targetId,
+        targetTitle: titleOf(drop.targetId),
+      });
+    }
+  }, []);
 
   const requestMove = useCallback((id: string, title: string) => setPendingMove({ id, title }), []);
   const moveActive = () => {
@@ -1813,9 +1980,11 @@ export function App() {
         onNewSubfolder: (d) => setPendingNewFolder({ parent: d }),
         onRename: (d) => setPendingFolderRename({ dir: d }),
         onDelete: requestFolderDelete,
+        onCollapseAll: collapseAll,
+        onExpandAll: expandAll,
       });
     },
-    [requestFolderDelete],
+    [requestFolderDelete, collapseAll, expandAll],
   );
   const closeFolderMenu = useCallback(() => {
     setFolderMenu(null);
@@ -1909,6 +2078,8 @@ export function App() {
     else if (c === "renameFolder") withActiveFolder((dir) => setPendingFolderRename({ dir }));
     else if (c === "deleteFolder") withActiveFolder(requestFolderDelete);
     else if (c === "toggleFolder") withActiveFolder(toggleFolder);
+    else if (c === "collapseAll") collapseAll();
+    else if (c === "expandAll") expandAll();
     else if (c === "reveal") revealActive();
     else if (c === "reopen") session.reopenLast();
     else if (c === "nextNote") stepNote(1);
@@ -1950,6 +2121,7 @@ export function App() {
       pendingDelete ||
       pendingRename ||
       pendingMove ||
+      pendingDrop ||
       pendingNewFolder ||
       pendingFolderRename ||
       pendingFolderDelete ||
@@ -2153,7 +2325,9 @@ export function App() {
               onRename={requestRename}
               onToggleFolder={toggleFolder}
               onFolderContext={openFolderMenu}
-              onMoveNote={onMoveNote}
+              onDropNote={onDropNote}
+              notebookName={notebookPath ? (notebookPath.split(/[\\/]/).pop() ?? null) : null}
+              onSwitchNotebook={openNotebookSwitcher}
               onNew={onNewNote}
               onNewFolder={onNewFolder}
               onSettings={openSettings}
@@ -2384,6 +2558,51 @@ export function App() {
             }}
           />
         )}
+        {pendingDrop?.kind === "move" && (
+          <ConfirmDialog
+            title={`Move “${pendingDrop.title}” to ${pendingDrop.dir || "the notebook root"}?`}
+            confirmLabel="Move"
+            primary
+            onConfirm={() => {
+              const { id, dir } = pendingDrop;
+              setPendingDrop(null);
+              setRefocus((r) => r + 1);
+              void moveNote(id, dir);
+            }}
+            onCancel={() => {
+              setPendingDrop(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
+        {pendingDrop?.kind === "group" && (
+          <PromptDialog
+            title="New folder"
+            message={`“${pendingDrop.title}” and “${pendingDrop.targetTitle}” move into it${
+              noteDir(pendingDrop.targetId) ? `, inside ${noteDir(pendingDrop.targetId)}` : ""
+            }.`}
+            initialValue=""
+            placeholder="Folder name"
+            confirmLabel="Create & move"
+            onConfirm={(value) => {
+              const { id, targetId } = pendingDrop;
+              setPendingDrop(null);
+              setRefocus((r) => r + 1);
+              if (!value.split("/").some((seg) => seg.trim())) {
+                flash("folder name is empty", "error");
+                return;
+              }
+              // The new folder lives beside the TARGET note (iOS-style: the
+              // note you dropped onto "becomes" a folder in place).
+              const parent = noteDir(targetId);
+              void groupNotes([id, targetId], parent ? `${parent}/${value}` : value);
+            }}
+            onCancel={() => {
+              setPendingDrop(null);
+              setRefocus((r) => r + 1);
+            }}
+          />
+        )}
         {folderMenu && (
           <ContextMenu
             x={folderMenu.x}
@@ -2399,6 +2618,9 @@ export function App() {
                 label: "Rename folder…",
                 run: () => setPendingFolderRename({ dir: folderMenu.dir }),
               },
+              "sep",
+              { label: "Collapse all", run: collapseAll },
+              { label: "Expand all", run: expandAll },
               "sep",
               {
                 label: "Delete folder",

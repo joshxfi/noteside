@@ -24,6 +24,9 @@ export interface FolderMenuActions {
   onNewSubfolder: (dir: string) => void;
   onRename: (dir: string) => void;
   onDelete: (dir: string) => void;
+  /** Whole-sidebar folds (the pointer path to :foldall / :unfoldall). */
+  onCollapseAll: () => void;
+  onExpandAll: () => void;
 }
 
 interface MenuContext {
@@ -154,6 +157,17 @@ async function folderMenu(): Promise<import("@tauri-apps/api/menu").Menu> {
           id: "folder-rename",
           text: "Rename folder…",
           action: () => activeFolderContext?.actions.onRename(activeFolderContext.dir),
+        },
+        { item: "Separator" },
+        {
+          id: "folder-collapse-all",
+          text: "Collapse all",
+          action: () => activeFolderContext?.actions.onCollapseAll(),
+        },
+        {
+          id: "folder-expand-all",
+          text: "Expand all",
+          action: () => activeFolderContext?.actions.onExpandAll(),
         },
         { item: "Separator" },
         {

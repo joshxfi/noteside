@@ -10,6 +10,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   danger,
+  primary,
   onConfirm,
   onCancel,
 }: {
@@ -18,6 +19,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   /** Style the confirm button as destructive (red). */
   danger?: boolean;
+  /** Style the confirm button as the accent-filled default (a non-destructive go-ahead). */
+  primary?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -61,7 +64,7 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            className={"cfm-btn" + (danger ? " danger" : "")}
+            className={"cfm-btn" + (danger ? " danger" : primary ? " primary" : "")}
             onClick={onConfirm}
           >
             {confirmLabel}
