@@ -135,9 +135,19 @@ function useKeycast() {
 
 const FEATURES = [
   {
+    k: "write in blocks",
+    h: "A Notion-like editor, still just Markdown",
+    p: "Headings, tables, task lists, callouts, code with syntax highlighting, KaTeX math — real blocks you edit in place. Type Markdown shorthand and it becomes the block; press / for everything else. No source pane, no preview toggle: the file on disk is what you see.",
+  },
+  {
     k: "mouse & keyboard, first-class",
     h: "Point, click — or never leave home row",
-    p: "Everything clicks: the sidebar, the palettes, pins, renames, a right-click menu. And everything has a keystroke: full modal vim if you want it, or ⌘-shortcuts, a searchable command palette, and ⌘F find — rebind any chord right from the cheatsheet (⌘/). Your hands choose; the app keeps up.",
+    p: "Everything clicks: the sidebar, the palettes, pins, renames, a right-click menu. And everything has a keystroke: vim modes and motions if you want them, or ⌘-shortcuts, a searchable command palette, and ⌘F find — rebind any chord right from the cheatsheet (⌘/). Your hands choose; the app keeps up.",
+  },
+  {
+    k: "folders, not a database",
+    h: "Real folders, right in the sidebar",
+    p: "Group notes into actual subdirectories — collapsible sections at the top of the sidebar, the folder you're working in marked. Drag a note onto a folder to move it, or drop one note onto another to gather both into a new one. What you see is the shape on disk.",
   },
   {
     k: "fast & lightweight",
@@ -179,8 +189,9 @@ export function App() {
             A quiet page that keeps up with your hands.
           </h1>
           <p className="mx-auto mt-6 max-w-[39rem] text-[clamp(1.05rem,2.2vw,1.32rem)] leading-[1.55] text-ink-soft text-pretty">
-            Noteside is a fast, minimalist offline notebook. Point and click, or drive everything
-            from the keyboard — full vim, or the everyday shortcuts you already know.
+            Noteside is a fast, minimalist offline notebook — a Notion-like block editor over plain
+            Markdown files. Point and click, or drive everything from the keyboard — vim modes and
+            motions, or the everyday shortcuts you already know.
           </p>
           <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
             <a className="btn btn-primary" href={dl.primary.href} {...linkProps(dl.primary)}>

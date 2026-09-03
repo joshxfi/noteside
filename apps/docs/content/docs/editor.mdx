@@ -1,0 +1,187 @@
+---
+title: Editor
+description: A block editor that writes plain Markdown — blocks as you type, files you can read anywhere.
+---
+
+Noteside's editor is a Notion-like **WYSIWYG block editor**. Headings, lists, tables,
+code, callouts and math are real blocks you edit directly. There's no preview pane and
+no source/preview toggle; this is the one editing surface.
+
+Underneath, your notes are still plain `.md` files.
+
+## Your files stay Markdown
+
+Opening a note parses the file into blocks. Saving serializes the blocks back to
+Markdown. That's the whole contract.
+
+- **Opening never writes.** Reading a note leaves the file byte-for-byte alone.
+- **The first real edit may tidy the file** into Noteside's canonical style: ATX
+  headings (`#`), `-` bullets, two-space list indentation.
+- **After that, saving is a fixed point.** Parse then serialize gives back the same
+  bytes, so the file stops churning and diffs stay small.
+
+That canonical style is fixed and independent of your settings, so moving the
+`tab-width` stepper never rewrites a note.
+
+### Frontmatter is untouched
+
+A leading `---` block never reaches the editor. Noteside splits it off before parsing
+and re-attaches it verbatim on save. `title:`, `tags:` and `pinned:` keep working, and
+any other key you keep in there survives every edit, including ones Noteside doesn't
+recognize.
+
+## Writing
+
+Type Markdown shorthand and it becomes a block:
+
+| Type                   | Get            |
+| ---------------------- | -------------- |
+| `# ` … `###### `       | Heading 1–6    |
+| `- `, `* `, `+ `       | Bullet list    |
+| `1. `                  | Numbered list  |
+| `[ ] `, `[x] `         | Task list item |
+| `> `                   | Blockquote     |
+| ` ```ts `              | Code block     |
+| `---`                  | Divider        |
+| `**bold**`             | **bold**       |
+| `*italic*`, `_italic_` | _italic_       |
+| `` `code` ``           | `inline code`  |
+| `~~struck~~`           | ~~struck~~     |
+
+Prefer the mouse? Two ways in:
+
+- **The `/` menu.** Type `/` at the start of a line for a filtered list of block types:
+  headings, bullet/numbered/task lists, a 3×3 table, code block, quote, callout, math
+  block, divider. `↑↓` (or `Ctrl-n`/`Ctrl-p`) move, `Enter` inserts, `Esc` closes.
+- **The drag grip.** Hover a block and a `⋮⋮` handle appears in the left margin. Drag
+  it to move the whole block.
+
+### Tab
+
+`Tab` never walks focus out of the editor. What it does depends on where you are:
+
+- **In a table.** Move to the next cell; tabbing past the last cell adds a fresh row.
+  `⇧Tab` goes back a cell.
+- **In a list.** Nest the item one level. `⇧Tab` unnests it.
+- **Anywhere else.** Insert `tab-width` spaces at the caret.
+
+With vim on, `Tab` does nothing in normal or visual mode. It's swallowed so focus can't
+escape the editor.
+
+## Blocks
+
+Every construct below is a real block node, and each one serializes back to the
+Markdown you'd have written by hand.
+
+### Tables
+
+GFM pipe tables, with column alignment. Put the caret in a table and a small toolbar
+floats above it with **+ row**, **− row**, **+ col**, **− col**. Those buttons run the
+same commands the palette and the ex bar dispatch:
+
+| Command   | Does               |
+| --------- | ------------------ |
+| `:addrow` | Add a row below    |
+| `:delrow` | Delete the row     |
+| `:addcol` | Add a column right |
+| `:delcol` | Delete the column  |
+
+A literal `|` inside a cell is escaped as `\|` on save, so a pipe in your text can't
+split the cell open the next time the note is parsed.
+
+### Code blocks
+
+Fenced code blocks show the language in the corner and a **copy** button. Highlighting
+grammars load per language, on demand, so the app stays offline-safe and never
+downloads a language you don't write. An unrecognized language renders unhighlighted;
+the code itself is still correct.
+
+### Callouts
+
+Callouts are stored as **GFM alerts**, an ordinary blockquote whose first line is a
+marker:
+
+```md
+> [!NOTE]
+> Worth knowing.
+```
+
+Five kinds: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`. Insert one from the `/`
+menu. Because the on-disk form is just a blockquote, a callout degrades to a plain
+quote in any other Markdown app, which is why that form was chosen. Plain blockquotes
+stay plain blockquotes.
+
+### Math
+
+KaTeX, inline and block. Inline math is `$…$`:
+
+```md
+Euler: $e^{i\pi} + 1 = 0$ inline.
+```
+
+Block math is a `$$` fence:
+
+```md
+$$
+\int_0^1 x^2 dx
+$$
+```
+
+`/` → **Math block** inserts one.
+
+### Images
+
+Standard Markdown images. The `src` is stored exactly as written, relative paths
+included, and resolved against the notebook root only for display. So
+`![alt](./assets/pic.png)` keeps working when you sync the folder, move it, or open it
+somewhere else.
+
+### Raw HTML
+
+A block of raw HTML (`<div>`, `<details>`, and friends) is kept verbatim and shown as
+an opaque source chip. Noteside never executes it, and writes it back exactly as you
+typed it.
+
+## Links
+
+`⌘`-click a link to open it in your browser. A plain click just places the caret, since
+this is an editor and not a browser. While `⌘` is held, links pick up the pointer
+cursor so you can see what's clickable. From the keyboard: `⌥↵`, `:follow`, or vim's
+`gx`.
+
+`⌘` is Cmd on macOS, Ctrl elsewhere.
+
+## Find in the note
+
+`⌘F` opens the find bar at the top of the editor. `Enter` and `⇧Enter` (or the `‹` `›`
+buttons) cycle matches, and a counter shows where you are. `F3` and `⇧F3` do the same
+with the bar closed.
+
+`Esc` closes the bar but leaves the highlights lit, vim's `hlsearch` behavior, so `F3`
+keeps cycling. The `✕` button clears them.
+
+Vim users get the same engine: `/`, `n`/`N`, `*`/`#` all search through it, and `:noh`
+clears the highlights. See [Search](/search) for the other two search surfaces (`⌘P`
+across notes, `⌘⇧F` grep).
+
+## What changes when you save
+
+Serialization is canonical, so a handful of Markdown spellings normalize to one form.
+These are deliberate and pinned by tests:
+
+- **Setext headings become ATX.** `Title` over `=====` becomes `# Title`.
+- **Reference links are inlined.** `[ref][1]` plus a `[1]: https://…` definition becomes
+  `[ref](https://…)`.
+- **Bare URLs gain explicit link syntax.** `https://x.dev` becomes
+  `[https://x.dev](https://x.dev)`.
+- **Lists use `-` and two-space indentation**, whatever the file used before.
+
+<Callout title="One lossy case: inline HTML">
+  HTML *blocks* survive verbatim. HTML *inside a paragraph*, say a &lt;kbd&gt; tag mid-sentence, is
+  escaped to text on save, because the Markdown parser claims inline HTML before Noteside can.
+  Recognized tags degrade to their formatting equivalent; the rest become literal text. If you keep
+  inline HTML in your notes, give it its own block.
+</Callout>
+
+Next: the [keybindings](/keybindings), or tune the editor font and `tab-width` in your
+[`~/.notesiderc`](/configuration).

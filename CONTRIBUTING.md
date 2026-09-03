@@ -54,8 +54,8 @@ pnpm e2e
 
 - The codebase is kept `oxfmt`-formatted — run `pnpm format`.
 - TypeScript is strict (`verbatimModuleSyntax` — use `import type`).
-- The desktop app intentionally does **not** use `<React.StrictMode>` (it would
-  double-fire the editor's action flush).
+- The desktop app intentionally does **not** use `<React.StrictMode>` (its dev
+  double-invoke would double-create the Tiptap editor, which is built in an effect).
 - Commits follow [Conventional Commits](https://www.conventionalcommits.org)
   (`feat:` / `fix:` / `perf:` / `docs:` / …) — the type drives the automated release
   and changelog, so it matters.
@@ -66,6 +66,6 @@ pnpm e2e
 apps/
   desktop/   Tauri 2 + React 19 + TypeScript — the app (Rust core in src-tauri/)
   landing/   Vite + React + Tailwind v4 — the marketing site (embeds the real app)
-  docs/      Fumadocs on React Router 7 — the documentation site (docs.noteside.app)
+  docs/      Fumadocs on React Router 8 — the documentation site (docs.noteside.app)
   brand/     The brand guide — internal reference only, not deployed
 ```

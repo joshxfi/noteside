@@ -33,9 +33,17 @@ notebook, not just jump to a file.
 
 ## Find in the current note — `⌘F`
 
-`⌘F` toggles an in-note search bar (CodeMirror's own find) scoped to the open note —
-the conventional equivalent of vim's `/`. Press `⌘F` again to close it. Vim users can
-keep using `/` and `?` as normal.
+`⌘F` opens a find bar docked at the top of the note, scoped to the note you have open.
+Type to highlight every match; `Enter` and `⇧Enter` (or the `‹` `›` buttons) step
+through them, and so do `F3` and `⇧F3` from anywhere in the editor. The counter shows
+which match you're on out of how many.
+
+`Esc` closes the bar but **keeps the highlights lit**, so `F3` keeps cycling after the
+bar is gone — vim's `hlsearch` behavior. The `✕` button clears the highlights and
+closes.
+
+There's one find engine behind all of it: vim's `/`, `n` / `N`, and `*` / `#` drive the
+same search, and `:noh` clears the highlights.
 
 <Callout title="No index, no database">
   Search runs entirely in memory — fuzzy file search is sub-millisecond and content search is a fast

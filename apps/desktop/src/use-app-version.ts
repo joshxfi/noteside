@@ -7,7 +7,7 @@ import { isTauri } from "./use-window-controls";
 
 export function useAppVersion(): string {
   // typeof-guarded: Vite's `define` inlines the literal (the guard folds away),
-  // while other bundlers (tests, the design-sync converter) get the fallback
+  // while other bundlers (tests) get the fallback
   // instead of a ReferenceError.
   const [version, setVersion] = useState(
     typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev",

@@ -3,9 +3,10 @@
   "pages": [
     "index",
     "getting-started",
+    "editor",
+    "folders",
     "keybindings",
     "search",
-    "live-preview",
     "configuration",
     "performance"
   ]

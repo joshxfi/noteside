@@ -1,14 +1,14 @@
 ---
 title: Keybindings
-description: Vim commands, conventional chords, and the leader palette — all first-class.
+description: Conventional chords, the leader palette, and Noteside's vim subset — all first-class.
 ---
 
-Every command in Noteside is a keystroke away: drive it with full vim, or with the
-conventional chords you already know. The chords are always on, so they work even
-with vim enabled. Every command below comes from one table, so the three ways to
-reach it — ex-command, chord, and leader key — never drift apart. (Prefer the
-mouse? Everything here is also clickable — the `⌘⇧P` command palette has a
-titlebar button and lists it all.)
+Every command in Noteside is a keystroke away: drive it with the conventional chords
+you already know, or with vim. The chords are always on, so they work even with vim
+enabled. Every command below comes from one table, so the three ways to reach it —
+chord, ex-command, and leader key — never drift apart. (Prefer the mouse? Everything
+here is also clickable — the `⌘⇧P` command palette has a titlebar button and lists it
+all.)
 
 <Callout title="Three places to search">
   These are easy to mix up:
@@ -26,92 +26,178 @@ See [Search](/search) for the difference.
 Don't use vim? Turn it off (`set vim = off` in your `~/.notesiderc`, or the settings
 panel) and these are all you need. They stay available with vim on, too.
 
-| Chord         | Command                           |
-| ------------- | --------------------------------- |
-| `⌘P`          | Find files & content              |
-| `⌘⇧P`         | Command palette (searchable)      |
-| `⌘⇧F`         | Search note contents (grep)       |
-| `⌘F`          | Find in the current note (toggle) |
-| `F3` / `⇧F3`  | Next / previous search match      |
-| `⌘N`          | New note                          |
-| `⌘S`          | Save note                         |
-| `⌘W`          | Close note                        |
-| `⌘⇧T`         | Reopen closed note                |
-| `⌘J` / `⌘K`   | Next / previous note              |
-| `⌘O`          | Switch notebook                   |
-| `⌥↵`          | Open URL under cursor             |
-| `⌘B`          | Toggle the sidebar                |
-| `⌘E`          | Toggle inline live-preview        |
-| `⌘=` / `⌘-`   | Editor font larger / smaller      |
-| `⌘0`          | Editor font reset                 |
-| `⌘⇧=` / `⌘⇧-` | Interface larger / smaller        |
-| `⌘,`          | Settings panel                    |
-| `⌘/`          | Keyboard cheatsheet               |
+| Chord         | Command                      |
+| ------------- | ---------------------------- |
+| `⌘P`          | Find files & content         |
+| `⌘⇧P`         | Command palette (searchable) |
+| `⌘⇧F`         | Search note contents (grep)  |
+| `⌘F`          | Find in note                 |
+| `F3` / `⇧F3`  | Next / previous match        |
+| `⌘L`          | Leader menu                  |
+| `⌘O`          | Switch notebook              |
+| `⌘N`          | New note                     |
+| `⌘S`          | Save note                    |
+| `⌘W`          | Close note                   |
+| `⌘⇧T`         | Reopen closed note           |
+| `⌘J` / `⌘K`   | Next / previous note         |
+| `⌥↵`          | Open URL under cursor        |
+| `⌘B`          | Toggle sidebar               |
+| `⌘=` / `⌘-`   | Editor font larger / smaller |
+| `⌘0`          | Editor font reset            |
+| `⌘⇧=` / `⌘⇧-` | Interface larger / smaller   |
+| `⌘,`          | Settings                     |
+| `⌘/`          | Keyboard shortcuts           |
 
-`⌘` is Cmd on macOS, Ctrl elsewhere. Forgot one? `⌘/` opens the cheatsheet — which also
-**edits** them (see [Editing shortcuts](#editing-shortcuts) below). Or remap with
-`bind <chord> <command>` in `~/.notesiderc` — see [Configuration](/configuration).
+`⌘` is Cmd on macOS, Ctrl elsewhere. `⌘L` opens the same which-key menu vim users get
+with `<Space>` — see [the leader palette](#the-space-leader-palette) below. A few
+commands ship with no chord at all (interface size reset, the note and folder
+operations); run those from `⌘⇧P`, or bind a key to them.
 
-## Vim commands
+Forgot one? `⌘/` opens the cheatsheet — which also **edits** them (see
+[Editing shortcuts](#editing-shortcuts) below). Or remap with `bind <chord> <command>`
+in `~/.notesiderc` — see [Configuration](/configuration).
 
-Standard vim throughout. On top of that, these ex-commands and motions are wired to
-the app:
+## Vim
 
-| Command               | Does                                             |
-| --------------------- | ------------------------------------------------ |
-| `:w` `:q` `:wq`       | Save · close note · save & close (`:x` too)      |
-| `:find` (`:files`)    | Fuzzy file & content finder                      |
-| `:grep`               | Search note contents                             |
-| `gx` / `:follow`      | Open the URL under the cursor in the browser     |
-| `:new` / `:rm`        | New note · delete note (asks to confirm)         |
-| `:dup` · `:rename`    | Duplicate · rename the current note              |
-| `:reveal`             | Reveal the note's file in the OS file manager    |
-| `:notebook` (`:nb`)   | Switch, open, or create a notebook               |
-| `:preview`            | Toggle inline live-preview                       |
-| `:theme`              | Theme picker (also vim's `:colorscheme`/`:colo`) |
-| `:nav`                | Toggle the sidebar                               |
-| `:commands`           | Open the searchable command palette              |
-| `:settings` `:config` | Settings panel · edit `~/.notesiderc`            |
-| `:help`               | Keyboard cheatsheet                              |
-| `:set …`              | CodeMirror-vim options (e.g. `:set hlsearch`)    |
+Vim mode is a hand-built **subset**, not a full emulation: navigation and line editing,
+wired straight into the block editor. Turn it on with `set vim = on` in `~/.notesiderc`,
+or in Settings → Keys.
 
-Insert-escape (e.g. `jj`) and your own `nmap`/`imap`/`vmap` mappings live in
-`~/.notesiderc` and apply on `:w`.
+**Modes.** Normal, insert, and visual-line. `v` acts like `V` — a selection is always
+whole lines.
 
-<Callout title="Mouse gestures on a note">
-  Every note command has a pointer twin. **Right-click** a note in the sidebar for the context menu
-  — **Open**, **Pin/Unpin**, **Reveal in Finder/Explorer**, **Duplicate**, **Rename…**, and
-  **Delete** — the same actions as the commands above (Delete and Rename open a small confirmation /
-  input dialog). Hovering a row also reveals a **pin toggle** and a **⋯ menu button**,
-  **double-click** renames, and the sidebar's right edge **drags to resize** (double-click the edge
-  to reset).
+**Motions.** `h j k l w b e 0 ^ $ gg G { }`, all count-aware (`3w`, `5j`). `f t F T`
+jump to a character on the line; `;` and `,` repeat that jump forward and backward.
+`5G` (or `:5`) goes to the 5th top-level block. `Ctrl-d` / `Ctrl-u` scroll half a page
+— **macOS only**, since everywhere else Ctrl is the chord modifier.
+
+**Edits.** `x`, `dd`, `yy` / `Y`, `dw db de d$ d0`, `D`, and `p` / `P`, all sharing one
+unnamed register. `i a I A o O` enter insert mode, and `u` / `Ctrl-r` are the editor's
+own undo and redo. Linewise commands follow the **line-unit rule**: `dd` deletes what
+the line _is_ — a heading, a list item, a table row, or a single source line inside a
+code block.
+
+**Search.** `/` opens the same find bar as `⌘F`; `n` / `N` step through matches, `*` /
+`#` search the word under the cursor, and `:noh` clears the highlights.
+
+**The rest.** `:` opens the ex bar, `<Space>` the leader palette, and `gx` follows the
+link under the cursor.
+
+**Leaving insert mode.** `imap jj <Esc>` in `~/.notesiderc` (or the "Leave insert with"
+field in Settings → Keys) drops you back to normal mode when you type `jj` — the keys
+are removed as you go. This is the one mapping directive that actually applies.
+
+### Not in the subset
+
+Deliberately out, because they need recording or register plumbing the editor doesn't
+have: named registers, macros, marks, the `.` repeat, replace mode, the change operator
+`c`, and text objects (`ciw`, `di(`). There are no `:set` options either — settings live
+in `~/.notesiderc` and the settings panel. Your `nmap` / `vmap` lines round-trip through
+the config file verbatim but are **not applied**; applying a config that contains them
+says so in the toast.
+
+### Ex commands
+
+The `:` bar exact-matches the names below and runs the same command the chord would.
+
+**Note**
+
+| Command             | Does                                         |
+| ------------------- | -------------------------------------------- |
+| `:w` `:write`       | Save note                                    |
+| `:q` `:quit`        | Close note                                   |
+| `:wq` `:x` `:xit`   | Save & close note                            |
+| `:new`              | New note (in the open note's folder)         |
+| `:rm`               | Delete note (asks to confirm)                |
+| `:dup` `:duplicate` | Duplicate note                               |
+| `:rename`           | Rename note                                  |
+| `:pin` / `:unpin`   | Pin / unpin — pinned notes sort to the top   |
+| `:reveal`           | Reveal the file in Finder / Explorer         |
+| `:reopen`           | Reopen the last closed note                  |
+| `:follow`           | Open the URL under the cursor                |
+| `:N`                | Jump to the Nth top-level block (e.g. `:42`) |
+
+**Folders**
+
+| Command                   | Does                                               |
+| ------------------------- | -------------------------------------------------- |
+| `:mv` `:move`             | Move the note to a folder (opens a picker)         |
+| `:mkdir` `:folder`        | New folder — accepts `a/b` to nest                 |
+| `:fold` `:collapse`       | Collapse / expand the open note's folder           |
+| `:foldall`                | Collapse all folders                               |
+| `:unfoldall` `:expandall` | Expand all folders                                 |
+| `:renamefolder`           | Rename the open note's folder                      |
+| `:rmdir`                  | Delete that folder and its notes (asks to confirm) |
+
+The folder commands act on the **open note's** folder. Empty folders are managed from
+their header in the sidebar — see [Folders](/folders).
+
+**Tables**
+
+| Command   | Does               |
+| --------- | ------------------ |
+| `:addrow` | Add a row below    |
+| `:delrow` | Delete the row     |
+| `:addcol` | Add a column right |
+| `:delcol` | Delete the column  |
+
+These need the cursor inside a table; the floating table toolbar runs the same four.
+
+**App**
+
+| Command                         | Does                                          |
+| ------------------------------- | --------------------------------------------- |
+| `:find` `:files`                | Fuzzy file & content finder                   |
+| `:grep`                         | Search note contents                          |
+| `:noh` `:nohlsearch`            | Clear search highlights                       |
+| `:commands`                     | Searchable command palette                    |
+| `:palette`                      | Leader menu (the `<Space>` which-key palette) |
+| `:notebook` `:notebooks` `:nb`  | Switch, open, or create a notebook            |
+| `:nav`                          | Toggle the sidebar                            |
+| `:theme` `:colorscheme` `:colo` | Theme picker                                  |
+| `:settings` `:prefs`            | Settings panel                                |
+| `:config`                       | Edit `~/.notesiderc`                          |
+| `:help`                         | Keyboard shortcuts                            |
+
+<Callout title="Mouse gestures in the sidebar">
+  Every note command has a pointer twin. **Right-click** a note (or use the **⋯** button that
+  appears when you hover the row) for **Open**, **Pin/Unpin**, **Reveal in Finder/Explorer**,
+  **Duplicate**, **Move to folder…**, **Rename…**, and **Delete** — Delete, Rename and Move open a
+  small confirmation or input dialog. **Folder headers have their own menu**: New note here, New
+  subfolder…, Rename folder…, Collapse all, Expand all, and Delete folder. You can also **drag a
+  note onto a folder header** to move it there — Noteside asks you to confirm — or **onto another
+  note** to group both into a new folder, which it asks you to name. A row also reveals a **pin
+  toggle** on hover, **double-click** renames, and the sidebar's right edge **drags to resize**
+  (double-click the edge to reset). See [Folders](/folders) for the details.
 </Callout>
 
 ## The `<Space>` leader palette
 
-Tap `<Space>` in normal mode to open a which-key menu, then a single key:
+Tap `<Space>` in normal mode — or `⌘L` anywhere, vim or not — to open a which-key menu,
+then press a single key:
 
 | Key         | Command              |
 | ----------- | -------------------- |
 | `<Space> f` | Find files & content |
 | `<Space> g` | Search note contents |
+| `<Space> o` | Switch notebook      |
 | `<Space> n` | New note             |
+| `<Space> m` | Move to folder…      |
 | `<Space> q` | Close note           |
 | `<Space> d` | Delete note          |
-| `<Space> o` | Switch notebook      |
-| `<Space> b` | Toggle the sidebar   |
-| `<Space> p` | Toggle live-preview  |
-| `<Space> t` | Theme picker         |
+| `<Space> b` | Toggle sidebar       |
 | `<Space> ,` | Settings             |
+| `<Space> t` | Change theme         |
 | `<Space> c` | Edit `~/.notesiderc` |
+
+Destructive entries ask first: `y` or `↵` confirms, `n` backs out, `Esc` closes the menu.
 
 ## Discovering commands
 
 Three surfaces help you find your way:
 
 - **`⌘⇧P` — command palette.** A searchable list of every command (also `:commands`).
-- **`<Space>` — which-key menu.** In vim normal mode, shows the leader keys above as
-  you start typing.
+- **`⌘L` / `<Space>` — which-key menu.** The leader keys above, shown as a menu.
 - **`⌘/` — cheatsheet.** A **searchable** list of every chord and command — type to
   filter it down.
 
@@ -119,14 +205,22 @@ Three surfaces help you find your way:
 
 The `⌘/` cheatsheet doubles as a **live keymap editor** — no config file needed. Open it
 (or **Settings → Keys → Edit keys**). It leads with a **search box**: type to filter the
-list (by command name or `:ex`-command), then `↑`/`↓` to pick a command and:
+list (by command name, group, or `:ex`-command), then `↑`/`↓` (or `Ctrl-n`/`Ctrl-p`) to
+pick a command and:
 
-- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Replace /
-  Cancel). Shortcuts must include Cmd/Ctrl/Alt or use a function key so they cannot hijack
-  ordinary typing, Tab, Enter, or cursor movement. While recording, **Backspace** unbinds the
-  command instead.
-- **⟲** on the selected row resets that command to its default; **Reset all keys** (footer)
-  restores every default.
+- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Enter
+  to replace / Esc to cancel). Shortcuts must include Cmd/Ctrl/Alt or use a function key
+  so they cannot hijack ordinary typing, Tab, Enter, or cursor movement. While recording,
+  **Backspace** unbinds the command instead; with an empty search box, Backspace unbinds
+  the selected row outright.
+- **⟲** on the selected row resets that command to its default; **Reset all keys**
+  (footer) restores every default. Vim maps in `~/.notesiderc` are left alone.
 
 Changes apply instantly and persist to `~/.notesiderc` as `bind` lines, so the file and
 the editor never drift.
+
+## Editing keys
+
+A few keys belong to the editor rather than the command table — `Tab` in tables and
+lists, the `/` slash menu, and opening links (`⌘`-click, `gx`, `⌥↵`). See
+[The editor](/editor).
