@@ -199,8 +199,9 @@ test.describe("vim mode", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-empty-title")).toContainText("No note open");
 
-    // reopen: the save landed
-    await page.locator(".av-item").first().click();
+    // reopen: the save landed (the note that was open is a root note — the
+    // folder groups render first, so pick it by section, not by "first row")
+    await page.locator('.av-item[data-dir=""]').first().click();
     await expect(page.locator(".av-cm .tiptap")).toContainText("EX_SAVE_SENTINEL");
   });
 

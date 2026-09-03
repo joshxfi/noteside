@@ -17,18 +17,58 @@ const runCommand = async (page: import("@playwright/test").Page, title: string) 
 };
 
 test.describe("folder groups", () => {
-  test("root notes render first, then one collapsible group per dir (empties included)", async ({
+  test("folder groups render first, then a divider, then the root notes (empties included)", async ({
     page,
   }) => {
     await boot(page);
-    // Root notes precede every group header.
+    // Every group header precedes the loose notes: the first row is a header,
+    // the divider separates the last group from the root notes, and the root
+    // notes sit after it.
     const nav = page.locator(".av-list");
-    await expect(nav.locator("> :first-child")).toHaveClass(/av-item/);
+    await expect(nav.locator("> :first-child")).toHaveClass(/av-grouphead/);
     await expect(page.locator(".av-grouphead")).toHaveCount(5); // archive ideas journal recipes work
     await expect(page.locator(".av-grouphead .av-group-name").first()).toHaveText("archive");
+    await expect(page.locator(".av-divider")).toHaveCount(1);
+    await expect(nav.locator(".av-divider + .av-item")).toHaveAttribute("data-dir", "");
+    await expect(nav.locator("> :last-child")).toHaveAttribute("data-dir", "");
     // The empty archive group renders its blank drop row.
     await expect(page.locator('.av-group-blank[data-dir="archive"]')).toBeVisible();
-    // Group members carry their dir; the journal group holds its two notes.
+    // Group members carry their dir (and the nested class that indents them);
+    // the journal group holds its two notes.
+    await expect(page.locator('.av-item.is-nested[data-dir="journal"]')).toHaveCount(2);
+    await expect(page.locator('.av-item.is-nested[data-dir=""]')).toHaveCount(0);
+  });
+
+  test("the open note's folder header is marked, and the header shows its icon + count", async ({
+    page,
+  }) => {
+    await boot(page); // welcome.md (a root note) is open → no header marked
+    await expect(page.locator(".av-grouphead.is-here")).toHaveCount(0);
+    await page.locator('.av-item[data-dir="journal"]').first().click();
+    await expect(page.locator(".av-grouphead.is-here .av-group-name")).toHaveText("journal");
+    await expect(page.locator('.av-grouphead[data-dir="journal"] .av-group-icon')).toBeVisible();
+    await expect(page.locator('.av-grouphead[data-dir="journal"] .av-group-count')).toHaveText("2");
+  });
+
+  test("Collapse all / Expand all from a folder menu (and :foldall / :unfoldall)", async ({
+    page,
+  }) => {
+    await boot(page);
+    const header = page.locator('.av-grouphead[data-dir="journal"]');
+    await header.hover();
+    await header.getByRole("button", { name: "folder actions" }).click();
+    await page.locator(".ctx-menu").getByRole("menuitem", { name: "Collapse all" }).click();
+    await expect(page.locator(".av-item.is-nested")).toHaveCount(0);
+    await expect(page.locator(".av-grouphead")).toHaveCount(5); // headers stay
+    await expect(page.locator('.av-item[data-dir=""]')).toHaveCount(3); // root notes untouched
+    await header.hover();
+    await header.getByRole("button", { name: "folder actions" }).click();
+    await page.locator(".ctx-menu").getByRole("menuitem", { name: "Expand all" }).click();
+    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
+    // The keyboard path through the palette.
+    await runCommand(page, "collapse all folders");
+    await expect(page.locator(".av-item.is-nested")).toHaveCount(0);
+    await runCommand(page, "expand all folders");
     await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
   });
 
@@ -59,15 +99,18 @@ test.describe("folder groups", () => {
     await expect(page.locator(".av-item.is-active .av-item-titletext")).toHaveText("Morning pages");
   });
 
-  test("Mod-j steps in visual order and skips a collapsed group", async ({ page }) => {
-    await boot(page); // welcome.md (first root note) is open
-    await page.locator('.av-grouphead[data-dir="ideas"]').click(); // collapse ideas
-    // Step from the last root note: next lands in journal (ideas' notes are
-    // hidden, headers are skipped — visual order).
-    await page.keyboard.press("ControlOrMeta+j"); // rich-blocks
-    await page.keyboard.press("ControlOrMeta+j"); // keymap (last root note)
-    await page.keyboard.press("ControlOrMeta+j"); // first journal note (archive is empty, ideas collapsed)
-    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "journal");
+  test("Mod-j/k step in visual order across the divider and skip a collapsed group", async ({
+    page,
+  }) => {
+    await boot(page); // welcome.md (first root note, right after the divider) is open
+    await page.locator('.av-grouphead[data-dir="work"]').click(); // collapse work
+    // Up from the first root note crosses the divider into the last VISIBLE
+    // group's last note — recipes (work's notes are hidden, headers skipped).
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "recipes");
+    // Down lands back on the root note.
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(page.locator(".av-item.is-active")).toHaveAttribute("data-dir", "");
   });
 
   test("pin floats a foldered note within its group, not to the root", async ({ page }) => {
@@ -81,8 +124,10 @@ test.describe("folder groups", () => {
     await expect(
       page.locator('.av-item[data-dir="work"]').first().locator(".av-item-titletext"),
     ).toHaveText(title);
-    // …and the first sidebar row is still a root note (no hoisting).
-    await expect(page.locator(".av-list > :first-child")).toHaveAttribute("data-dir", "");
+    // …and it stayed in its group: the root section (after the divider) has no
+    // pinned row, and the group's header still precedes it.
+    await expect(page.locator('.av-item[data-dir=""] .av-item-pin')).toHaveCount(0);
+    await expect(page.locator(".av-list > :first-child")).toHaveClass(/av-grouphead/);
   });
 
   test("move via the row menu → picker re-homes the note (and the finder shows the new path)", async ({
@@ -278,13 +323,16 @@ test.describe("folder groups", () => {
 
   // Chromium-only: WebKit's synthetic HTML5 drag events are unreliable in
   // Playwright (the hover-grip drag precedent) — verify manually there.
-  test("dragging a note row onto a group header moves it; onto its own folder is a no-op", async ({
-    page,
-    browserName,
-  }) => {
-    test.skip(browserName !== "chromium", "synthetic DnD is chromium-only");
-    await boot(page);
-    const drag = (srcSel: string, srcIndex: number, targetSel: string) =>
+  test.describe("drag-and-drop", () => {
+    test.skip(({ browserName }) => browserName !== "chromium", "synthetic DnD is chromium-only");
+
+    /** Drag the `srcIndex`-th `srcSel` row and drop it on the first `targetSel`. */
+    const drag = (
+      page: import("@playwright/test").Page,
+      srcSel: string,
+      srcIndex: number,
+      targetSel: string,
+    ) =>
       page.evaluate(
         ([srcSelector, index, targetSelector]) => {
           const src = [...document.querySelectorAll(srcSelector)].at(index) as HTMLElement;
@@ -292,14 +340,16 @@ test.describe("folder groups", () => {
           const nav = document.querySelector(".av-list") as HTMLElement;
           // (A constructed DataTransfer doesn't persist dropEffect outside a
           // real drag session, so the no-drop cursor isn't probed here — the
-          // behavior is: nothing moves and no toast.)
+          // behavior is: no ring, no dialog, nothing moves.)
           const dataTransfer = new DataTransfer();
           src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
           const nested = nav.classList.contains("is-drag-nested");
           target.dispatchEvent(
             new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }),
           );
-          const ringed = target.classList.contains("is-drop");
+          // A row/header target rings itself; the root target rings the nav's zone.
+          const ringed =
+            target.classList.contains("is-drop") || target.classList.contains("is-drop-root");
           target.dispatchEvent(
             new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }),
           );
@@ -308,19 +358,139 @@ test.describe("folder groups", () => {
         },
         [srcSel, srcIndex, targetSel] as const,
       );
-    // A root note onto the archive header: the header rings, the note moves,
-    // and no root drop zone was offered (the note was already at the root).
-    const first = await drag('.av-item[data-dir=""]', -1, '.av-grouphead[data-dir="archive"]');
-    expect(first).toEqual({ nested: false, ringed: true, cleared: true });
-    await expect(page.locator(".av-toast")).toContainText("moved to archive");
-    await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(1);
-    // A journal note onto its OWN header: no ring, nothing moves, no toast —
-    // but the root drop zone WAS offered, since the note came from a folder.
-    await page.waitForTimeout(1800); // let the first toast expire
-    const same = await drag('.av-item[data-dir="journal"]', 0, '.av-grouphead[data-dir="journal"]');
-    expect(same).toEqual({ nested: true, ringed: false, cleared: true });
-    await page.waitForTimeout(300);
-    await expect(page.locator(".av-toast")).toHaveCount(0);
-    await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
+
+    test("onto a group header asks to move; Enter moves, Esc leaves the note put", async ({
+      page,
+    }) => {
+      await boot(page);
+      const root = page.locator('.av-item[data-dir=""]');
+      const title = await root.last().locator(".av-item-titletext").innerText();
+      // A root note onto the archive header: the header rings and no root drop
+      // zone was offered (the note was already at the root) — nothing moves
+      // until the confirm says so.
+      const first = await drag(
+        page,
+        '.av-item[data-dir=""]',
+        -1,
+        '.av-grouphead[data-dir="archive"]',
+      );
+      expect(first).toEqual({ nested: false, ringed: true, cleared: true });
+      const dialog = page.locator(".cfm-panel");
+      await expect(dialog).toContainText(`Move “${title}” to archive?`);
+      await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(0);
+      // Again, confirmed with Enter this time.
+      await drag(page, '.av-item[data-dir=""]', -1, '.av-grouphead[data-dir="archive"]');
+      await expect(dialog).toContainText("to archive?");
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".av-toast")).toContainText("moved to archive");
+      await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(1);
+      await expect(page.locator('.av-item[data-dir="archive"] .av-item-titletext')).toHaveText(
+        title,
+      );
+    });
+
+    test("onto its own folder is a no-op (no ring, no dialog)", async ({ page }) => {
+      await boot(page);
+      // The root drop zone WAS offered, since the note came from a folder.
+      const same = await drag(
+        page,
+        '.av-item[data-dir="journal"]',
+        0,
+        '.av-grouphead[data-dir="journal"]',
+      );
+      expect(same).toEqual({ nested: true, ringed: false, cleared: true });
+      await page.waitForTimeout(300);
+      await expect(page.locator(".cfm-panel")).toHaveCount(0);
+      await expect(page.locator(".av-toast")).toHaveCount(0);
+      await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
+    });
+
+    test("onto the root zone asks to move to the notebook root", async ({ page }) => {
+      await boot(page);
+      const title = await page
+        .locator('.av-item[data-dir="journal"]')
+        .first()
+        .locator(".av-item-titletext")
+        .innerText();
+      const rootBefore = await page.locator('.av-item[data-dir=""]').count();
+      // Dropping on the nav itself (empty space / the ::after root zone) — the
+      // nav rings its root zone rather than any row.
+      const hit = await drag(page, '.av-item[data-dir="journal"]', 0, ".av-list");
+      expect(hit).toEqual({ nested: true, ringed: true, cleared: true });
+      await expect(page.locator(".cfm-panel")).toContainText(
+        `Move “${title}” to the notebook root?`,
+      );
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".av-toast")).toContainText("moved to notebook root");
+      await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(1);
+      await expect(page.locator('.av-item[data-dir=""]')).toHaveCount(rootBefore + 1);
+    });
+
+    test("onto another note groups both into a new folder beside the target", async ({ page }) => {
+      await boot(page);
+      const root = page.locator('.av-item[data-dir=""]');
+      const rootBefore = await root.count();
+      const dragged = await root.last().locator(".av-item-titletext").innerText();
+      const target = await root.first().locator(".av-item-titletext").innerText();
+      // The target NOTE row rings (with its "new folder" label) — not a header.
+      const hit = await drag(page, '.av-item[data-dir=""]', -1, '.av-item[data-dir=""]');
+      expect(hit).toEqual({ nested: false, ringed: true, cleared: true });
+      const dialog = page.locator(".cfm-panel");
+      await expect(dialog).toContainText("New folder");
+      await expect(dialog).toContainText(`“${dragged}” and “${target}” move into it.`);
+      await expect(page.locator(".cfm-input")).toBeFocused();
+      // An empty name can't be submitted (the button is disabled, Enter is inert).
+      await page.keyboard.press("Enter");
+      await expect(dialog).toHaveCount(1);
+      await page.keyboard.type("pair");
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".av-toast")).toContainText("2 notes moved to pair");
+      await expect(page.locator('.av-grouphead[data-dir="pair"]')).toHaveCount(1);
+      const grouped = page.locator('.av-item[data-dir="pair"] .av-item-titletext');
+      await expect(grouped).toHaveCount(2);
+      await expect(grouped.filter({ hasText: target })).toHaveCount(1);
+      await expect(grouped.filter({ hasText: dragged })).toHaveCount(1);
+      await expect(root).toHaveCount(rootBefore - 2);
+    });
+
+    test("onto a note inside a folder nests the new folder there; onto itself is a no-op", async ({
+      page,
+    }) => {
+      await boot(page);
+      // Itself: no ring, no dialog.
+      const self = await drag(page, '.av-item[data-dir=""]', 0, '.av-item[data-dir=""]');
+      expect(self).toEqual({ nested: false, ringed: false, cleared: true });
+      await page.waitForTimeout(200);
+      await expect(page.locator(".cfm-panel")).toHaveCount(0);
+      // A root note onto a journal note: the new folder lives INSIDE journal.
+      const hit = await drag(page, '.av-item[data-dir=""]', -1, '.av-item[data-dir="journal"]');
+      expect(hit).toEqual({ nested: false, ringed: true, cleared: true });
+      await expect(page.locator(".cfm-panel")).toContainText("inside journal.");
+      await page.keyboard.type("sub");
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".av-toast")).toContainText("2 notes moved to journal/sub");
+      await expect(page.locator('.av-grouphead[data-dir="journal/sub"]')).toHaveCount(1);
+      await expect(page.locator('.av-item[data-dir="journal/sub"]')).toHaveCount(2);
+      await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(1);
+    });
+
+    test("grouping the OPEN note keeps its buffer (id migrates, no remount)", async ({ page }) => {
+      await boot(page);
+      // Open the last root note and type into it; then drop the ACTIVE row onto
+      // another root note (the autosave may have re-sorted it to the top).
+      await page.locator('.av-item[data-dir=""]').last().click();
+      await caretToEnd(page);
+      await page.keyboard.type(" GROUP_SENTINEL");
+      await drag(page, ".av-item.is-active", 0, '.av-item[data-dir=""]:not(.is-active)');
+      await page.keyboard.type("held");
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".av-toast")).toContainText("2 notes moved to held");
+      // The buffer survived the id change: edit intact, the active row is now in `held`.
+      await expect(page.locator(".av-cm .tiptap")).toContainText("GROUP_SENTINEL");
+      await expect(page.locator('.av-item.is-active[data-dir="held"]')).toHaveCount(1);
+    });
   });
 });

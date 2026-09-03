@@ -31,6 +31,8 @@ const folderActions = () => ({
   onNewSubfolder: vi.fn(),
   onRename: vi.fn(),
   onDelete: vi.fn(),
+  onCollapseAll: vi.fn(),
+  onExpandAll: vi.fn(),
 });
 
 describe("native note context menu lifecycle", () => {
@@ -98,7 +100,7 @@ describe("native note context menu lifecycle", () => {
     await disposeNativeMenus();
   });
 
-  it("the folder menu is its own retained resource with the four folder ops", async () => {
+  it("the folder menu is its own retained resource with the folder ops + whole-sidebar folds", async () => {
     const { disposeNativeMenus, showFolderContextMenu, showNoteContextMenu } =
       await import("./native-menu");
     const actions = folderActions();
@@ -127,6 +129,10 @@ describe("native note context menu lifecycle", () => {
     expect(actions.onDelete).toHaveBeenCalledWith("journal");
     byId("folder-new-subfolder")?.action();
     expect(actions.onNewSubfolder).toHaveBeenCalledWith("journal");
+    byId("folder-collapse-all")?.action();
+    expect(actions.onCollapseAll).toHaveBeenCalledOnce();
+    byId("folder-expand-all")?.action();
+    expect(actions.onExpandAll).toHaveBeenCalledOnce();
 
     // dispose closes BOTH retained menus
     await disposeNativeMenus();

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function PromptDialog({
   title,
+  message,
   initialValue,
   placeholder,
   confirmLabel,
@@ -12,6 +13,8 @@ export function PromptDialog({
   onCancel,
 }: {
   title: string;
+  /** One line under the title saying what the value does. */
+  message?: string;
   initialValue?: string;
   placeholder?: string;
   confirmLabel: string;
@@ -57,6 +60,7 @@ export function PromptDialog({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="cfm-title">{title}</div>
+        {message && <div className="cfm-msg">{message}</div>}
         <input
           ref={inputRef}
           className="cfm-input"
