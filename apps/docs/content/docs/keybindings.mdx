@@ -59,29 +59,52 @@ in `~/.notesiderc` — see [Configuration](/configuration).
 
 ## Vim
 
-Vim mode is a hand-built **subset**, not a full emulation: navigation and line editing,
-wired straight into the block editor. Turn it on with `set vim = on` in `~/.notesiderc`,
-or in Settings → Keys.
+Vim mode is a hand-built **subset**, not a full emulation: the navigation and the
+everyday edit grammar — operators, motions, text objects, `.` — wired straight into the
+block editor. Turn it on with `set vim = on` in `~/.notesiderc`, or in Settings → Keys.
 
-**Modes.** Normal, insert, and visual-line. `v` acts like `V` — a selection is always
-whole lines.
+**Modes.** Normal, insert, and visual. `v` is charwise, `V` linewise; in visual mode `o`
+swaps the ends, `v`/`V` switch flavor, and the same key (or `Esc`) leaves. Selecting text
+with the mouse drops you into visual mode too. The cursor sits _on_ a character in normal
+mode, the way vim's does: `$` lands on the last one, `l` stops there, and `Esc` from
+insert steps back onto what you just typed.
 
-**Motions.** `h j k l w b e 0 ^ $ gg G { }`, all count-aware (`3w`, `5j`). `f t F T`
-jump to a character on the line; `;` and `,` repeat that jump forward and backward.
-`5G` (or `:5`) goes to the 5th top-level block. `Ctrl-d` / `Ctrl-u` scroll half a page
-— **macOS only**, since everywhere else Ctrl is the chord modifier.
+**Motions.** `h j k l w b e 0 ^ $ gg G { } %`, all count-aware (`3w`, `5j`). `f t F T`
+jump to a character on the line; `;` and `,` repeat that jump forward and backward. `5G`
+(or `:5`) goes to the 5th top-level block. `Enter` and `Backspace` move like `j` and `h`.
+`zz` / `zt` / `zb` scroll the cursor line to the middle / top / bottom. `Ctrl-d` /
+`Ctrl-u` scroll half a page and `Ctrl-f` / `Ctrl-b` a full one — **macOS only**, since
+everywhere else Ctrl is the chord modifier.
 
-**Edits.** `x`, `dd`, `yy` / `Y`, `dw db de d$ d0`, `D`, and `p` / `P`, all sharing one
-unnamed register. `i a I A o O` enter insert mode, and `u` / `Ctrl-r` are the editor's
-own undo and redo. Linewise commands follow the **line-unit rule**: `dd` deletes what
-the line _is_ — a heading, a list item, a table row, or a single source line inside a
-code block.
+**Operators.** `d` delete, `c` change, `y` yank, `>` / `<` shift — each followed by any
+motion or text object, with counts on either side (`2d3w` is six words). Doubling an
+operator makes it linewise: `dd cc yy >> <<`. The shorthands are there too: `D` `C` `S`
+`Y` `s` `x` `X`. `cw` changes to the end of the word without eating the blank after it,
+exactly as vim does.
+
+**Text objects.** `iw` / `aw` (word), `ip` (the block), `i"` `i'` `` i` `` (quotes), and
+`i(` `i[` `i{` `i<` (bracket pairs — `ib` / `iB` and the closing brackets work as
+aliases). `a` instead of `i` includes the delimiters. So `ciw`, `di"`, `da(`, `yi{`.
+
+**Edits.** `p` / `P` paste, `r` replaces a character, `~` toggles case, `J` joins lines,
+`u` / `Ctrl-r` undo and redo, `.` repeats the last change — including the text you typed
+after a `cw` or an `o`. Everything shares one unnamed register. **An insert session is
+one undo step**: `cw` + typing + `Esc`, then `u`, brings the whole word back.
+
+**Visual.** `d`/`x`, `c`/`s`, `y`, `p` (replace the selection), `>` / `<`, `~` `u` `U`
+(toggle / lower / upper), `J`, and `iw`/`i(`/… to grow the selection to an object.
+
+**The line-unit rule.** Linewise commands act on what the line _is_: `dd` deletes a
+heading, a list item, a table row, a source line inside a code block, or a paragraph inside
+a quote. `o` / `O` open a sibling item in a list and a new **row** in a table. `>>` / `<<`
+nest and unnest list items and indent code lines by `tab-width`.
 
 **Search.** `/` opens the same find bar as `⌘F`; `n` / `N` step through matches, `*` /
 `#` search the word under the cursor, and `:noh` clears the highlights.
 
 **The rest.** `:` opens the ex bar, `<Space>` the leader palette, and `gx` follows the
-link under the cursor.
+link under the cursor. `Ctrl-[` works as `Esc`. The status bar echoes a pending count or
+operator (`2d`, `ci`) while you type a command.
 
 **Leaving insert mode.** `imap jj <Esc>` in `~/.notesiderc` (or the "Leave insert with"
 field in Settings → Keys) drops you back to normal mode when you type `jj` — the keys
@@ -90,11 +113,12 @@ are removed as you go. This is the one mapping directive that actually applies.
 ### Not in the subset
 
 Deliberately out, because they need recording or register plumbing the editor doesn't
-have: named registers, macros, marks, the `.` repeat, replace mode, the change operator
-`c`, and text objects (`ciw`, `di(`). There are no `:set` options either — settings live
-in `~/.notesiderc` and the settings panel. Your `nmap` / `vmap` lines round-trip through
-the config file verbatim but are **not applied**; applying a config that contains them
-says so in the toast.
+have: named registers, macros, marks, replace mode `R`, blockwise visual (`Ctrl-v`),
+`gu` / `gU`, and `:s`. A `.` after an insert that spanned several lines says it can't
+repeat that. There are no `:set` options either — settings live in `~/.notesiderc` and
+the settings panel. Your `nmap` / `vmap` lines round-trip through the config file
+verbatim but are **not applied**; applying a config that contains them says so in the
+toast.
 
 ### Ex commands
 

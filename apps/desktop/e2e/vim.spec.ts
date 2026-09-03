@@ -14,6 +14,19 @@ test.describe("vim mode", () => {
   };
   const mode = (page: import("@playwright/test").Page) => page.locator(".av-mode");
   const stat = (page: import("@playwright/test").Page) => page.locator(".av-stat").nth(1); // block:offset cell
+  const lastBlock = (page: import("@playwright/test").Page) =>
+    page.locator(".av-cm .tiptap > *").last();
+  /** Append a fresh paragraph holding `text` at the end of the note and come
+   *  back to normal mode with the cursor on its first character. */
+  const freshLine = async (page: import("@playwright/test").Page, text: string) => {
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(text);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("0");
+    await expect(lastBlock(page)).toHaveText(text);
+  };
 
   test("modes: i enters insert, Esc returns to normal, v enters visual", async ({ page }) => {
     await bootVim(page);
@@ -211,6 +224,169 @@ test.describe("vim mode", () => {
     await page.locator(".av-exbar-input").fill("frobnicate");
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-toast.is-error")).toContainText("frobnicate");
+  });
+
+  test("cw changes a word, typing replaces it, and u undoes the whole change at once", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    await freshLine(page, "alpha beta gamma");
+    await page.keyboard.press("w"); // onto beta
+    await page.keyboard.press("c");
+    await expect(page.locator(".av-showcmd")).toHaveText("c");
+    await page.keyboard.press("w");
+    await expect(mode(page)).toHaveText("INSERT");
+    await page.keyboard.type("delta");
+    await page.keyboard.press("Escape");
+    await expect(lastBlock(page)).toHaveText("alpha delta gamma");
+    await expect(mode(page)).toHaveText("NORMAL");
+    // one undo restores both the cut and the typed text
+    await page.keyboard.press("u");
+    await expect(lastBlock(page)).toHaveText("alpha beta gamma");
+  });
+
+  test('di" and daw act on text objects; . repeats the last change', async ({ page }) => {
+    await bootVim(page);
+    await freshLine(page, 'say "hello there" now');
+    await page.keyboard.press("f");
+    await page.keyboard.press("e"); // inside the quotes
+    await page.keyboard.press("d");
+    await page.keyboard.press("i");
+    await page.keyboard.press('"');
+    await expect(lastBlock(page)).toHaveText('say "" now');
+
+    await freshLine(page, "one two three four");
+    await page.keyboard.press("d");
+    await page.keyboard.press("w");
+    await expect(lastBlock(page)).toHaveText("two three four");
+    await page.keyboard.press(".");
+    await expect(lastBlock(page)).toHaveText("three four");
+    await page.keyboard.press("2");
+    await page.keyboard.press(".");
+    await expect(lastBlock(page)).toHaveText("");
+  });
+
+  test("the normal-mode cursor sits ON a character: $ parks on the last one, l stays put, x steps back", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    await freshLine(page, "abc");
+    const block = await stat(page).innerText();
+    await page.keyboard.press("$");
+    await expect(stat(page)).toHaveText(/:3$/); // offset 2 → col 3, ON "c"
+    await page.keyboard.press("l");
+    await page.keyboard.press("l");
+    await expect(stat(page)).toHaveText(`${block.split(":")[0]}:3`); // same block, same col
+    await page.keyboard.press("x");
+    await expect(lastBlock(page)).toHaveText("ab");
+    await expect(stat(page)).toHaveText(/:2$/); // back onto "b"
+  });
+
+  test("Backspace moves in normal mode instead of deleting; Delete acts like x", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    await freshLine(page, "abc");
+    await page.keyboard.press("$");
+    await page.keyboard.press("Backspace");
+    await expect(stat(page)).toHaveText(/:2$/);
+    await expect(lastBlock(page)).toHaveText("abc");
+    await page.keyboard.press("Delete");
+    await expect(lastBlock(page)).toHaveText("ac");
+  });
+
+  test("v is charwise visual (l extends, d deletes); V j d deletes two lines", async ({ page }) => {
+    await bootVim(page);
+    await freshLine(page, "abcdef");
+    await page.keyboard.press("v");
+    await expect(mode(page)).toHaveText("VISUAL");
+    await page.keyboard.press("l");
+    await page.keyboard.press("l");
+    await page.keyboard.press("d");
+    await expect(lastBlock(page)).toHaveText("def");
+    await expect(mode(page)).toHaveText("NORMAL");
+
+    const blocks = page.locator(".av-cm .tiptap > *");
+    await freshLine(page, "second");
+    const before = await blocks.count();
+    await page.keyboard.press("k");
+    await page.keyboard.press("V");
+    await page.keyboard.press("j");
+    await page.keyboard.press("d");
+    await expect(blocks).toHaveCount(before - 2);
+    await expect(mode(page)).toHaveText("NORMAL");
+  });
+
+  test("a mouse drag enters visual mode; Esc leaves it", async ({ page }) => {
+    await bootVim(page);
+    await freshLine(page, "drag across me");
+    const box = await lastBlock(page).boundingBox();
+    if (!box) throw new Error("no block box");
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + 4, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 60, y, { steps: 6 });
+    await page.mouse.up();
+    await expect(mode(page)).toHaveText("VISUAL");
+    await page.keyboard.press("Escape");
+    await expect(mode(page)).toHaveText("NORMAL");
+  });
+
+  test("r replaces a character, ~ toggles case, J joins lines", async ({ page }) => {
+    await bootVim(page);
+    await freshLine(page, "abc");
+    await page.keyboard.press("r");
+    await page.keyboard.press("x");
+    await expect(lastBlock(page)).toHaveText("xbc");
+    await page.keyboard.press("~");
+    await expect(lastBlock(page)).toHaveText("Xbc");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("next");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("k");
+    await page.keyboard.press("J");
+    await expect(lastBlock(page)).toHaveText("Xbc next");
+  });
+
+  test(">> nests a list item and << unnests it", async ({ page }) => {
+    await bootVim(page);
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("- item one"); // the input rule makes a bullet list
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("item two");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".av-cm .tiptap ul li")).toHaveCount(2);
+    const nested = page.locator(".av-cm .tiptap ul li ul li");
+    await expect(nested).toHaveCount(0);
+    await page.keyboard.press(">");
+    await page.keyboard.press(">");
+    await expect(nested).toHaveCount(1);
+    await page.keyboard.press("<");
+    await page.keyboard.press("<");
+    await expect(nested).toHaveCount(0);
+  });
+
+  test("yw yanks a word and p pastes it after the cursor", async ({ page }) => {
+    await bootVim(page);
+    await freshLine(page, "ab cd");
+    await page.keyboard.press("y");
+    await page.keyboard.press("w");
+    await page.keyboard.press("$");
+    await page.keyboard.press("p");
+    await expect(lastBlock(page)).toContainText("ab cdab");
+  });
+
+  test("showcmd echoes a pending count + operator and clears on Esc", async ({ page }) => {
+    await bootVim(page);
+    const show = page.locator(".av-showcmd");
+    await page.keyboard.press("2");
+    await page.keyboard.press("d");
+    await expect(show).toHaveText("2d");
+    await page.keyboard.press("Escape");
+    await expect(show).toHaveCount(0);
   });
 
   test("Tab is swallowed in normal mode, indents in insert (issue #23 semantics)", async ({

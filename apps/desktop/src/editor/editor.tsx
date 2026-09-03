@@ -161,6 +161,8 @@ function RichEditor(props: EditorProps) {
 
   // Mode is owned by the vim layer via onModeChange; non-vim is fixed "text".
   const [mode, setMode] = useState(props.vimMode ? "normal" : "text");
+  // showcmd: the pending vim count/operator ("2d", "ci"); "" when idle.
+  const [pending, setPending] = useState("");
   const [findOpen, setFindOpen] = useState(false);
   const [exOpen, setExOpen] = useState(false);
   const [stat, setStat] = useState<EditorStat>({
@@ -261,7 +263,9 @@ function RichEditor(props: EditorProps) {
       vim: props.vimMode
         ? {
             getEscMap: () => propsRef.current.escMap,
+            getTabWidth: () => propsRef.current.tabWidth,
             onModeChange: setMode,
+            onPending: setPending,
             hooks: {
               palette: () => propsRef.current.onCommand("palette"),
               exBar: () => setExOpen(true),
@@ -434,6 +438,7 @@ function RichEditor(props: EditorProps) {
       <StatusBar
         modeClass={props.vimMode ? "mode-" + mode : "mode-text"}
         modeLabel={props.vimMode ? (MODE_LABEL[mode] ?? mode.toUpperCase()) : "TEXT"}
+        pendingLabel={props.vimMode ? pending : ""}
         fileLabel={props.fileLabel}
         stat={shownStat}
         onSave={() => {
