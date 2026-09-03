@@ -15,6 +15,8 @@ export interface EditorStat {
 export function StatusBar(props: {
   modeClass: string;
   modeLabel: string;
+  /** vim showcmd — the pending count/operator; empty when idle. */
+  pendingLabel?: string;
   fileLabel: string;
   stat: EditorStat;
   onSave: () => void;
@@ -23,6 +25,7 @@ export function StatusBar(props: {
   return (
     <div className="av-status">
       <div className={"av-mode " + props.modeClass}>{props.modeLabel}</div>
+      {props.pendingLabel ? <div className="av-showcmd">{props.pendingLabel}</div> : null}
       <div className="av-file">
         {props.fileLabel}
         {stat.dirty && (

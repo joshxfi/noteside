@@ -48,6 +48,10 @@ export interface ExtensionOpts {
 export function markdownExtensions(opts?: {
   codeBlock?: false;
   resolveImageSrc?: (src: string) => string;
+  /** Undo grouping (not schema-bearing): vim mode stretches the typing-pause
+   *  delay so an insert session undoes as ONE step — the vim layer seals
+   *  groups itself around every normal-mode command. */
+  undoRedo?: { newGroupDelay: number };
 }) {
   return [
     StarterKit.configure({
@@ -57,6 +61,7 @@ export function markdownExtensions(opts?: {
         linkOnPaste: true,
       },
       ...(opts?.codeBlock === false ? { codeBlock: false as const } : {}),
+      ...(opts?.undoRedo ? { undoRedo: opts.undoRedo } : {}),
     }),
     Markdown.configure({
       indentation: { style: "space", size: 2 },
@@ -109,9 +114,18 @@ function tabKey(getTabWidth: () => number) {
   });
 }
 
+/** Vim: an insert session is one undo step — typing pauses inside it don't
+ *  split the group (the layer seals a group on Esc and around every
+ *  normal-mode command); 30s is the safety valve for a walked-away session. */
+const VIM_UNDO_GROUP_DELAY_MS = 30_000;
+
 export function buildExtensions(opts: ExtensionOpts) {
   return [
-    ...markdownExtensions({ codeBlock: false, resolveImageSrc: opts.resolveImageSrc }),
+    ...markdownExtensions({
+      codeBlock: false,
+      resolveImageSrc: opts.resolveImageSrc,
+      ...(opts.vim ? { undoRedo: { newGroupDelay: VIM_UNDO_GROUP_DELAY_MS } } : {}),
+    }),
     NsCodeBlock,
     ActiveBlock,
     Find,

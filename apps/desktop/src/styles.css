@@ -1479,6 +1479,14 @@ body {
   background: var(--accent);
   color: var(--accent-ink);
 }
+/* vim showcmd: the pending count/operator ("2d", "ci") beside the mode */
+.av-showcmd {
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 0;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+}
 .av-file {
   display: flex;
   align-items: center;
