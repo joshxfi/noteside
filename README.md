@@ -5,7 +5,7 @@
 <h1 align="center">Noteside</h1>
 
 <p align="center">
-  A fast, minimalist offline notebook. Point and click, or drive everything from the keyboard — full vim, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
+  A fast, minimalist offline notebook with a Notion-like block editor. Point and click, or drive everything from the keyboard — vim modes and motions, or the conventional shortcuts you already know. Your notes stay as plain Markdown files on your disk.
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-dark.png" />
-    <img src="assets/screenshot.png" alt="Noteside — the editor in NORMAL mode, with the note sidebar and live status bar" width="840" />
+    <img src="assets/screenshot.png" alt="Noteside — the editor with the note sidebar and status bar" width="840" />
   </picture>
 </p>
 
@@ -48,9 +48,10 @@ Full walkthrough: **[Getting started](https://docs.noteside.app/getting-started)
 Everything lives at **[docs.noteside.app](https://docs.noteside.app)**:
 
 - [Getting started](https://docs.noteside.app/getting-started) — install, open a notebook, your first note
-- [Keybindings](https://docs.noteside.app/keybindings) — vim + conventional chords, and remapping them
+- [Editor](https://docs.noteside.app/editor) — tables, code blocks, callouts, math, and images edited in place as real blocks; the file on disk stays plain Markdown
+- [Folders](https://docs.noteside.app/folders) — organize notes into real subdirectories: collapsible sidebar groups, the move picker, and drag-and-drop
+- [Keybindings](https://docs.noteside.app/keybindings) — a vim subset + conventional chords, and remapping them
 - [Search](https://docs.noteside.app/search) — fuzzy file finder and line-level content grep
-- [Live preview](https://docs.noteside.app/live-preview) — inline Markdown: rendered tables, code blocks, and task lists, with markup hidden off the cursor line
 - [Configuration](https://docs.noteside.app/configuration) — `~/.notesiderc`, themes, and settings
 - [Performance](https://docs.noteside.app/performance) — how it stays fast at scale
 

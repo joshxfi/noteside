@@ -2,7 +2,7 @@
   "name": "noteside",
   "version": "1.7.1",
   "private": true,
-  "description": "Noteside — fast, minimalist, offline notes. Plain Markdown files; mouse and keyboard both first-class (full vim optional).",
+  "description": "Noteside — fast, minimalist, offline notes. Plain Markdown files; mouse and keyboard both first-class (vim modes optional).",
   "license": "MIT",
   "author": "Josh Daniel (https://github.com/joshxfi)",
   "scripts": {

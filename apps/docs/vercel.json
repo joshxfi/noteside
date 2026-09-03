@@ -3,5 +3,6 @@
   "framework": null,
   "buildCommand": "pnpm build",
   "outputDirectory": "dist/client",
+  "redirects": [{ "source": "/live-preview", "destination": "/editor", "permanent": true }],
   "rewrites": [{ "source": "/(.*)", "destination": "/__spa-fallback.html" }]
 }
