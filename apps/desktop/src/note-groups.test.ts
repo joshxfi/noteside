@@ -56,22 +56,14 @@ describe("buildSidebarRows", () => {
   it("puts the folder groups first, then a divider, then the root notes", () => {
     const rows = buildSidebarRows(notes, ["archive"], new Set());
     const shape = rows.map((r) =>
-      r.kind === "note"
-        ? r.note.path
-        : r.kind === "folder"
-          ? `[${r.dir}]`
-          : r.kind === "blank"
-            ? `(${r.dir})`
-            : "---",
+      r.kind === "note" ? r.note.path : r.kind === "folder" ? `[${r.dir}]` : "---",
     );
     expect(shape).toEqual([
-      "[archive]",
-      "(archive)", // expanded empty group renders its blank drop row
+      "[archive]", // an expanded empty group is just its header
       "[journal]",
       "journal/night.md", // pinned floats within its group, not to the root
       "journal/morning.md",
       "[work]", // an intermediate dir with no direct notes is an empty group
-      "(work)",
       "[work/projects]", // nested dir = ONE group with the full label
       "work/projects/roadmap.md",
       "---", // the hairline between the groups and the loose notes
@@ -95,11 +87,14 @@ describe("buildSidebarRows", () => {
     expect(foldersOnly.some((r) => r.kind === "divider")).toBe(false);
   });
 
-  it("collapse hides members (and an empty group's blank row)", () => {
+  it("collapse hides members; an empty group is a header either way", () => {
     const rows = buildSidebarRows(notes, ["archive"], new Set(["journal", "archive"]));
     expect(rows.some((r) => r.kind === "note" && r.dir === "journal")).toBe(false);
-    expect(rows.some((r) => r.kind === "blank")).toBe(true); // work's blank survives
-    expect(rows.some((r) => r.kind === "blank" && r.dir === "archive")).toBe(false);
+    expect(rows.filter((r) => r.kind === "folder" && r.dir === "archive")).toHaveLength(1);
+    expect(rows.find((r) => r.kind === "folder" && r.dir === "work")).toMatchObject({
+      count: 0,
+      collapsed: false,
+    });
     const journal = rows.find((r) => r.kind === "folder" && r.dir === "journal");
     expect(journal).toMatchObject({ collapsed: true, count: 2 });
   });

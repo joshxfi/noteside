@@ -382,15 +382,6 @@ body {
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--rule-soft);
 }
-.av-item-bar {
-  width: 2px;
-  border-radius: 2px;
-  background: transparent;
-  flex: none;
-}
-.av-item.is-active .av-item-bar {
-  background: var(--accent);
-}
 .av-item-main {
   display: flex;
   flex-direction: column;
@@ -513,17 +504,6 @@ body {
   text-overflow: ellipsis;
   font-weight: 500;
 }
-.av-group-count {
-  flex: none;
-  margin-left: auto;
-  min-width: 1.7em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--paper-2), var(--ink) 6%);
-  font-size: calc(10px * var(--ui-scale));
-  text-align: center;
-  color: var(--ink-faint);
-}
 /* the OPEN note's folder — "where am I", even when the note row is off screen */
 .av-grouphead.is-here .av-group-name {
   color: var(--accent);
@@ -532,11 +512,6 @@ body {
 .av-grouphead:focus-within .av-item-actions {
   opacity: 1;
   pointer-events: auto;
-}
-/* the kebab replaces the count on hover (both sit at the right edge) */
-.av-grouphead:hover .av-group-count,
-.av-grouphead:focus-within .av-group-count {
-  display: none;
 }
 .av-grouphead .av-item-actions {
   margin-left: auto;
@@ -560,17 +535,6 @@ body {
 .av-item.is-nested:not(:has(+ .av-item.is-nested))::before {
   bottom: 0;
 }
-/* the expanded EMPTY group's body — also the drop target for the drag below */
-.av-group-blank {
-  margin: 0 2px 0 24px;
-  padding: 8px 10px;
-  border: 1px dashed color-mix(in oklab, var(--ink-faint), transparent 55%);
-  border-radius: 8px;
-  font-family: var(--mono);
-  font-size: calc(10.5px * var(--ui-scale));
-  color: var(--ink-faint);
-  opacity: 0.75;
-}
 /* the hairline between the last group and the loose root notes */
 .av-divider {
   flex: none;
@@ -583,8 +547,7 @@ body {
 .av-list.is-dragging {
   background: color-mix(in oklab, var(--paper-2), var(--accent) 4%);
 }
-.av-grouphead.is-drop,
-.av-group-blank.is-drop {
+.av-grouphead.is-drop {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   color: var(--ink);
   background: color-mix(in oklab, var(--paper-2), var(--accent) 10%);

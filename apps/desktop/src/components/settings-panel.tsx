@@ -254,7 +254,7 @@ export function SettingsPanel({
         <header className="set-head">
           <div>
             <h2>Settings</h2>
-            <p>j/k to move · ←/→ to change · esc to close — applied live and saved</p>
+            <p>j/k to move · ←/→ to change · esc to close</p>
           </div>
           <button className="set-x" onClick={onClose} aria-label="close">
             ×
