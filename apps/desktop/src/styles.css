@@ -516,24 +516,12 @@ body {
 .av-grouphead .av-item-actions {
   margin-left: auto;
 }
-/* Members indent under their header with a guide line — the note title starts
-   where the folder name does (chevron 12 + icon 14 + gaps), so the hierarchy
-   reads as a tree without being one. The line rides each row's ::before and
-   bridges the 2px row gap; the last member of a group stops at its own edge. */
+/* Members indent under their header — the note title starts where the folder
+   name does (chevron 12 + icon 14 + gaps), so the hierarchy reads without a
+   guide line (a vertical rule met the group/root hairline at a corner that
+   never joined up — indentation alone is the file-explorer convention). */
 .av-item.is-nested {
   padding-left: 32px;
-}
-.av-item.is-nested::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 0;
-  bottom: -2px;
-  width: 1px;
-  background: var(--rule-soft);
-}
-.av-item.is-nested:not(:has(+ .av-item.is-nested))::before {
-  bottom: 0;
 }
 /* the hairline between the last group and the loose root notes */
 .av-divider {
