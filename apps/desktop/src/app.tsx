@@ -277,7 +277,6 @@ const NoteRow = memo(function NoteRow({
             }
       }
     >
-      <span className="av-item-bar" />
       <span className="av-item-main">
         <span className="av-item-title">
           <span className="av-item-titletext">{note.title}</span>
@@ -334,7 +333,6 @@ const NoteRow = memo(function NoteRow({
 // `data-dir` doubles as the drop target for the note drag-and-drop below.
 const FolderRow = memo(function FolderRow({
   dir,
-  count,
   collapsed,
   here,
   onToggle,
@@ -344,7 +342,6 @@ const FolderRow = memo(function FolderRow({
   measureRef,
 }: {
   dir: string;
-  count: number;
   collapsed: boolean;
   here: boolean;
   onToggle: (dir: string) => void;
@@ -392,7 +389,6 @@ const FolderRow = memo(function FolderRow({
         <FolderOpen className="av-group-icon" size={14} aria-hidden="true" />
       )}
       <span className="av-group-name">{dir}</span>
-      <span className="av-group-count">{count}</span>
       <span className="av-item-actions">
         <button
           type="button"
@@ -447,42 +443,6 @@ function DividerRow({
   );
 }
 
-// An expanded EMPTY group's body — one muted row that keeps the group visibly
-// a place (and, via data-dir, a drop target for the drag below).
-function BlankRow({
-  dir,
-  top,
-  index,
-  measureRef,
-}: {
-  dir: string;
-  top?: number;
-  index?: number;
-  measureRef?: (el: HTMLElement | null) => void;
-}) {
-  return (
-    <div
-      ref={measureRef}
-      data-index={index}
-      data-dir={dir}
-      className="av-group-blank"
-      style={
-        top === undefined
-          ? undefined
-          : {
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              transform: `translateY(${top}px)`,
-            }
-      }
-    >
-      no notes — drop one here
-    </div>
-  );
-}
-
 // One bundle for everything a sidebar row needs; the callbacks are stable in
 // App (useCallback + latest-refs), so only `now`'s minute tick and `activeId`
 // changes re-render the memoized rows.
@@ -501,7 +461,7 @@ interface RowHandlers {
 // with a note, but a stable prefix keeps the invariant obvious).
 function rowKey(r: SidebarRow): string {
   if (r.kind === "divider") return "divider";
-  return r.kind === "note" ? r.note.id : (r.kind === "folder" ? "d:" : "b:") + r.dir;
+  return r.kind === "note" ? r.note.id : "d:" + r.dir;
 }
 
 function renderRow(
@@ -514,7 +474,6 @@ function renderRow(
       <FolderRow
         key={rowKey(r)}
         dir={r.dir}
-        count={r.count}
         collapsed={r.collapsed}
         here={!!h.activeId && noteDir(h.activeId) === r.dir}
         onToggle={h.onToggleFolder}
@@ -527,17 +486,6 @@ function renderRow(
   }
   if (r.kind === "divider") {
     return <DividerRow key="divider" top={v?.top} index={v?.index} measureRef={v?.measureRef} />;
-  }
-  if (r.kind === "blank") {
-    return (
-      <BlankRow
-        key={rowKey(r)}
-        dir={r.dir}
-        top={v?.top}
-        index={v?.index}
-        measureRef={v?.measureRef}
-      />
-    );
   }
   return (
     <NoteRow
@@ -558,7 +506,7 @@ function renderRow(
 
 // Delegated HTML5 drag-and-drop over the note list. Every row carries data-dir
 // (note rows also data-id), so ONE handler set on the nav resolves any drop
-// target. Two gestures: dropping on a FOLDER (its header, its blank row, or
+// target. Two gestures: dropping on a FOLDER (its header or
 // the root zone / empty space for the notebook root) MOVES the note there;
 // dropping on another NOTE GROUPS the two — a new folder beside the target
 // note, both notes moved in. Neither runs on the drop itself: the hook only
@@ -598,11 +546,10 @@ function resolveDrop(nav: Element, target: Element, from: DragSource): DropHit |
     const targetId = row.getAttribute("data-id") ?? "";
     return targetId && targetId !== from.id ? { kind: "group", targetId, el: row } : null;
   }
-  // A folder header / blank row moves into that folder; anything else = root.
+  // A folder header moves into that folder; anything else = root.
   const dir = target.closest?.("[data-dir]")?.getAttribute("data-dir") ?? "";
   if (dir === from.dir) return null; // its own folder (or the root, for a root note)
-  // Ring the group's header (querySelector finds it before the blank row in
-  // DOM order); a root target rings the root zone instead (nav class).
+  // Ring the group's header; a root target rings the root zone instead (nav class).
   const el = dir ? nav.querySelector(`.av-grouphead[data-dir="${CSS.escape(dir)}"]`) : null;
   return { kind: "move", dir, el };
 }

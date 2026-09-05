@@ -5,8 +5,9 @@
 // where the eye starts): one section per directory in lexicographic order,
 // then a hairline divider, then the loose root notes (no header). A nested
 // dir like "work/projects" is ONE group labeled with its full relative path,
-// not a tree. Empty folders are first-class: they render as a header plus a
-// blank drop-target row. The row model is exhaustive on purpose — both
+// not a tree. Empty folders are first-class: an expanded empty group is just
+// its header with the chevron down (the header is the drop target). The row
+// model is exhaustive on purpose — both
 // sidebar list variants render rows as direct children in row order, which is
 // what keeps scrollRowIntoView's child-index mapping and the virtualizer's
 // count exact (the divider is a row for the same reason).
@@ -15,7 +16,6 @@ import type { NoteMeta } from "./backend/types";
 export type SidebarRow =
   | { kind: "note"; note: NoteMeta; dir: string }
   | { kind: "folder"; dir: string; count: number; collapsed: boolean }
-  | { kind: "blank"; dir: string } // an expanded empty group's drop target
   | { kind: "divider" }; // the hairline between the last group and the root notes
 
 /** The directory a note path lives in ("" for a root note). */
@@ -66,7 +66,6 @@ export function buildSidebarRows(
     const isCollapsed = collapsed.has(dir);
     rows.push({ kind: "folder", dir, count: members.length, collapsed: isCollapsed });
     if (isCollapsed) continue;
-    if (members.length === 0) rows.push({ kind: "blank", dir });
     for (const n of members) rows.push({ kind: "note", note: n, dir });
   }
   const root = byDir.get("") ?? [];

@@ -31,15 +31,16 @@ test.describe("folder groups", () => {
     await expect(page.locator(".av-divider")).toHaveCount(1);
     await expect(nav.locator(".av-divider + .av-item")).toHaveAttribute("data-dir", "");
     await expect(nav.locator("> :last-child")).toHaveAttribute("data-dir", "");
-    // The empty archive group renders its blank drop row.
-    await expect(page.locator('.av-group-blank[data-dir="archive"]')).toBeVisible();
+    // The empty archive group is just its header, expanded (chevron down), no rows under it.
+    await expect(page.locator('.av-grouphead[data-dir="archive"]')).toHaveClass(/is-open/);
+    await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(0);
     // Group members carry their dir (and the nested class that indents them);
     // the journal group holds its two notes.
     await expect(page.locator('.av-item.is-nested[data-dir="journal"]')).toHaveCount(2);
     await expect(page.locator('.av-item.is-nested[data-dir=""]')).toHaveCount(0);
   });
 
-  test("the open note's folder header is marked, and the header shows its icon + count", async ({
+  test("the open note's folder header is marked, and the header shows its icon (no count pill)", async ({
     page,
   }) => {
     await boot(page); // welcome.md (a root note) is open → no header marked
@@ -47,7 +48,7 @@ test.describe("folder groups", () => {
     await page.locator('.av-item[data-dir="journal"]').first().click();
     await expect(page.locator(".av-grouphead.is-here .av-group-name")).toHaveText("journal");
     await expect(page.locator('.av-grouphead[data-dir="journal"] .av-group-icon')).toBeVisible();
-    await expect(page.locator('.av-grouphead[data-dir="journal"] .av-group-count')).toHaveText("2");
+    await expect(page.locator(".av-group-count")).toHaveCount(0);
   });
 
   test("Collapse all / Expand all from a folder menu (and :foldall / :unfoldall)", async ({
@@ -142,7 +143,6 @@ test.describe("folder groups", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-toast")).toContainText("moved to archive");
     await expect(page.locator('.av-item[data-dir="archive"]')).toHaveCount(1);
-    await expect(page.locator('.av-group-blank[data-dir="archive"]')).toHaveCount(0);
     // The finder's secondary line shows the new relative path.
     await page.keyboard.press("ControlOrMeta+p");
     await page.keyboard.type("keymap");
@@ -312,7 +312,7 @@ test.describe("folder groups", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-toast")).toContainText("folder inbox created");
     await expect(page.locator('.av-grouphead[data-dir="inbox"]')).toBeVisible();
-    await expect(page.locator('.av-group-blank[data-dir="inbox"]')).toBeVisible();
+    await expect(page.locator('.av-grouphead[data-dir="inbox"]')).toHaveClass(/is-open/);
     // A separators-only name must not report "created" for a folder that
     // already existed (it would sanitize down to the parent).
     await newFolder.click();
