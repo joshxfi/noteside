@@ -10,9 +10,9 @@ questions.
 
 The fuzzy finder (`⌘P`, `:find`, or `<Space> f`) is how you jump between notes. Type a
 few characters of a note's title or path and it ranks matches instantly, backed by
-Rust [`nucleo`](https://github.com/helix-editor/nucleo), so it stays sub-millisecond
-even on very large notebooks. It also surfaces content matches, so it doubles as a
-quick "where did I write that?".
+Rust [`nucleo`](https://github.com/helix-editor/nucleo). It stays sub-millisecond at
+10,000 notes and takes about a millisecond at 50,000. It also surfaces content
+matches, so it doubles as a quick "where did I write that?".
 
 This is your everyday navigator, so reach for it first. Open it with an empty query and
 it shows your **recents**: notes you open often and recently rank first, with pinned
@@ -46,7 +46,7 @@ There's one find engine behind all of it: vim's `/`, `n` / `N`, and `*` / `#` dr
 same search, and `:noh` clears the highlights.
 
 <Callout title="No index, no database">
-  Search runs entirely in memory. Fuzzy file search is sub-millisecond, and content search is a fast
-  scan that stays quick across thousands of notes. There's nothing to index, rebuild, or keep in
-  sync; your notes stay plain files and search stays instant.
+  Search runs entirely in memory. Fuzzy file search is sub-millisecond at 10,000 notes, and content
+  search is a fast scan that stays quick across thousands of notes. There's nothing to index,
+  rebuild, or keep in sync; your notes stay plain files and search stays instant.
 </Callout>

@@ -152,7 +152,7 @@ const FEATURES = [
   {
     k: "fast & lightweight",
     h: "Native speed, no bloat",
-    p: "A Rust core drawing through your OS's own webview. It launches instantly, stays light on memory, and ships as a small binary. Even fuzzy search across 50,000 notes stays sub-millisecond.",
+    p: "A Rust core drawing through your OS's own webview. It launches instantly, stays light on memory, and ships as a small binary. Fuzzy search across 50,000 notes takes about a millisecond.",
   },
   {
     k: "offline & local-first",

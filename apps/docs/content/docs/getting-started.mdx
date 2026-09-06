@@ -60,7 +60,8 @@ no database. The first time you launch, Noteside asks you to **Open a notebook**
 any folder.
 
 - Every `.md` file in the folder (and its subfolders) becomes a note.
-- `.git/` and `.noteside/` are ignored, so a notebook can live inside a repo.
+- Hidden files and folders (anything starting with a `.`) are skipped, `.git/` and
+  `.noteside/` included, so a notebook can live inside a repo.
 - Edits from outside Noteside (another editor, git, a sync client) reload live.
 
 ### Switching notebooks
