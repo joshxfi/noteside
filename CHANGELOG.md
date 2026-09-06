@@ -1,3 +1,48 @@
+## [1.8.0](https://github.com/joshxfi/noteside/compare/v1.7.1...v1.8.0) (2026-09-06)
+
+### Features
+
+* editor UX — find bar, slash menu, hover grip, link follow, grep goto mapping ([3912398](https://github.com/joshxfi/noteside/commit/3912398f4d8bc94ed2043682bd5a3a662070de97))
+* folders — organize notes into subdirectories with collapsible sidebar groups, move picker, and drag-and-drop ([8ecde33](https://github.com/joshxfi/noteside/commit/8ecde33047317844ee21f66427d98b637faa59e2))
+* folders-first sidebar with legible headers, active-folder cue, indented members, collapse/expand all, notebook-name subline; drag-and-drop confirms a move onto a folder and groups two notes into a new folder when dropped onto a note ([f032c71](https://github.com/joshxfi/noteside/commit/f032c719bc07e212791fd02cb241001896197264))
+* replace the CodeMirror editor core with a Tiptap v3 block editor skeleton ([4727493](https://github.com/joshxfi/noteside/commit/4727493b2abe1605b1a7d84302592c0f31583be1))
+* rich blocks — tables, task lists, KaTeX math, lowlight code, images, callouts ([2a28e97](https://github.com/joshxfi/noteside/commit/2a28e973959b54683cf429597b5f5e04b22e31ea))
+* round-trip hardening — vector suite, html-block passthrough, pin flow specs ([1d66fe0](https://github.com/joshxfi/noteside/commit/1d66fe0f754a1997b3eb755467e9e78929a1dded))
+* table row/column commands + floating toolbar; follow URLs from the caret's trailing edge ([4e216c1](https://github.com/joshxfi/noteside/commit/4e216c11b20497f6397961f1ed8591c2a6eca4e7))
+* **themes:** 20 more schemes — every family that has a usable counterpart upstream now ships both polarities (GitHub, Ayu, Flexoki, Edge, Gruvbox Material, Neovim, Primer, Oxocarbon, Nord, Tomorrow, PaperColor, Selenized), plus Horizon's warm accents (the catalog was hue 150–269 only), Catppuccin Frappé and Sakura; 31 → 51 (30 dark / 21 light) ([55dddf9](https://github.com/joshxfi/noteside/commit/55dddf97f35daf4776680b9db15c81615961dccf))
+* vim subset — modal navigation, line editing, ex bar, escMap, nav extras ([d42d6a6](https://github.com/joshxfi/noteside/commit/d42d6a6a290907818620ecc650fe5149e1e52c74))
+* **vim:** operators with any motion or text object (cw/ciw/di"/d3j/dG), charwise visual, . repeat, r ~ J >> << zz %, normal-mode cursor clamp, Backspace/Enter/Delete as vim keys, one-undo insert sessions, showcmd; exec made state-pure and node-tested ([e78887a](https://github.com/joshxfi/noteside/commit/e78887aa270461b27ba4770cb067959e105fc648))
+* walking skeleton — session flows, config textarea, chords, block CSS, markdown-io ([6da1016](https://github.com/joshxfi/noteside/commit/6da1016afd8881c261a13c2f0ec7cfa6febbdbea))
+
+### Bug Fixes
+
+* asset protocol scope is empty — open_notebook grants the opened folder at runtime ([90fd9d9](https://github.com/joshxfi/noteside/commit/90fd9d97af932b8698d4f8e05ad8197b108a59c3))
+* deterministic follow spec (doc-end caret, focus guard, open poll) ([eb16317](https://github.com/joshxfi/noteside/commit/eb163177f40fe30d8ccb55f0598a6613512c0081))
+* **editor:** vim looks through modifier keydowns (d$ dG ci" fA 5G broke in a real browser — Playwright never fires keydown(Shift)), / n N * park the cursor on the match in normal mode instead of entering visual, Esc closes the slash menu with insert mode, Tab on an un-nestable list item is a no-op; incremental search highlights (31ms→0.07ms/keystroke [@10k](https://github.com/10k) lines with a persisting query), hover grip skips same-block re-measure and hides on scroll, find bar bails on unchanged counts ([404d17a](https://github.com/joshxfi/noteside/commit/404d17a9272327d2b175b1144f6cc5f674e3dc1a))
+* folders hardening — on-disk folder spelling, notebook-switch fence, held-buffer id migration; new note in current folder, New folder button, root drop zone, :fold ([9a60511](https://github.com/joshxfi/noteside/commit/9a60511daec3099f9aedd62e8140e075aaac43f7))
+* k moves up from an empty block — bias boundary probes by the motion direction ([65f0c15](https://github.com/joshxfi/noteside/commit/65f0c1546b8a51868d708dd030f086ead269a01a))
+* pickers re-seed the pointer-motion guard when their rows remount — No/Esc from a confirm or create view no longer hands Enter to the row under the cursor ([a337921](https://github.com/joshxfi/noteside/commit/a33792133bc9e37ab2df76e7628086e847a8cf64))
+* **sidebar:** keep the scroll position across folder toggles — the active-row scroll keys on the open note's id, not its row index (a collapse above it shifted the index and re-scrolled the list to the note on every click); e2e pins scrollTop ([88a6603](https://github.com/joshxfi/noteside/commit/88a66035a530fe98229f0c93571525f6e10153c4))
+* Tab in a table navigates cells and grows a row past the last cell ([d366142](https://github.com/joshxfi/noteside/commit/d3661425ba9b23a5d657c03cc18795e5effafcd5))
+* **themes:** tertiary ink is derived, not a raw slot — base03 is a syntax comment color that vanished as UI text on a third of the catalog (Flexoki Light 1.55, Nord Light 1.61), so it is now deepened toward the body ink by the smallest blend clearing a 2.2 contrast floor; replaces the base04 fallback, which barely moved on Catppuccin and overshot Nord to 9.25 ([629af8a](https://github.com/joshxfi/noteside/commit/629af8ae555732d77bbf894b5e14e0299222d619))
+* turn off Tauri's dragDropEnabled so HTML5 drag-and-drop reaches the webview in the native app (macOS/Windows) ([d89a633](https://github.com/joshxfi/noteside/commit/d89a6335c8cbf41338b650bbdd53e1def92927f5))
+* vertical motion probes reject positions against the motion direction ([1af7926](https://github.com/joshxfi/noteside/commit/1af7926e7066aa69bdb34cb6a9d57b96f2a0179c))
+
+### Polish
+
+* **sidebar:** drop the folder count pill, the empty-folder placeholder row, and the active-row accent bar — an expanded empty folder is just its header with the chevron down; README screenshots regenerated ([716dba9](https://github.com/joshxfi/noteside/commit/716dba9d14fc264c004f1d3d0bfb1ccb17f8100c))
+* **sidebar:** drop the nested-note guide line — indentation alone carries the hierarchy, so the vertical rule no longer meets the group/root hairline at a broken corner; README screenshots regenerated ([ec074d1](https://github.com/joshxfi/noteside/commit/ec074d1c59229abb17ff3f8e2099fd8c53028f91))
+
+### Refactors
+
+* write latest-value refs from effects and derive status-bar, About-row, and finder-preview state at render instead of syncing it in effects ([eb8100d](https://github.com/joshxfi/noteside/commit/eb8100da6170a4bc4cdf7f8724e340b6fa7b51d6))
+
+### Documentation
+
+* AGENTS.md reflects the runtime asset-scope grant ([f7cacc3](https://github.com/joshxfi/noteside/commit/f7cacc3b79fcbd29f5a6bb4050aa805f2659cc3f))
+* rewrite for the block editor and folders — Editor and Folders pages replace Live preview, keybindings regenerated from the command table, README and landing refreshed with new screenshots ([92d7f74](https://github.com/joshxfi/noteside/commit/92d7f74f58932a99c5a366e3bdf3be76e1c53158))
+* the theme catalog is 53 — refresh the counts in the docs index and configuration page, note that most families now ship both polarities, and correct the scheme count in AGENTS.md ([5d87788](https://github.com/joshxfi/noteside/commit/5d87788f14e05419d9026b30a0d6ec045800f671))
+
 ## [1.7.1](https://github.com/joshxfi/noteside/compare/v1.7.0...v1.7.1) (2026-08-12)
 
 ### Bug Fixes
