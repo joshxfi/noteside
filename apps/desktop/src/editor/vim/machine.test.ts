@@ -37,6 +37,66 @@ function feed(keys: string[], start: VimState = initialVimState) {
   return { state, intents, handled };
 }
 
+describe("modifier keydowns", () => {
+  // A real browser fires a keydown for the modifier ITSELF ("Shift") before the
+  // shifted character arrives — the machine must look straight through it, or
+  // every shifted motion/object/seek after an operator or count breaks (d$,
+  // dG, ci", fA, 5G). Playwright's press("$") emits no such event, which is
+  // why the e2e layer alone never caught it.
+  const MODS = ["Shift", "Control", "Alt", "Meta", "CapsLock", "AltGraph"];
+
+  it("are transparent while an operator is pending", () => {
+    const r = feed(["d", "Shift", "$"]);
+    expect(r.intents).toEqual([{ kind: "operate", op: "d", motion: { t: "lineEnd" }, count: 1 }]);
+    expect(feed(["d", "Shift", "G"]).intents[0]).toMatchObject({
+      kind: "operate",
+      motion: { t: "docEnd" },
+    });
+    expect(feed(["c", "Shift", "}"]).intents[0]).toMatchObject({
+      kind: "operate",
+      motion: { t: "para", dir: 1 },
+    });
+  });
+
+  it("are transparent inside a count, a seek, a replace, and a text object", () => {
+    expect(feed(["2", "Shift", "G"]).intents[0]).toMatchObject({
+      motion: { t: "blockJump", n: 2 },
+    });
+    expect(feed(["f", "Shift", "A"]).intents[0]).toMatchObject({
+      motion: { t: "seek", cmd: "f", ch: "A" },
+    });
+    expect(feed(["r", "Shift", "X"]).intents[0]).toEqual({
+      kind: "replaceChar",
+      ch: "X",
+      count: 1,
+    });
+    expect(feed(["d", "i", "Shift", '"']).intents[0]).toMatchObject({
+      kind: "operate",
+      motion: { t: "object", obj: '"', around: false },
+    });
+    expect(feed(["i", "Shift", '"'], visualState).intents.at(-1)).toMatchObject({
+      kind: "move",
+      motion: { t: "object", obj: '"' },
+    });
+  });
+
+  it("never consume the key, and leave the state untouched", () => {
+    for (const k of MODS) {
+      const pending = feed(["2", "d"]).state;
+      const r = feedKey(pending, input(k, { ctrl: k === "Control", shift: k === "Shift" }));
+      expect(r.handled).toBe(false);
+      expect(r.intents).toEqual([]);
+      expect(r.state).toBe(pending);
+    }
+  });
+
+  it("a dead key (macOS Option-e) is swallowed in normal mode — nothing may type", () => {
+    const r = feedKey(initialVimState, input("Dead"));
+    expect(r.handled).toBe(true);
+    expect(r.intents).toEqual([]);
+  });
+});
+
 describe("counts", () => {
   it("accumulates digits and applies to motions", () => {
     const r = feed(["1", "2", "j"]);

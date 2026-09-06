@@ -6,13 +6,26 @@ import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
 import { clearFind, currentFindQuery, findCounts, findNext, findPrev, setFindQuery } from "./find";
 
-export function FindBar(props: { editor: Editor; onClose: () => void }) {
+export function FindBar(props: {
+  editor: Editor;
+  /** vim: the cursor parks ON a match, so Enter searches from past it. */
+  skipCurrent?: boolean;
+  onClose: () => void;
+}) {
   const { editor } = props;
+  const next = () => findNext(editor, props.skipCurrent);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState(() => currentFindQuery(editor));
   const [counts, setCounts] = useState<[number, number]>(() => findCounts(editor));
 
-  const refresh = () => setCounts(findCounts(editor));
+  // Identity-stable when nothing changed: this runs on EVERY editor
+  // transaction while the bar is open (caret moves included), and a fresh
+  // tuple each time re-rendered the bar per keystroke.
+  const refresh = () =>
+    setCounts((prev) => {
+      const fresh = findCounts(editor);
+      return prev[0] === fresh[0] && prev[1] === fresh[1] ? prev : fresh;
+    });
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -45,7 +58,7 @@ export function FindBar(props: { editor: Editor; onClose: () => void }) {
           if (e.key === "Enter") {
             e.preventDefault();
             if (e.shiftKey) findPrev(editor);
-            else findNext(editor);
+            else next();
             refresh();
           } else if (e.key === "Escape") {
             e.preventDefault();
@@ -80,7 +93,7 @@ export function FindBar(props: { editor: Editor; onClose: () => void }) {
         title="next match (Enter)"
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
-          findNext(editor);
+          next();
           refresh();
         }}
       >

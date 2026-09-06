@@ -161,6 +161,10 @@ function RichEditor(props: EditorProps) {
 
   // Mode is owned by the vim layer via onModeChange; non-vim is fixed "text".
   const [mode, setMode] = useState(props.vimMode ? "normal" : "text");
+  // Event-time mirror of the vim mode for the extensions (the slash menu may
+  // open in insert mode only); written from the vim layer's callback, which
+  // fires BEFORE the mode-change transaction the suggestion plugin observes.
+  const modeRef = useRef(props.vimMode ? "normal" : "text");
   // showcmd: the pending vim count/operator ("2d", "ci"); "" when idle.
   const [pending, setPending] = useState("");
   const [findOpen, setFindOpen] = useState(false);
@@ -260,11 +264,15 @@ function RichEditor(props: EditorProps) {
       getTabWidth: () => propsRef.current.tabWidth,
       resolveImageSrc: (src) => resolveImageSrc(src, propsRef.current.notebookRoot),
       onOpenUrl: (url) => propsRef.current.onOpenUrl(url),
+      allowSlashMenu: () => modeRef.current !== "normal" && modeRef.current !== "visual",
       vim: props.vimMode
         ? {
             getEscMap: () => propsRef.current.escMap,
             getTabWidth: () => propsRef.current.tabWidth,
-            onModeChange: setMode,
+            onModeChange: (m) => {
+              modeRef.current = m;
+              setMode(m);
+            },
             onPending: setPending,
             hooks: {
               palette: () => propsRef.current.onCommand("palette"),
@@ -408,7 +416,9 @@ function RichEditor(props: EditorProps) {
       data-vim-mode={props.vimMode ? mode : undefined}
     >
       <div className="av-cm">
-        {findOpen && editor && <FindBar editor={editor} onClose={() => setFindOpen(false)} />}
+        {findOpen && editor && (
+          <FindBar editor={editor} skipCurrent={props.vimMode} onClose={() => setFindOpen(false)} />
+        )}
         <EditorContent editor={editor} className="av-editor-scroll" />
         {exOpen && editor && (
           <ExBar

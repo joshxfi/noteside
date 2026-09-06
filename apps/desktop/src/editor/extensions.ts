@@ -32,6 +32,8 @@ export interface ExtensionOpts {
   resolveImageSrc?: (src: string) => string;
   /** Mod-click / follow target — opens in the system browser. */
   onOpenUrl?: (url: string) => void;
+  /** May the `/` menu open right now? (vim: insert mode only.) */
+  allowSlashMenu?: () => boolean;
   /** The vim layer's options — present only when cfg.vimMode is on (the
    *  parent remounts on a vim-mode change via the editorKey suffix). */
   vim?: VimOptions | null;
@@ -93,6 +95,20 @@ function tabKey(getTabWidth: () => number) {
             () => commands.goToNextCell(),
             () => can().addRowAfter() && chain().addRowAfter().goToNextCell().run(),
             () => commands.sinkListItem("listItem"),
+            // An item that can't nest (the first of its list) swallows Tab —
+            // Notion's behavior; the space fallback below used to land two
+            // spaces INSIDE the bullet text. A code block inside an item still
+            // indents (falls through).
+            () =>
+              commands.command(({ state }) => {
+                const $from = state.selection.$from;
+                if ($from.parent.type.spec.code) return false;
+                for (let d = $from.depth; d > 0; d--) {
+                  const n = $from.node(d).type.name;
+                  if (n === "listItem" || n === "taskItem") return true;
+                }
+                return false;
+              }),
             // raw insertText — insertContent would route through the markdown
             // parser, which eats a whitespace-only string entirely
             () =>
@@ -129,7 +145,7 @@ export function buildExtensions(opts: ExtensionOpts) {
     NsCodeBlock,
     ActiveBlock,
     Find,
-    SlashMenu,
+    SlashMenu.configure({ allow: opts.allowSlashMenu ?? (() => true) }),
     HoverHandle,
     TableToolbar.configure({ dispatch: opts.chords.dispatch }),
     LinkClick.configure({ onOpenUrl: opts.onOpenUrl ?? (() => {}) }),
