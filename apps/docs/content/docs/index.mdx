@@ -3,39 +3,38 @@ title: Introduction
 description: A fast, minimalist, offline notes app.
 ---
 
-**Noteside** is a fast, minimalist desktop notebook. Point and click, or drive
-everything from the keyboard — full vim if you want it, conventional shortcuts if you
-don't. Every note is a plain `.md` file in a folder you choose: grep it, back it up,
-sync it, or walk away with it. Nothing leaves your machine.
+**Noteside** is a fast, minimalist desktop notes app. Point and click, or drive
+everything from the keyboard, with full vim if you want it and conventional shortcuts if
+you don't. Every note is a plain `.md` file in a folder you choose, so you can grep it,
+back it up, sync it, or walk away with it. Nothing leaves your machine.
 
-Writing happens in a **Notion-like block editor** (Tiptap / ProseMirror) inside a
-native **Tauri** window, with a Rust core that treats your files as the source of
-truth — headings, tables, code blocks, and callouts are real blocks you edit in place,
-and what lands on disk is still plain Markdown.
+You write in a **block editor** (Tiptap / ProseMirror) inside a native **Tauri** window.
+Headings, tables, code blocks, and callouts are real blocks you edit in place, and what
+lands on disk is still plain Markdown. A Rust core treats those files as the source of
+truth.
 
 <Callout title="Get the app">
-  Noteside runs on macOS, Windows, and Linux — download the latest build from [GitHub
+  Noteside runs on macOS, Windows, and Linux. Download the latest build from [GitHub
   Releases](https://github.com/joshxfi/noteside/releases/latest), or [build it from
   source](/getting-started). Everything below works today.
 </Callout>
 
 ## What you get
 
-- **Mouse and keyboard, both first-class.** Everything clicks — the sidebar, the
-  palettes, pins, renames, a right-click menu — and everything has a keystroke: real
+- **Mouse and keyboard, both first-class.** Everything clicks: the sidebar, the
+  palettes, pins, renames, the right-click menu. Everything also has a keystroke: real
   vim modes and motions, or the conventional `⌘`-shortcuts you already know.
-- **Files as truth.** Plain Markdown in a folder you pick — keep several notebooks and
-  switch between them — autosaved, written atomically, and reloaded live when something
-  edits them from outside.
-- **Offline & local-first.** No account, no telemetry, no network.
+- **Files as truth.** Plain Markdown in a folder you pick. Keep several notebooks and
+  switch between them. Notes autosave, get written atomically, and reload live when
+  something edits them from outside.
+- **Offline and local-first.** No account, no telemetry, no network.
 - **A real block editor.** Tables, code blocks, callouts, math, images, and task lists
-  are blocks you edit in place — no source pane, no preview pane. The file stays
-  Markdown, so the round-trip back to disk is exact.
+  are blocks you edit in place. No source pane, no preview pane. The file stays
+  Markdown, and the round-trip back to disk is exact.
 - **Folders that are folders.** Group notes into real subdirectories, move them by
   drag-and-drop or from the keyboard, and fold the sidebar down when it gets long.
-- **Fast search and a surface worth reading** — a warm, literary writing area with
-  **53 bundled themes** (Catppuccin, Gruvbox, Nord, Rosé Pine, …) and a live
-  `~/.notesiderc`.
+- **Search that reads from memory**, and a warm, literary writing area with **53 bundled
+  themes** (Catppuccin, Gruvbox, Nord, Rosé Pine, and more) plus a live `~/.notesiderc`.
 
 ## Start here
 
@@ -53,7 +52,7 @@ and what lands on disk is still plain Markdown.
   <Card
     title="Folders"
     href="/folders"
-    description="Real subdirectories — group, move, and fold your notes."
+    description="Real subdirectories. Group, move, and fold your notes."
   />
   <Card
     title="Keybindings"

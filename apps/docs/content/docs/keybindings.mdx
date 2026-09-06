@@ -1,21 +1,20 @@
 ---
 title: Keybindings
-description: Conventional chords, the leader palette, and Noteside's vim subset — all first-class.
+description: Conventional chords, the leader palette, and Noteside's vim subset, all first-class.
 ---
 
 Every command in Noteside is a keystroke away: drive it with the conventional chords
 you already know, or with vim. The chords are always on, so they work even with vim
-enabled. Every command below comes from one table, so the three ways to reach it —
-chord, ex-command, and leader key — never drift apart. (Prefer the mouse? Everything
-here is also clickable — the `⌘⇧P` command palette has a titlebar button and lists it
-all.)
+enabled. Every command below comes from one table, so its chord, its ex-command, and its
+leader key never drift apart. Prefer the mouse? Everything here is also clickable, and
+the `⌘⇧P` command palette has a titlebar button and lists it all.
 
 <Callout title="Three places to search">
   These are easy to mix up:
 
-- `⌘P` — **find files & content** across the notebook (fuzzy)
-- `⌘⇧F` — **search note contents** (grep, with a preview pane)
-- `⌘F` — **find in the current note** (toggles the in-note search bar)
+- `⌘P` **finds files & content** across the notebook (fuzzy)
+- `⌘⇧F` **searches note contents** (grep, with a preview pane)
+- `⌘F` **finds in the current note** (toggles the in-note search bar)
 
 See [Search](/search) for the difference.
 
@@ -49,19 +48,20 @@ panel) and these are all you need. They stay available with vim on, too.
 | `⌘/`          | Keyboard shortcuts           |
 
 `⌘` is Cmd on macOS, Ctrl elsewhere. `⌘L` opens the same which-key menu vim users get
-with `<Space>` — see [the leader palette](#the-space-leader-palette) below. A few
+with `<Space>`; see [the leader palette](#the-space-leader-palette) below. A few
 commands ship with no chord at all (interface size reset, the note and folder
-operations); run those from `⌘⇧P`, or bind a key to them.
+operations). Run those from `⌘⇧P`, or bind a key to them.
 
-Forgot one? `⌘/` opens the cheatsheet — which also **edits** them (see
+Forgot one? `⌘/` opens the cheatsheet, which also **edits** them (see
 [Editing shortcuts](#editing-shortcuts) below). Or remap with `bind <chord> <command>`
-in `~/.notesiderc` — see [Configuration](/configuration).
+in `~/.notesiderc`; see [Configuration](/configuration).
 
 ## Vim
 
-Vim mode is a hand-built **subset**, not a full emulation: the navigation and the
-everyday edit grammar — operators, motions, text objects, `.` — wired straight into the
-block editor. Turn it on with `set vim = on` in `~/.notesiderc`, or in Settings → Keys.
+Vim mode is a hand-built **subset**, not a full emulation. It covers the navigation and
+the everyday edit grammar, meaning operators, motions, text objects, and `.`, wired
+straight into the block editor. Turn it on with `set vim = on` in `~/.notesiderc`, or in
+Settings → Keys.
 
 **Modes.** Normal, insert, and visual. `v` is charwise, `V` linewise; in visual mode `o`
 swaps the ends, `v`/`V` switch flavor, and the same key (or `Esc`) leaves. Selecting text
@@ -73,21 +73,21 @@ insert steps back onto what you just typed.
 jump to a character on the line; `;` and `,` repeat that jump forward and backward. `5G`
 (or `:5`) goes to the 5th top-level block. `Enter` and `Backspace` move like `j` and `h`.
 `zz` / `zt` / `zb` scroll the cursor line to the middle / top / bottom. `Ctrl-d` /
-`Ctrl-u` scroll half a page and `Ctrl-f` / `Ctrl-b` a full one — **macOS only**, since
+`Ctrl-u` scroll half a page and `Ctrl-f` / `Ctrl-b` a full one, **macOS only**, since
 everywhere else Ctrl is the chord modifier.
 
-**Operators.** `d` delete, `c` change, `y` yank, `>` / `<` shift — each followed by any
-motion or text object, with counts on either side (`2d3w` is six words). Doubling an
-operator makes it linewise: `dd cc yy >> <<`. The shorthands are there too: `D` `C` `S`
-`Y` `s` `x` `X`. `cw` changes to the end of the word without eating the blank after it,
-exactly as vim does.
+**Operators.** `d` delete, `c` change, `y` yank, `>` / `<` shift. Each takes any motion
+or text object, with counts on either side (`2d3w` is six words). Doubling an operator
+makes it linewise: `dd cc yy >> <<`. The shorthands are there too: `D` `C` `S` `Y` `s`
+`x` `X`. `cw` changes to the end of the word without eating the blank after it, exactly
+as vim does.
 
 **Text objects.** `iw` / `aw` (word), `ip` (the block), `i"` `i'` `` i` `` (quotes), and
-`i(` `i[` `i{` `i<` (bracket pairs — `ib` / `iB` and the closing brackets work as
+`i(` `i[` `i{` `i<` (bracket pairs, where `ib` / `iB` and the closing brackets work as
 aliases). `a` instead of `i` includes the delimiters. So `ciw`, `di"`, `da(`, `yi{`.
 
 **Edits.** `p` / `P` paste, `r` replaces a character, `~` toggles case, `J` joins lines,
-`u` / `Ctrl-r` undo and redo, `.` repeats the last change — including the text you typed
+`u` / `Ctrl-r` undo and redo, `.` repeats the last change, including the text you typed
 after a `cw` or an `o`. Everything shares one unnamed register. **An insert session is
 one undo step**: `cw` + typing + `Esc`, then `u`, brings the whole word back.
 
@@ -107,18 +107,18 @@ link under the cursor. `Ctrl-[` works as `Esc`. The status bar echoes a pending 
 operator (`2d`, `ci`) while you type a command.
 
 **Leaving insert mode.** `imap jj <Esc>` in `~/.notesiderc` (or the "Leave insert with"
-field in Settings → Keys) drops you back to normal mode when you type `jj` — the keys
-are removed as you go. This is the one mapping directive that actually applies.
+field in Settings → Keys) drops you back to normal mode when you type `jj`, removing the
+keys as you go. This is the one mapping directive that actually applies.
 
 ### Not in the subset
 
 Deliberately out, because they need recording or register plumbing the editor doesn't
 have: named registers, macros, marks, replace mode `R`, blockwise visual (`Ctrl-v`),
 `gu` / `gU`, and `:s`. A `.` after an insert that spanned several lines says it can't
-repeat that. There are no `:set` options either — settings live in `~/.notesiderc` and
+repeat that. There are no `:set` options either; settings live in `~/.notesiderc` and
 the settings panel. Your `nmap` / `vmap` lines round-trip through the config file
-verbatim but are **not applied**; applying a config that contains them says so in the
-toast.
+verbatim but are **not applied**, and applying a config that contains them says so in
+the toast.
 
 ### Ex commands
 
@@ -135,7 +135,7 @@ The `:` bar exact-matches the names below and runs the same command the chord wo
 | `:rm`               | Delete note (asks to confirm)                |
 | `:dup` `:duplicate` | Duplicate note                               |
 | `:rename`           | Rename note                                  |
-| `:pin` / `:unpin`   | Pin / unpin — pinned notes sort to the top   |
+| `:pin` / `:unpin`   | Pin / unpin (pinned notes sort to the top)   |
 | `:reveal`           | Reveal the file in Finder / Explorer         |
 | `:reopen`           | Reopen the last closed note                  |
 | `:follow`           | Open the URL under the cursor                |
@@ -146,7 +146,7 @@ The `:` bar exact-matches the names below and runs the same command the chord wo
 | Command                   | Does                                               |
 | ------------------------- | -------------------------------------------------- |
 | `:mv` `:move`             | Move the note to a folder (opens a picker)         |
-| `:mkdir` `:folder`        | New folder — accepts `a/b` to nest                 |
+| `:mkdir` `:folder`        | New folder (`a/b` nests)                           |
 | `:fold` `:collapse`       | Collapse / expand the open note's folder           |
 | `:foldall`                | Collapse all folders                               |
 | `:unfoldall` `:expandall` | Expand all folders                                 |
@@ -154,7 +154,7 @@ The `:` bar exact-matches the names below and runs the same command the chord wo
 | `:rmdir`                  | Delete that folder and its notes (asks to confirm) |
 
 The folder commands act on the **open note's** folder. Empty folders are managed from
-their header in the sidebar — see [Folders](/folders).
+their header in the sidebar; see [Folders](/folders).
 
 **Tables**
 
@@ -186,19 +186,19 @@ These need the cursor inside a table; the floating table toolbar runs the same f
 <Callout title="Mouse gestures in the sidebar">
   Every note command has a pointer twin. **Right-click** a note (or use the **⋯** button that
   appears when you hover the row) for **Open**, **Pin/Unpin**, **Reveal in Finder/Explorer**,
-  **Duplicate**, **Move to folder…**, **Rename…**, and **Delete** — Delete, Rename and Move open a
+  **Duplicate**, **Move to folder…**, **Rename…**, and **Delete**. Delete, Rename and Move open a
   small confirmation or input dialog. **Folder headers have their own menu**: New note here, New
   subfolder…, Rename folder…, Collapse all, Expand all, and Delete folder. You can also **drag a
-  note onto a folder header** to move it there — Noteside asks you to confirm — or **onto another
-  note** to group both into a new folder, which it asks you to name. A row also reveals a **pin
-  toggle** on hover, **double-click** renames, and the sidebar's right edge **drags to resize**
-  (double-click the edge to reset). See [Folders](/folders) for the details.
+  note onto a folder header** to move it there, which Noteside asks you to confirm, or **onto
+  another note** to group both into a new folder, which it asks you to name. A row also reveals a
+  **pin toggle** on hover, **double-click** renames, and the sidebar's right edge **drags to
+  resize** (double-click the edge to reset). See [Folders](/folders) for the details.
 </Callout>
 
 ## The `<Space>` leader palette
 
-Tap `<Space>` in normal mode — or `⌘L` anywhere, vim or not — to open a which-key menu,
-then press a single key:
+Tap `<Space>` in normal mode, or `⌘L` anywhere, vim or not, to open a which-key menu.
+Then press a single key:
 
 | Key         | Command              |
 | ----------- | -------------------- |
@@ -220,20 +220,20 @@ Destructive entries ask first: `y` or `↵` confirms, `n` backs out, `Esc` close
 
 Three surfaces help you find your way:
 
-- **`⌘⇧P` — command palette.** A searchable list of every command (also `:commands`).
-- **`⌘L` / `<Space>` — which-key menu.** The leader keys above, shown as a menu.
-- **`⌘/` — cheatsheet.** A **searchable** list of every chord and command — type to
+- **`⌘⇧P`, the command palette.** A searchable list of every command (also `:commands`).
+- **`⌘L` / `<Space>`, the which-key menu.** The leader keys above, shown as a menu.
+- **`⌘/`, the cheatsheet.** A **searchable** list of every chord and command. Type to
   filter it down.
 
 ## Editing shortcuts
 
-The `⌘/` cheatsheet doubles as a **live keymap editor** — no config file needed. Open it
-(or **Settings → Keys → Edit keys**). It leads with a **search box**: type to filter the
-list (by command name, group, or `:ex`-command), then `↑`/`↓` (or `Ctrl-n`/`Ctrl-p`) to
-pick a command and:
+The `⌘/` cheatsheet doubles as a **live keymap editor**, with no config file needed.
+Open it (or **Settings → Keys → Edit keys**). It leads with a **search box**: type to
+filter the list (by command name, group, or `:ex`-command), then `↑`/`↓` (or
+`Ctrl-n`/`Ctrl-p`) to pick a command and:
 
-- **Enter** — record a new chord (press the keys; a clash is flagged inline, with Enter
-  to replace / Esc to cancel). Shortcuts must include Cmd/Ctrl/Alt or use a function key
+- **Enter** records a new chord. Press the keys; a clash is flagged inline, with Enter
+  to replace and Esc to cancel. Shortcuts must include Cmd/Ctrl/Alt or use a function key
   so they cannot hijack ordinary typing, Tab, Enter, or cursor movement. While recording,
   **Backspace** unbinds the command instead; with an empty search box, Backspace unbinds
   the selected row outright.
@@ -245,6 +245,6 @@ the editor never drift.
 
 ## Editing keys
 
-A few keys belong to the editor rather than the command table — `Tab` in tables and
+A few keys belong to the editor rather than the command table: `Tab` in tables and
 lists, the `/` slash menu, and opening links (`⌘`-click, `gx`, `⌥↵`). See
 [The editor](/editor).
