@@ -14,13 +14,14 @@ same config. Open the file with `:config`, edit any line, and `:w` to apply.
 
 " appearance
 set theme        = noteside-light
+set sidebar-width = 250
 
 " typography
 set editor-font  = Newsreader
 set font-size    = 19
 set line-height  = 1.75
+set tab-width    = 2
 set ui-scale     = 100%
-set sidebar-width = 250
 
 " cursor
 set cursor       = block
@@ -39,10 +40,11 @@ bind Ctrl-j find
 
 | Setting         | Values                                                                        |
 | --------------- | ----------------------------------------------------------------------------- |
-| `theme`         | a theme id (33 bundled, see below); `light` · `dark` still work               |
+| `theme`         | a theme id (53 bundled, see below); `light` · `dark` still work               |
 | `editor-font`   | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono` · `Geist Mono` |
 | `font-size`     | `16`–`28`                                                                     |
 | `line-height`   | `1.4`–`2.1`                                                                   |
+| `tab-width`     | `1`–`8` (spaces `Tab` inserts, and the code-block indent step)                |
 | `ui-scale`      | `90%`–`130%`                                                                  |
 | `sidebar-width` | `200`–`420` (px, or just drag the sidebar's edge; double-click resets)        |
 | `cursor`        | `block` · `bar` · `underline`                                                 |
@@ -69,8 +71,9 @@ they simply stop being written back out.
   themes.
 - **Typography.** `editor-font` sets the writing surface: serif `Newsreader` or
   `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono` / `Geist Mono`. `font-size`
-  (16–28) and `line-height` (1.4–2.1) tune the reading rhythm. The surrounding
-  interface is always **Geist Mono**; there's no separate interface-font setting.
+  (16–28) and `line-height` (1.4–2.1) tune the reading rhythm, and `tab-width`
+  (1–8) sets how many spaces `Tab` inserts. The surrounding interface is always
+  **Geist Mono**; there's no separate interface-font setting.
 - **Interface size.** `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
   independently of the editor `font-size`.
 - **Sidebar width.** `sidebar-width` (200–420 px). Dragging the sidebar's right edge
