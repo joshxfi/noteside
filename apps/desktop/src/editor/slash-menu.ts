@@ -163,11 +163,25 @@ class SlashPopup {
   }
 }
 
-export const SlashMenu = Extension.create({
+export interface SlashMenuOptions {
+  /** Whether a `/` match may open the menu right now — evaluated by the
+   *  suggestion plugin on every transaction. The editor wires vim's mode
+   *  here: only INSERT mode types, so Esc (which vim handles first and steps
+   *  the caret back INTO the "/he" match) closes the menu with the mode
+   *  instead of leaving it floating over normal mode. */
+  allow: () => boolean;
+}
+
+export const SlashMenu = Extension.create<SlashMenuOptions>({
   name: "nsSlashMenu",
+
+  addOptions() {
+    return { allow: () => true };
+  },
 
   addProseMirrorPlugins() {
     const editor = this.editor;
+    const options = this.options;
     let popup: SlashPopup | null = null;
 
     return [
@@ -176,6 +190,7 @@ export const SlashMenu = Extension.create({
         editor,
         char: "/",
         startOfLine: true,
+        allow: () => options.allow(),
         items: ({ query }) => ITEMS.filter((i) => subseq(query.toLowerCase(), i.title)),
         command: ({ editor: e, range, props }) => props.run(e, range),
         render: () => ({

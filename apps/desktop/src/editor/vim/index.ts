@@ -14,7 +14,7 @@ import type { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import { Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { findNext, findPrev, setFindQuery } from "../find";
+import { FIND_META, findNext, findPrev, setFindQuery } from "../find";
 import { IS_MAC } from "../platform";
 import { adoptSelection, execIntent, visualSelection, type VisualSel } from "./exec";
 import {
@@ -426,7 +426,7 @@ export const Vim = Extension.create<VimOptions>({
             options.hooks[intent.hook]();
             break;
           case "findNext":
-            findNext(editor);
+            findNext(editor, true); // the cursor sits ON the last match — search past it
             break;
           case "findPrev":
             findPrev(editor);
@@ -458,7 +458,7 @@ export const Vim = Extension.create<VimOptions>({
             }
             if (r.searchWord) {
               setFindQuery(editor, r.searchWord.word);
-              if (r.searchWord.dir === 1) findNext(editor);
+              if (r.searchWord.dir === 1) findNext(editor, true);
               else findPrev(editor);
             }
             if (r.notify) options.hooks.notify(r.notify);
@@ -521,9 +521,15 @@ export const Vim = Extension.create<VimOptions>({
           }
 
           // ── normal / visual ──────────────────────────────────────
+          // An Alt-composed character (macOS Option-a → "å"; Windows AltGr,
+          // which Chromium reports as Ctrl+Alt) is a bare printable to vim:
+          // nothing may type in normal mode. An unbound Ctrl+Alt+key reaching
+          // this layer (the chord layer above already claimed bound ones)
+          // would otherwise pass through and insert.
+          const composedChar = e.altKey && e.key.length === 1;
           const result = feedKey(vim, {
             key: e.key,
-            ctrl: e.ctrlKey,
+            ctrl: e.ctrlKey && !composedChar,
             shift: e.shiftKey,
             allowCtrlScroll: IS_MAC, // elsewhere Ctrl IS the chord modifier
           });
@@ -538,6 +544,24 @@ export const Vim = Extension.create<VimOptions>({
         if (vim.mode === "insert") return null;
         const ours = trs.some((tr) => tr.getMeta(key));
         const sel = newState.selection;
+        // A find (the bar's Enter, n/N, */#) selects the whole match. That is
+        // NOT a mouse drag: in normal mode the cursor parks on the match start
+        // and the mode stays normal (otherwise `n x` deleted the whole word);
+        // in visual mode the head extends to it, as vim's `n` does.
+        if (!sel.empty && trs.some((tr) => tr.getMeta(FIND_META))) {
+          const at = clampNormalPos(newState.doc, sel.from);
+          if (vim.mode === "visual" && vsel) {
+            vsel = { ...vsel, head: at };
+            return newState.tr
+              .setSelection(visualSelection(newState.doc, vsel))
+              .scrollIntoView()
+              .setMeta(key, true);
+          }
+          return newState.tr
+            .setSelection(TextSelection.create(newState.doc, at))
+            .scrollIntoView()
+            .setMeta(key, true);
+        }
         if (vim.mode === "visual") {
           if (!ours && trs.some((tr) => tr.selectionSet)) {
             // the mouse (or a command) moved the selection under visual mode

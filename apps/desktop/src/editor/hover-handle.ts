@@ -54,6 +54,17 @@ export const HoverHandle = Extension.create({
             gripPos = null;
           };
 
+          // The scroller moves the blocks under a stationary pointer (a wheel
+          // scroll fires no mousemove), which left the grip floating beside
+          // nothing — hide it, the next pointer move re-places it. Resolved
+          // lazily with the host, for the same mount-order reason.
+          let scroller: Element | null = null;
+          const hookScroller = (host: HTMLElement) => {
+            if (scroller) return;
+            scroller = host.querySelector(".av-editor-scroll");
+            scroller?.addEventListener("scroll", hide, { passive: true });
+          };
+
           const onMove = (e: MouseEvent) => {
             // never while dragging, and not for hovers over the grip itself
             if (e.buttons !== 0 || grip.contains(e.target as Node)) return;
@@ -63,6 +74,10 @@ export const HoverHandle = Extension.create({
               hide();
               return;
             }
+            // Same block as last time and still shown: nothing to re-measure.
+            // Without this every mousemove read two rects and wrote two styles —
+            // a layout flush per pointer event while merely crossing a block.
+            if (pos === gripPos && grip.classList.contains("is-visible")) return;
             const node = view.state.doc.nodeAt(pos);
             if (!node) {
               hide();
@@ -70,6 +85,7 @@ export const HoverHandle = Extension.create({
             }
             const dom = view.nodeDOM(pos) as HTMLElement | null;
             if (!dom || !host) return;
+            hookScroller(host);
             // Viewport-rect deltas: .av-cm doesn't scroll itself (the inner
             // EditorContent wrapper does), so no scrollTop bookkeeping.
             const rect = dom.getBoundingClientRect();
@@ -112,6 +128,7 @@ export const HoverHandle = Extension.create({
             destroy() {
               view.dom.removeEventListener("mousemove", onMove);
               view.dom.removeEventListener("mouseleave", hide);
+              scroller?.removeEventListener("scroll", hide);
               grip.remove();
             },
           };

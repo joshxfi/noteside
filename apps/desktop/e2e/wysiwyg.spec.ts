@@ -103,6 +103,22 @@ test.describe("wysiwyg blocks", () => {
     await expect(rows.nth(3)).toContainText("new row");
   });
 
+  test("Tab nests a list item that can nest and is a no-op on one that can't", async ({ page }) => {
+    await boot(page);
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
+    await caretToEnd(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("- alpha");
+    await page.keyboard.press("Tab"); // the first item has nothing to nest under
+    await expect(page.locator(".av-cm .tiptap li").first()).toHaveText("alpha"); // no stray spaces
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("beta");
+    await page.keyboard.press("Tab");
+    await expect(page.locator(".av-cm .tiptap li li")).toHaveText("beta");
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator(".av-cm .tiptap li li")).toHaveCount(0);
+  });
+
   // Table structure ops: the floating toolbar is the pointer path, the
   // searchable palette the keyboard path — both dispatch the SAME commands.
   test("the table toolbar and palette add/remove rows and columns", async ({ page }) => {

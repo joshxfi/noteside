@@ -122,6 +122,30 @@ const OBJECT_KEYS: Record<string, TextObject> = {
 
 const isSeek = (k: string): k is SeekCmd => k === "f" || k === "t" || k === "F" || k === "T";
 
+/** Keydowns for the modifier keys THEMSELVES. A real keyboard fires
+ *  keydown("Shift") before the shifted character arrives, so these must be
+ *  transparent — looked straight through, no state change — or every shifted
+ *  motion, object, seek, or replacement after an operator or count breaks
+ *  (`d$`, `dG`, `ci"`, `fA`, `5G`). Playwright's press("$") emits no such
+ *  event, which is why only the unit layer can pin this. */
+const MODIFIER_KEYS = new Set([
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+  "AltGraph",
+  "CapsLock",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+  "NumLock",
+  "ScrollLock",
+  "OS",
+]);
+
 /** Everything pending cleared; mode/visual/lastSeek kept. */
 const clearPending = (s: VimState): VimState => ({
   ...s,
@@ -182,6 +206,7 @@ export function withCount(i: Intent, count: number): Intent {
 /** One key in normal or visual mode. (Insert mode never reaches the machine —
  *  the extension handles only Esc/escMap there.) */
 export function feedKey(s: VimState, input: KeyInput): FeedResult {
+  if (MODIFIER_KEYS.has(input.key)) return { state: s, intents: [], handled: false };
   const { ctrl } = input;
   const key = ctrl && input.key === "[" ? "Escape" : input.key;
   const visual = s.mode === "visual";
@@ -224,6 +249,9 @@ export function feedKey(s: VimState, input: KeyInput): FeedResult {
     if (visual) return out([toNormal]);
     return out([]);
   }
+  // a dead key (macOS Option-e, an accent composer) would start a composition
+  // that types into the document — swallowed like any other bare printable
+  if (key === "Dead") return out([]);
 
   // a pending f/t/F/T consumes the NEXT printable as its target
   if (s.awaitSeek) {

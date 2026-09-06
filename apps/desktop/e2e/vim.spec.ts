@@ -192,6 +192,36 @@ test.describe("vim mode", () => {
     await expect(stat(page)).toHaveText(/:4$/);
   });
 
+  test("/ search, n/N and * park the cursor ON the match in NORMAL mode — never visual", async ({
+    page,
+  }) => {
+    // The match is a ranged selection, which the layer used to adopt as a
+    // mouse-drag visual selection — so `n x` deleted the whole word.
+    await bootVim(page);
+    await freshLine(page, "zebra one zebra two zebra");
+    await page.keyboard.press("/");
+    await expect(page.locator(".av-find-input")).toBeFocused();
+    await page.keyboard.type("zebra");
+    await page.keyboard.press("Enter"); // from ON the first match → the second
+    await expect(mode(page)).toHaveText("NORMAL");
+    await expect(stat(page)).toHaveText(/:11$/);
+    await page.keyboard.press("Escape"); // bar closes, highlights stay
+    await expect(mode(page)).toHaveText("NORMAL");
+    await page.keyboard.press("n");
+    await expect(stat(page)).toHaveText(/:21$/);
+    await page.keyboard.press("n"); // wraps
+    await expect(stat(page)).toHaveText(/:1$/);
+    await page.keyboard.press("N");
+    await expect(stat(page)).toHaveText(/:21$/);
+    await page.keyboard.press("x"); // one character, not the match
+    await expect(lastBlock(page)).toHaveText("zebra one zebra two ebra");
+    await expect(mode(page)).toHaveText("NORMAL");
+    await page.keyboard.press("0");
+    await page.keyboard.press("*"); // word under the cursor, next occurrence
+    await expect(stat(page)).toHaveText(/:11$/);
+    await expect(mode(page)).toHaveText("NORMAL");
+  });
+
   test("Space opens the leader palette from normal mode", async ({ page }) => {
     await bootVim(page);
     await page.keyboard.press(" ");
@@ -224,6 +254,46 @@ test.describe("vim mode", () => {
     await page.locator(".av-exbar-input").fill("frobnicate");
     await page.keyboard.press("Enter");
     await expect(page.locator(".av-toast.is-error")).toContainText("frobnicate");
+  });
+
+  test("a held Shift (its own keydown) does not cancel a pending operator or count", async ({
+    page,
+  }) => {
+    // Real keyboards fire keydown("Shift") before "$" — Playwright's press("$")
+    // skips it, so this drives the modifier explicitly.
+    await bootVim(page);
+    await freshLine(page, "alpha beta gamma");
+    await page.keyboard.press("w");
+    await page.keyboard.press("d");
+    await page.keyboard.down("Shift");
+    await page.keyboard.press("Digit4"); // $
+    await page.keyboard.up("Shift");
+    await expect(lastBlock(page)).toHaveText("alpha ");
+
+    await freshLine(page, 'say "hello there" now');
+    await page.keyboard.press("f");
+    await page.keyboard.press("e");
+    await page.keyboard.press("d");
+    await page.keyboard.press("i");
+    await page.keyboard.down("Shift");
+    await page.keyboard.press("Quote"); // "
+    await page.keyboard.up("Shift");
+    await expect(lastBlock(page)).toHaveText('say "" now');
+    await expect(mode(page)).toHaveText("NORMAL");
+  });
+
+  test("Esc closes an open slash menu AND leaves insert mode", async ({ page }) => {
+    // vim handles Esc first and steps the caret back INTO the "/he" match, so
+    // the suggestion stayed active and the menu floated over normal mode.
+    await bootVim(page);
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/he");
+    await expect(page.locator(".av-slash")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(mode(page)).toHaveText("NORMAL");
+    await expect(page.locator(".av-slash")).toHaveCount(0);
   });
 
   test("cw changes a word, typing replaces it, and u undoes the whole change at once", async ({
