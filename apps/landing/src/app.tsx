@@ -99,7 +99,7 @@ const STEPS: Step[] = [
     ],
     cap: (
       <>
-        <span className="k">⌘⇧P</span> opens the command palette — no vim required
+        <span className="k">⌘⇧P</span> opens the command palette, no vim required
       </>
     ),
   },
@@ -136,23 +136,23 @@ function useKeycast() {
 const FEATURES = [
   {
     k: "write in blocks",
-    h: "A Notion-like editor, still just Markdown",
-    p: "Headings, tables, task lists, callouts, code with syntax highlighting, KaTeX math — real blocks you edit in place. Type Markdown shorthand and it becomes the block; press / for everything else. No source pane, no preview toggle: the file on disk is what you see.",
+    h: "Blocks you edit in place",
+    p: "Headings, tables, task lists, callouts, syntax-highlighted code, KaTeX math. Type Markdown shorthand and it becomes the block; press / for the rest. No source pane, no preview toggle.",
   },
   {
     k: "mouse & keyboard, first-class",
-    h: "Point, click — or never leave home row",
-    p: "Everything clicks: the sidebar, the palettes, pins, renames, a right-click menu. And everything has a keystroke: vim modes and motions if you want them, or ⌘-shortcuts, a searchable command palette, and ⌘F find — rebind any chord right from the cheatsheet (⌘/). Your hands choose; the app keeps up.",
+    h: "Point and click, or never leave home row",
+    p: "Everything clicks: the sidebar, the palettes, pins, renames, the right-click menu. Everything also has a keystroke: vim modes and motions if you want them, or ⌘-shortcuts, a searchable command palette, and ⌘F find. Rebind any chord from the cheatsheet (⌘/).",
   },
   {
     k: "folders, not a database",
     h: "Real folders, right in the sidebar",
-    p: "Group notes into actual subdirectories — collapsible sections at the top of the sidebar, the folder you're working in marked. Drag a note onto a folder to move it, or drop one note onto another to gather both into a new one. What you see is the shape on disk.",
+    p: "Group notes into actual subdirectories, shown as collapsible sections at the top of the sidebar with the folder you're working in marked. Drag a note onto a folder to move it, or drop one note onto another to gather both into a new one. The sidebar is the shape on disk.",
   },
   {
     k: "fast & lightweight",
     h: "Native speed, no bloat",
-    p: "A Rust core over your OS's native webview — it launches instantly, stays light on memory, and ships as a small native binary. Even fuzzy search across 50,000 notes stays sub-millisecond.",
+    p: "A Rust core drawing through your OS's own webview. It launches instantly, stays light on memory, and ships as a small binary. Even fuzzy search across 50,000 notes stays sub-millisecond.",
   },
   {
     k: "offline & local-first",
@@ -189,9 +189,8 @@ export function App() {
             A quiet page that keeps up with your hands.
           </h1>
           <p className="mx-auto mt-6 max-w-[39rem] text-[clamp(1.05rem,2.2vw,1.32rem)] leading-[1.55] text-ink-soft text-pretty">
-            Noteside is a fast, minimalist offline notebook — a Notion-like block editor over plain
-            Markdown files. Point and click, or drive everything from the keyboard — vim modes and
-            motions, or the everyday shortcuts you already know.
+            An offline notes app that writes plain Markdown files. Edit in blocks, reach every
+            command with the mouse or the keyboard, and turn on vim keys if you want them.
           </p>
           <div className="mt-[34px] mb-3.5 flex flex-wrap justify-center gap-3" id="get">
             <a className="btn btn-primary" href={dl.primary.href} {...linkProps(dl.primary)}>
@@ -257,7 +256,7 @@ export function App() {
             />
           </div>
           <p className="mt-[22px] text-center font-mono text-[13px] text-ink-faint">
-            The real app, running right here. Click around — or press{" "}
+            The real app, running right here. Click around, or press{" "}
             <b className="text-accent">⌘⇧P</b> for every command and{" "}
             <b className="text-accent">⌘P</b> to jump anywhere.
           </p>
@@ -266,7 +265,7 @@ export function App() {
         <section className="wrap border-t border-rule-soft pt-[30px] pb-24" id="features">
           <div className="reveal mb-[46px] text-center">
             <p className={eyebrow}>Why Noteside</p>
-            <h2 className={sectionH2}>Fast, focused, and out of your way.</h2>
+            <h2 className={sectionH2}>Fast, and out of your way.</h2>
           </div>
           <div className="reveal grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-rule-soft bg-rule-soft max-sm:grid-cols-1">
             {FEATURES.map((f) => (

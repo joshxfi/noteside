@@ -6,32 +6,32 @@ description: Find notes by name, search inside them, or jump within the current 
 Noteside has three distinct search surfaces. They look similar but answer different
 questions.
 
-## Find files & content — `⌘P`
+## Find files & content (`⌘P`)
 
 The fuzzy finder (`⌘P`, `:find`, or `<Space> f`) is how you jump between notes. Type a
-few characters of a note's title or path and it ranks matches instantly — backed by
+few characters of a note's title or path and it ranks matches instantly, backed by
 Rust [`nucleo`](https://github.com/helix-editor/nucleo), so it stays sub-millisecond
 even on very large notebooks. It also surfaces content matches, so it doubles as a
 quick "where did I write that?".
 
-This is your everyday navigator — reach for it first. Open it with an empty query and
-it shows your **recents**: notes you open often and recently rank first (pinned notes
-stay on top), so your working set is always a `⌘P ↵` away. Typed queries get the same
-gentle nudge — near-ties break toward the notes you actually use.
+This is your everyday navigator, so reach for it first. Open it with an empty query and
+it shows your **recents**: notes you open often and recently rank first, with pinned
+notes on top, so your working set is always a `⌘P ↵` away. Typed queries get the same
+gentle nudge, and near-ties break toward the notes you actually use.
 
-## Search note contents — `⌘⇧F`
+## Search note contents (`⌘⇧F`)
 
 Content search (`⌘⇧F`, `:grep`, or `<Space> g`) scans the text of every note and
 shows matching lines with a live preview pane. It supports three modes:
 
-- **Plain** — literal substring
-- **Regex** — full regular expressions
-- **Fuzzy** — loose, typo-tolerant matching
+- **Plain.** Literal substring.
+- **Regex.** Full regular expressions.
+- **Fuzzy.** Loose, typo-tolerant matching.
 
 Use this when you want to see the matching lines in context across the whole
 notebook, not just jump to a file.
 
-## Find in the current note — `⌘F`
+## Find in the current note (`⌘F`)
 
 `⌘F` opens a find bar docked at the top of the note, scoped to the note you have open.
 Type to highlight every match; `Enter` and `⇧Enter` (or the `‹` `›` buttons) step
@@ -39,14 +39,14 @@ through them, and so do `F3` and `⇧F3` from anywhere in the editor. The counte
 which match you're on out of how many.
 
 `Esc` closes the bar but **keeps the highlights lit**, so `F3` keeps cycling after the
-bar is gone — vim's `hlsearch` behavior. The `✕` button clears the highlights and
-closes.
+bar is gone, which is vim's `hlsearch` behavior. The `✕` button clears the highlights
+and closes.
 
 There's one find engine behind all of it: vim's `/`, `n` / `N`, and `*` / `#` drive the
 same search, and `:noh` clears the highlights.
 
 <Callout title="No index, no database">
-  Search runs entirely in memory — fuzzy file search is sub-millisecond and content search is a fast
-  scan that stays quick across thousands of notes. Nothing to index, rebuild, or keep in sync; your
-  notes stay plain files and search stays instant.
+  Search runs entirely in memory. Fuzzy file search is sub-millisecond, and content search is a fast
+  scan that stays quick across thousands of notes. There's nothing to index, rebuild, or keep in
+  sync; your notes stay plain files and search stays instant.
 </Callout>

@@ -1,14 +1,15 @@
 ---
 title: Folders
-description: Organize notes into real subdirectories — group, move, and fold them from the mouse or the keyboard.
+description: Organize notes into real subdirectories. Group, move, and fold them from the mouse or the keyboard.
 ---
 
 A folder in Noteside is a **real subdirectory** of your notebook. Moving a note moves the
-`.md` file; the filename stays the same. Nothing is a tag, a database row, or a symlink —
-open the notebook in Finder or `ls` it and you'll see exactly what the sidebar shows.
+`.md` file; the filename stays the same. Nothing is a tag, a database row, or a symlink.
+Open the notebook in Finder or `ls` it and you'll see exactly what the sidebar shows.
 
 Folders nest as deep as you like. A nested folder is shown as **one group** labeled with
-its full path — `work/projects` is a single section, not a tree you have to unfold twice.
+its full path, so `work/projects` is a single section rather than a tree you have to
+unfold twice.
 
 `⌘` is Cmd on macOS, Ctrl elsewhere. Everything on this page works with the mouse and
 with the keyboard.
@@ -19,15 +20,15 @@ Folder groups come first, in alphabetical order. Then a hairline, then the loose
 that live at the notebook root.
 
 Each group has a header: a chevron, a folder icon, and the folder's name. Click the
-header — or press `Enter`/`Space` on it — to collapse or expand the group. The folder
+header, or press `Enter`/`Space` on it, to collapse or expand the group. The folder
 holding the note you have open is highlighted in the accent color, so you can tell where
 you are even when the note's own row is scrolled out of sight. Notes inside a folder are
-indented under it. An empty folder is just its header: expand it and
-the chevron turns down with nothing beneath — it's still a place you can drop a note.
+indented under it. An empty folder is just its header: expand it and the chevron turns
+down with nothing beneath, and it's still a place you can drop a note.
 
 `⌘J` / `⌘K` step to the next and previous note in the order you see them, skipping over
 anything hidden inside a collapsed group. Which groups are collapsed is remembered per
-notebook, on that machine — it isn't part of your config file.
+notebook, on that machine. It isn't part of your config file.
 
 <Callout title="Pinned notes stay in their folder">
   A pinned note floats to the top of its own group, not to the top of the sidebar. Pin inside a
@@ -36,15 +37,15 @@ notebook, on that machine — it isn't part of your config file.
 
 ## Making a folder
 
-The **New folder** button sits in the sidebar footer, next to **New note** — that's the
+The **New folder** button sits in the sidebar footer, next to **New note**. That's the
 one always-visible way to make your first folder. From the keyboard it's `:mkdir` (also
 `:folder`), or **New folder…** in the command palette. A name with a slash in it nests:
 typing `work/projects` creates both levels.
 
-Right-click a folder header — or click the `⋯` button that appears when you hover it —
+Right-click a folder header, or click the `⋯` button that appears when you hover it,
 for the folder menu:
 
-- **New note here** — a new note in that folder
+- **New note here**, a new note in that folder
 - **New subfolder…**
 - **Rename folder…**
 - **Collapse all** / **Expand all**
@@ -53,7 +54,7 @@ for the folder menu:
 ## Where new notes go
 
 A new note (`⌘N`, `:new`, or the **New note** button) lands in the folder of the note you
-currently have open. With no note open — or with a root note open — it goes to the
+currently have open. With no note open, or with a root note open, it goes to the
 notebook root. Use a folder header's **New note here** to aim it somewhere else.
 
 ## Moving a note
@@ -63,20 +64,20 @@ Right-click a note (or use its `⋯` button) → **Move to folder…**. From the
 
 The picker lists every folder in the notebook, plus:
 
-- **Notebook root** — move the note back out to the top level
-- **New folder…** — type a name and Noteside creates the folder and moves the note into
-  it in one step
+- **Notebook root**, to move the note back out to the top level
+- **New folder…**, where you type a name and Noteside creates the folder and moves the
+  note into it in one step
 
 Moving the note you're editing keeps your cursor where it is and carries any unsaved
 edits with it.
 
 ## Drag and drop
 
-Drag a note row onto a **folder header** to move it there. Noteside asks first — `Enter`
-confirms, `Esc` leaves the note where it was — so a slip while clicking a row never
-relocates a file. Dragging a note _out_ of a folder reveals a **notebook root · drop
-here** zone at the bottom of the list; dropping there moves it to the top level. Dropping
-a note back onto its own folder does nothing.
+Drag a note row onto a **folder header** to move it there. Noteside asks first, with
+`Enter` to confirm and `Esc` to leave the note where it was, so a slip while clicking a
+row never relocates a file. Dragging a note _out_ of a folder reveals a **notebook root ·
+drop here** zone at the bottom of the list; dropping there moves it to the top level.
+Dropping a note back onto its own folder does nothing.
 
 Drag a note onto **another note** and Noteside offers to group them: type a folder name
 and both notes move into it. The new folder is created next to the note you dropped onto,
@@ -84,11 +85,11 @@ so dropping onto a note that lives in `journal` gives you `journal/<name>`.
 
 ## Renaming and deleting
 
-Renaming a folder renames the directory on disk; every note inside follows it, and if one
+Renaming a folder renames the directory on disk. Every note inside follows it, and if one
 of them is the note you're editing, your buffer comes along too.
 
 Deleting a folder deletes everything inside it. Noteside confirms first and tells you how
-many notes are about to go — it's permanent, with no trash.
+many notes are about to go. It's permanent, with no trash.
 
 ## Folder commands
 
@@ -107,12 +108,12 @@ menu covers every folder, empty ones included. All of them are in the command pa
 too.
 
 With folders sitting above the loose notes, a notebook with many open groups puts the
-root notes a long scroll away — `:foldall` and then opening the one group you want is the
+root notes a long scroll away. `:foldall`, then opening the one group you want, is the
 fast way back.
 
 ## Notebooks vs. folders
 
 A **notebook** is the whole folder you opened; folders are the subdirectories inside it.
-The line under the Noteside wordmark in the sidebar shows the open notebook's name —
-click it to switch notebooks (the same thing `⌘O` does). See
+The line under the Noteside wordmark in the sidebar shows the open notebook's name.
+Click it to switch notebooks, the same thing `⌘O` does. See
 [Getting started](/getting-started) for more on notebooks.

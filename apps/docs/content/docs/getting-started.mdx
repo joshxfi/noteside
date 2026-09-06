@@ -11,43 +11,43 @@ or run it from source.
 Grab the latest installer for your platform from [GitHub
 Releases](https://github.com/joshxfi/noteside/releases/latest):
 
-- **macOS** — `.dmg` (a separate build for Apple Silicon and Intel)
-- **Windows** — the `.msi` or `.exe` setup
-- **Linux** — `.AppImage`, `.deb`, or `.rpm`
+- **macOS.** A `.dmg`, with separate builds for Apple Silicon and Intel.
+- **Windows.** The `.msi` or `.exe` setup.
+- **Linux.** `.AppImage`, `.deb`, or `.rpm`.
 
 <Callout title="First launch">
   The builds aren't code-signed yet, so your OS shows a one-time warning on first launch. The app
-  isn't broken — your system just can't verify an unsigned download. Signing is on the roadmap.
+  isn't broken; your system just can't verify an unsigned download. Signing is on the roadmap.
 </Callout>
 
-**macOS** reports the app as _"damaged and can't be opened."_ It isn't damaged — that's Gatekeeper
-refusing an unsigned, quarantined download (more strictly on Apple Silicon). Drag **Noteside** into
+**macOS** reports the app as _"damaged and can't be opened."_ It isn't damaged. That's Gatekeeper
+refusing an unsigned, quarantined download, more strictly on Apple Silicon. Drag **Noteside** into
 `/Applications`, then clear the quarantine flag:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Noteside.app
 ```
 
-It opens normally after that. Right-click → **Open** does _not_ clear the "damaged" message — only
+It opens normally after that. Right-click → **Open** does _not_ clear the "damaged" message. Only
 removing the quarantine flag does.
 
-**Windows** — click **More info → Run anyway** on the SmartScreen prompt.
+**Windows** shows a SmartScreen prompt. Click **More info → Run anyway**.
 
 ## Build from source
 
 Prefer to run from source, or want to hack on Noteside? You'll need:
 
-- **Node 24** and **pnpm 11** — run `corepack enable` (the repo pins both)
-- **Rust** (stable) + the [Tauri 2 system dependencies](https://v2.tauri.app/start/prerequisites/)
+- **Node 24** and **pnpm 11**. Run `corepack enable`; the repo pins both.
+- **Rust** (stable) plus the [Tauri 2 system dependencies](https://v2.tauri.app/start/prerequisites/).
 
 ```bash
 pnpm install
-pnpm dev:desktop    # the desktop app — native window + Vite HMR
+pnpm dev:desktop    # the desktop app: native window + Vite HMR
 ```
 
 <Callout title="No Rust toolchain?">
   `pnpm --filter @noteside/desktop dev:web` runs the UI in a plain browser against an in-memory mock
-  backend — handy for trying it out or doing frontend work without a native window. Your edits won't
+  backend, handy for trying it out or doing frontend work without a native window. Your edits won't
   touch disk in this mode.
 </Callout>
 
@@ -55,9 +55,9 @@ To build your own installer: `pnpm tauri build`.
 
 ## Open a notebook
 
-A **notebook** is just a folder of Markdown files that you choose — there's no
-import step and no database. The first time you launch, Noteside asks you to **Open a
-notebook**; pick any folder.
+A **notebook** is a folder of Markdown files that you choose. There's no import step and
+no database. The first time you launch, Noteside asks you to **Open a notebook**; pick
+any folder.
 
 - Every `.md` file in the folder (and its subfolders) becomes a note.
 - `.git/` and `.noteside/` are ignored, so a notebook can live inside a repo.
@@ -65,12 +65,12 @@ notebook**; pick any folder.
 
 ### Switching notebooks
 
-Keep as many notebooks as you like and switch between them. Press `⌘O` — or the folder
-button in the toolbar, or `:notebook` — to open the **notebook switcher**, a list of the
+Keep as many notebooks as you like and switch between them. Press `⌘O`, or use the folder
+button in the toolbar, or `:notebook`, to open the **notebook switcher**, a list of the
 ones you've opened recently (most recent first). From there:
 
 - **Enter** switches to the highlighted notebook.
-- **New notebook…** creates a fresh folder — type a name and pick where it lives.
+- **New notebook…** creates a fresh folder. Type a name and pick where it lives.
 - **Open folder…** opens any existing folder as a notebook.
 
 Noteside reopens whichever notebook you had open last the next time you launch.
@@ -78,7 +78,7 @@ Noteside reopens whichever notebook you had open last the next time you launch.
 ## Your first note
 
 Press `⌘N` (or `:new`, or `<Space> n`) to create a note. It lands in the folder of the
-note you have open, or at the notebook root if you don't have one open — see
+note you have open, or at the notebook root if you don't have one open. See
 [Folders](/folders) for how to organize and move notes around. New notes start as
 `Untitled`; a note's **title** is taken from, in order:
 
@@ -86,24 +86,25 @@ note you have open, or at the notebook root if you don't have one open — see
 2. otherwise the first heading or non-blank line,
 3. otherwise the prettified filename.
 
-So just typing `# My ideas` at the top names the note "My ideas" in the sidebar. You can
-also **rename** a note directly — `:rename`, or right-click it in the sidebar →
-**Rename…** — and Noteside updates the title for you. Either way, on an explicit save
+So typing `# My ideas` at the top names the note "My ideas" in the sidebar. You can
+also **rename** a note directly with `:rename`, or by right-clicking it in the sidebar →
+**Rename…**, and Noteside updates the title for you. Either way, on an explicit save
 (`:w` / `⌘S`, never autosave) the file on disk is renamed to match the title too
-(`untitled.md` → `my-ideas.md`, staying in its folder), so filenames keep up with your
-notes. (A `title:` in YAML frontmatter wins over the heading if you'd rather set it
-explicitly.)
+(`untitled.md` becomes `my-ideas.md`, staying in its folder), so filenames keep up with
+your notes. A `title:` in YAML frontmatter wins over the heading if you'd rather set it
+explicitly.
 
 ## Saving
 
-Noteside **autosaves** about a second after you stop typing — your words are always
-on disk. You can still save explicitly with `:w` or `⌘S` (handy before quitting), and:
+Noteside **autosaves** about a second after you stop typing, so your words are always
+on disk. You can still save explicitly with `:w` or `⌘S`, which is handy before quitting.
+Also:
 
-- `:q` — close the note (back to the notebook)
-- `:rm` — delete the current note. Every delete — `:rm`, the `<Space> d` leader, the
-  command palette, or a **right-click on a note → Delete** — asks you to confirm first,
-  since deletes are permanent (no trash). That right-click menu also has **Duplicate**
-  and **Reveal in Finder/Explorer**.
+- `:q` closes the note and takes you back to the notebook.
+- `:rm` deletes the current note. Every delete asks you to confirm first, whether it came
+  from `:rm`, the `<Space> d` leader, the command palette, or a **right-click on a note →
+  Delete**, since deletes are permanent (there's no trash). That right-click menu also
+  has **Duplicate** and **Reveal in Finder/Explorer**.
 
 Next: get to know the [editor](/editor), organize with [folders](/folders), learn the
 [keybindings](/keybindings), or theme your [`~/.notesiderc`](/configuration).

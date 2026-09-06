@@ -4,7 +4,7 @@ description: Theme, typography, and the ~/.notesiderc config file.
 ---
 
 Everything is configurable from a live **`~/.notesiderc`** buffer (vimrc-flavored, in
-your home directory) or the in-app **Settings** panel — they're two editors over the
+your home directory) or the in-app **Settings** panel. They're two editors over the
 same config. Open the file with `:config`, edit any line, and `:w` to apply.
 
 ## Example
@@ -39,59 +39,60 @@ bind Ctrl-j find
 
 | Setting         | Values                                                                        |
 | --------------- | ----------------------------------------------------------------------------- |
-| `theme`         | a theme id (33 bundled — see below); `light` · `dark` still work              |
+| `theme`         | a theme id (33 bundled, see below); `light` · `dark` still work               |
 | `editor-font`   | `Newsreader` · `Spectral` · `IBM Plex Mono` · `JetBrains Mono` · `Geist Mono` |
 | `font-size`     | `16`–`28`                                                                     |
 | `line-height`   | `1.4`–`2.1`                                                                   |
 | `ui-scale`      | `90%`–`130%`                                                                  |
-| `sidebar-width` | `200`–`420` (px — or just drag the sidebar's edge; double-click resets)       |
+| `sidebar-width` | `200`–`420` (px, or just drag the sidebar's edge; double-click resets)        |
 | `cursor`        | `block` · `bar` · `underline`                                                 |
 | `cursor-blink`  | `on` · `off`                                                                  |
 | `auto-update`   | `on` · `off`                                                                  |
 | `vim`           | `on` · `off`                                                                  |
 
 If your `~/.notesiderc` still has `live-preview` or `relative-numbers` lines from an
-older version, they're read and ignored — no error, nothing to clean up. The block
+older version, they're read and ignored, with no error and nothing to clean up. The block
 editor has no source/preview split and no gutter, so neither setting does anything;
 they simply stop being written back out.
 
 ## Appearance
 
-- **Theme** — 53 bundled themes: **Noteside Light/Dark** (the warm paper default) plus
-  a curated set of [base16](https://github.com/tinted-theming/schemes) palettes —
+- **Theme.** 53 bundled themes: **Noteside Light/Dark** (the warm paper default) plus
+  a curated set of [base16](https://github.com/tinted-theming/schemes) palettes.
   Catppuccin, Gruvbox, Nord, Rosé Pine, Tokyo Night, Everforest, Kanagawa, Solarized,
   One, Dracula, GitHub, Ayu, Horizon, Neovim, Primer, and more; most families ship
   both a dark and a light variant. Open the picker with `:theme` (or `:colorscheme`),
-  `<Space> t`, or **Settings → Theme**: two columns (dark · light), it opens on your
+  `<Space> t`, or **Settings → Theme**. It has two columns (dark · light), opens on your
   current theme, **live-previews** as you move, applies on `Enter`, and reverts on
   `Esc`. In the file, `theme` takes a theme id (`catppuccin-mocha`, `gruvbox-dark`, …)
   or a label; the old `light` / `dark` values still work as aliases for the Noteside
   themes.
-- **Typography** — `editor-font` sets the writing surface: serif `Newsreader` or
+- **Typography.** `editor-font` sets the writing surface: serif `Newsreader` or
   `Spectral`, or mono `IBM Plex Mono` / `JetBrains Mono` / `Geist Mono`. `font-size`
   (16–28) and `line-height` (1.4–2.1) tune the reading rhythm. The surrounding
-  interface is always **Geist Mono** — there's no separate interface-font setting.
-- **Interface size** — `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
+  interface is always **Geist Mono**; there's no separate interface-font setting.
+- **Interface size.** `ui-scale` (90%–130%) scales the sidebar, panels, and UI chrome,
   independently of the editor `font-size`.
-- **Sidebar width** — `sidebar-width` (200–420 px). Dragging the sidebar's right edge
+- **Sidebar width.** `sidebar-width` (200–420 px). Dragging the sidebar's right edge
   writes the same setting; double-clicking the edge resets it.
-- **Updates** — `auto-update` (on by default) checks GitHub for a newer release on
-  launch, throttled to once a day. It never installs anything — a found update just
+- **Updates.** `auto-update` (on by default) checks GitHub for a newer release on
+  launch, throttled to once a day. It never installs anything. A found update just
   shows a dot on the **Settings** button and a download link in **Settings → About**.
   Turn it off to keep the app fully offline.
 
 ## Key mappings
 
-- **Insert-mode escape** — `imap <keys> <Esc>` still works, and it's the one vim mapping
+- **Insert-mode escape.** `imap <keys> <Esc>` still works, and it's the one vim mapping
   Noteside applies: `imap jj <Esc>` leaves insert mode when you type `jj`.
-- **Other vim mappings** — `nmap` / `vmap` / `:map` lines are **kept in the file
+- **Other vim mappings.** `nmap` / `vmap` / `:map` lines are **kept in the file
   verbatim** but are **not applied**. Noteside's vim layer is a hand-built subset, not a
   full emulation, so it has nowhere to hang them. Applying a config that contains them
   says so instead of pretending they took effect.
-- **Chord rebinds** — `bind <chord> <command-id>` remaps a conventional chord;
+- **Chord rebinds.** `bind <chord> <command-id>` remaps a conventional chord;
   `bind none <command-id>` unbinds it. You can also rebind live in the cheatsheet
-  (`⌘/`) — see [Keybindings](/keybindings); it writes the same `bind` lines. A chord has
-  to include Cmd/Ctrl/Alt or be an F-key, so a rebind can never swallow ordinary typing.
+  (`⌘/`), which writes the same `bind` lines; see [Keybindings](/keybindings). A chord
+  has to include Cmd/Ctrl/Alt or be an F-key, so a rebind can never swallow ordinary
+  typing.
 
 The command ids are: `find`, `grep`, `search`, `searchNext`, `searchPrev`, `commands`,
 `palette`, `notebooks`, `new`, `duplicate`, `rename`, `pin`, `unpin`, `reveal`, `move`,
