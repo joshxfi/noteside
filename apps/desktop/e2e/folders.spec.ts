@@ -86,6 +86,35 @@ test.describe("folder groups", () => {
     await expect(page.locator('.av-item[data-dir="journal"]')).toHaveCount(2);
   });
 
+  test("toggling a folder above the open note leaves the sidebar scroll alone", async ({
+    page,
+  }) => {
+    // The active-row scroll keys on the open note's IDENTITY, not its row index:
+    // a collapse above the open note shifts its index, and re-scrolling it into
+    // view on every toggle made the list jump down each click. A short viewport
+    // so the list scrolls, welcome.md (open at boot) parked below the fold; the
+    // ideas group (one member) is the second row, so its header is fully on
+    // screen at scrollTop 0 — a clipped header would make Playwright's click
+    // nudge the list itself.
+    await page.setViewportSize({ width: 1000, height: 440 });
+    await boot(page);
+    const nav = page.locator(".av-list");
+    await nav.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await expect(nav).toHaveJSProperty("scrollTop", 0);
+    const header = page.locator('.av-grouphead[data-dir="ideas"]');
+    await header.click();
+    await expect(page.locator('.av-item[data-dir="ideas"]')).toHaveCount(0);
+    await expect(nav).toHaveJSProperty("scrollTop", 0);
+    await header.click();
+    await expect(page.locator('.av-item[data-dir="ideas"]')).toHaveCount(1);
+    await expect(nav).toHaveJSProperty("scrollTop", 0);
+    // Opening ANOTHER note still brings its row on screen.
+    await page.keyboard.press("ControlOrMeta+j");
+    await expect(page.locator(".av-item.is-active")).toBeInViewport();
+  });
+
   test("opening a note inside a collapsed group auto-expands it", async ({ page }) => {
     await boot(page);
     await page.locator('.av-grouphead[data-dir="journal"]').click();
