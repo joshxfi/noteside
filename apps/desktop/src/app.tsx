@@ -640,11 +640,26 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
   }, []);
 }
 
-// The plain list for typical notebooks. Keeps the active row on screen: Mod-j /
-// Mod-k step through notes without touching the scroll position, so without this
-// the selection walks off the fold (the virtual list below already handles it).
-// Rows render as DIRECT children of the nav in row-model order — the invariant
-// scrollRowIntoView's container.children[index] mapping depends on.
+// Both lists keep the active row on screen when the OPEN note changes: Mod-j /
+// Mod-k step through notes without touching the scroll position, so without
+// this the selection walks off the fold. The effects key on the note's
+// IDENTITY (`shownFor`), never its row index — collapsing or expanding a group
+// above the active note shifts every index below it (so does an autosave,
+// which floats the note to the top of its group), and an index-keyed effect
+// re-scrolled the active row into view on every folder toggle: the list
+// "jumped down" each click (user-flagged 2026-09-05). A note opened inside a
+// collapsed group has no row until App expands the group, so the scroll waits
+// for the row (the id stays unmarked while the index is -1) and fires once.
+// Written twice rather than as a hook taking the scroller: the virtualizer
+// may not flow into a hook argument (react/incompatible-library).
+const activeRowIndex = (rows: SidebarRow[], activeId: string | null) =>
+  activeId ? rows.findIndex((r) => r.kind === "note" && r.note.id === activeId) : -1;
+const needsScroll = (activeId: string | null, activeIndex: number, shownFor: string | null) =>
+  activeIndex >= 0 && !!activeId && activeId !== shownFor;
+
+// The plain list for typical notebooks. Rows render as DIRECT children of the
+// nav in row-model order — the invariant scrollRowIntoView's
+// container.children[index] mapping depends on.
 function PlainNoteList({
   rows,
   handlers,
@@ -655,12 +670,14 @@ function PlainNoteList({
   dnd: ListDnd;
 }) {
   const listRef = useRef<HTMLElement>(null);
-  const activeIndex = handlers.activeId
-    ? rows.findIndex((r) => r.kind === "note" && r.note.id === handlers.activeId)
-    : -1;
+  const shownFor = useRef<string | null>(null);
+  const activeId = handlers.activeId;
+  const activeIndex = activeRowIndex(rows, activeId);
   useEffect(() => {
-    if (activeIndex >= 0) scrollRowIntoView(listRef.current, activeIndex);
-  }, [activeIndex]);
+    if (!needsScroll(activeId, activeIndex, shownFor.current)) return;
+    shownFor.current = activeId;
+    scrollRowIntoView(listRef.current, activeIndex);
+  }, [activeId, activeIndex]);
 
   return (
     <nav className="av-list" ref={listRef} aria-label="Notes" {...dnd}>
@@ -693,17 +710,15 @@ function VirtualNoteList({
     getItemKey: (i) => rowKey(rows[i]),
     overscan: 10,
   });
-  const activeIndex = useMemo(
-    () =>
-      handlers.activeId
-        ? rows.findIndex((r) => r.kind === "note" && r.note.id === handlers.activeId)
-        : -1,
-    [rows, handlers.activeId],
-  );
+  const shownFor = useRef<string | null>(null);
+  const activeId = handlers.activeId;
+  const activeIndex = activeRowIndex(rows, activeId);
   useEffect(() => {
-    if (activeIndex >= 0) virt.scrollToIndex(activeIndex, { align: "auto" });
+    if (!needsScroll(activeId, activeIndex, shownFor.current)) return;
+    shownFor.current = activeId;
+    virt.scrollToIndex(activeIndex, { align: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex]);
+  }, [activeId, activeIndex]);
 
   return (
     <nav className="av-list" ref={scrollRef} aria-label="Notes" {...dnd}>
