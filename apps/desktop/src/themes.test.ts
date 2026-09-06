@@ -128,11 +128,29 @@ describe("schemeToPalette", () => {
     expect(v["--paper-3"]).not.toBe(p.base02);
   });
 
-  it("rescues near-invisible faint ink by falling back to base04", () => {
+  it("deepens near-invisible faint ink toward the body ink until it reads", () => {
     const p = ramp();
-    p.base03 = p.base00; // contrast ~1 → below the floor
+    p.base03 = p.base00; // contrast ~1 → far below the floor
     const v = schemeToPalette(p);
-    expect(v["--ink-faint"]).toBe(p.base04);
+    const faint = v["--ink-faint"];
+    expect(faint).not.toBe(p.base03);
+    expect(faint).toMatch(/^#[0-9a-f]{6}$/i); // a real color, not a color-mix()
+    expect(contrast(faint, p.base00)).toBeGreaterThanOrEqual(2.2);
+  });
+
+  it("moves faint ink no further than it must — the floor is a floor, not a target", () => {
+    const p = ramp();
+    p.base03 = p.base00;
+    const faint = schemeToPalette(p)["--ink-faint"];
+    // the old base04 fallback overshot (Nord landed at 9.25); a minimal blend lands
+    // just past the floor and stays well short of the body ink.
+    expect(contrast(faint, p.base00)).toBeLessThan(2.5);
+    expect(contrast(faint, p.base00)).toBeLessThan(contrast(p.base05, p.base00));
+  });
+
+  it("passes an already-legible base03 through untouched (author fidelity)", () => {
+    const p = ramp(); // base03 #606060 on #101010 ≈ 3.2, clears the floor
+    expect(schemeToPalette(p)["--ink-faint"]).toBe(p.base03);
   });
 
   it("picks the accent-ink extreme that reads best on the accent", () => {
@@ -186,5 +204,28 @@ describe("applyThemeVars", () => {
     expect(el.set["--sel"]).toBeUndefined();
     expect(el.set["--desk-a"]).toBeUndefined();
     expect(el.set["--shadow"]).toBeUndefined();
+  });
+});
+
+describe("readableFaint across the shipped catalog", () => {
+  it("gives every bundled scheme tertiary ink that clears the floor", () => {
+    for (const t of THEMES) {
+      if (t.kind !== "base16") continue;
+      const p = t.scheme!.palette;
+      const faint = schemeToPalette(p)["--ink-faint"];
+      expect(
+        contrast(faint, p.base00),
+        `${t.id} tertiary ink is below the legibility floor`,
+      ).toBeGreaterThanOrEqual(2.2);
+    }
+  });
+
+  it("never pushes tertiary ink past the body ink it derives toward", () => {
+    for (const t of THEMES) {
+      if (t.kind !== "base16") continue;
+      const p = t.scheme!.palette;
+      const faint = schemeToPalette(p)["--ink-faint"];
+      expect(contrast(faint, p.base00)).toBeLessThanOrEqual(contrast(p.base05, p.base00));
+    }
   });
 });
