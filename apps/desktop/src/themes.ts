@@ -105,11 +105,53 @@ export const THEME_VARS = [
   // definition, which the inline --accent above already shadows.
 ] as const;
 
-// Guard thresholds. base16 schemes are authored for syntax, not UI, so a couple
-// of slots need safety nets — tuned to NOT fire on the curated set (fidelity),
-// only rescuing pathological schemes (matters for the deferred user-import v2).
+// Guard thresholds. base16 schemes are authored for SYNTAX, not UI, so a couple of
+// slots need safety nets. These are not "pathological schemes only" rules — both
+// fire on the curated set by design: HOVER_FLAT on Nord/One Dark/Rosé Pine, and
+// FAINT_MIN on 19 of 51. Fidelity is preserved where it costs nothing (a slot that
+// already reads is passed through untouched) and traded only where the raw slot
+// would be unusable as interface text.
 const HOVER_FLAT = 0.04; // gamma-lightness gap (~10/255) below which base02≈base01
-const FAINT_MIN = 1.5; // contrast ratio below which faint ink is ~invisible
+/** Contrast floor for tertiary ink (note metadata, the notebook subline, the status
+ *  bar). base03 is a syntax COMMENT color — authored to recede inside a code buffer,
+ *  not to carry UI text — and on a third of the curated set it all but disappears
+ *  against base00 (Flexoki Light 1.55, Nord Light 1.61, Catppuccin Latte 1.61).
+ *  Sits just under the catalog median (2.47), so it lifts only the faintest schemes
+ *  and leaves the majority's authored color untouched. */
+const FAINT_MIN = 2.2;
+
+const rgbToHex = (c: number[]): string =>
+  "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+/** sRGB interpolation from `a` to `b` at `t` (0..1), as a hex string. */
+function blend(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex([ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]);
+}
+
+/**
+ * Tertiary ink that is actually legible. Returns base03 untouched when it already
+ * clears FAINT_MIN against the paper; otherwise deepens it TOWARD the body ink by
+ * the smallest blend that does, which keeps the author's hue and moves the value as
+ * little as possible (≤25% across the curated set).
+ *
+ * Deriving beats the old "fall back to base04" rule, which was blunt in both
+ * directions: on Catppuccin it barely moved (1.72 → 2.23) while on Nord it overshot
+ * to 9.25 — brighter than several themes' BODY text, which is not what a faint token
+ * is for. A scheme whose base05 itself misses the floor simply lands on base05.
+ */
+export function readableFaint(base03: string, base05: string, paper: string): string {
+  if (contrast(base03, paper) >= FAINT_MIN) return base03;
+  let lo = 0,
+    hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const midpoint = (lo + hi) / 2;
+    if (contrast(blend(base03, base05, midpoint), paper) >= FAINT_MIN) hi = midpoint;
+    else lo = midpoint;
+  }
+  return blend(base03, base05, hi);
+}
 
 /**
  * Map a base16 palette onto Noteside's primitive design tokens. Returns hex/CSS
@@ -128,8 +170,9 @@ export function schemeToPalette(p: Base16Palette): Record<string, string> {
 
   const ink = p.base05;
   const inkSoft = p.base04;
-  // Faint ink = comments (base03), unless near-invisible → fall back to base04.
-  const inkFaint = contrast(p.base03, p.base00) < FAINT_MIN ? p.base04 : p.base03;
+  // Faint ink = comments (base03), deepened toward the body ink when it would be
+  // too pale to read as UI text (see readableFaint).
+  const inkFaint = readableFaint(p.base03, p.base05, p.base00);
 
   // Borders derived as faint ink-tinted paper — robust in both polarities and
   // visible even when the surface ramp is flat.
