@@ -120,6 +120,30 @@
     }
   },
   {
+    "id": "nord-light",
+    "name": "Nord Light",
+    "author": "threddast, based on fuxialexander's doom-nord-light-theme (Doom Emacs)",
+    "variant": "light",
+    "palette": {
+      "base00": "#e5e9f0",
+      "base01": "#c2d0e7",
+      "base02": "#b8c5db",
+      "base03": "#aebacf",
+      "base04": "#60728c",
+      "base05": "#2e3440",
+      "base06": "#3b4252",
+      "base07": "#29838d",
+      "base08": "#99324b",
+      "base09": "#ac4426",
+      "base0a": "#9a7500",
+      "base0b": "#4f894c",
+      "base0c": "#398eac",
+      "base0d": "#3b6ea8",
+      "base0e": "#97365b",
+      "base0f": "#5272af"
+    }
+  },
+  {
     "id": "solarized-light",
     "name": "Solarized Light",
     "author": "Ethan Schoonover (modified by aramisgithub)",
@@ -384,6 +408,30 @@
     }
   },
   {
+    "id": "catppuccin-frappe",
+    "name": "Catppuccin Frappé",
+    "author": "https://github.com/catppuccin/catppuccin",
+    "variant": "dark",
+    "palette": {
+      "base00": "#303446",
+      "base01": "#292c3c",
+      "base02": "#414559",
+      "base03": "#51576d",
+      "base04": "#626880",
+      "base05": "#c6d0f5",
+      "base06": "#f2d5cf",
+      "base07": "#babbf1",
+      "base08": "#e78284",
+      "base09": "#ef9f76",
+      "base0a": "#e5c890",
+      "base0b": "#a6d189",
+      "base0c": "#81c8be",
+      "base0d": "#8caaee",
+      "base0e": "#ca9ee6",
+      "base0f": "#eebebe"
+    }
+  },
+  {
     "id": "tokyo-night-storm",
     "name": "Tokyo Night Storm",
     "author": "Michaël Ball",
@@ -552,6 +600,30 @@
     }
   },
   {
+    "id": "github-dark",
+    "name": "GitHub Dark",
+    "author": "Tinted Theming (https://github.com/tinted-theming)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#0d1117",
+      "base01": "#161b22",
+      "base02": "#484f58",
+      "base03": "#6e7681",
+      "base04": "#8b949e",
+      "base05": "#c9d1d9",
+      "base06": "#f0f6fc",
+      "base07": "#ffffff",
+      "base08": "#ffa657",
+      "base09": "#79c0ff",
+      "base0a": "#bb8009",
+      "base0b": "#a5d6ff",
+      "base0c": "#7ee787",
+      "base0d": "#d2a8ff",
+      "base0e": "#ff7b72",
+      "base0f": "#ffa198"
+    }
+  },
+  {
     "id": "ayu-light",
     "name": "Ayu Light",
     "author": "Tinted Theming (https://github.com/tinted-theming), Ayu Theme (https://github.com/ayu-theme)",
@@ -573,6 +645,30 @@
       "base0d": "#399ee6",
       "base0e": "#a37acc",
       "base0f": "#e6ba7e"
+    }
+  },
+  {
+    "id": "ayu-dark",
+    "name": "Ayu Dark",
+    "author": "Tinted Theming (https://github.com/tinted-theming), Ayu Theme (https://github.com/ayu-theme)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#0b0e14",
+      "base01": "#131721",
+      "base02": "#202229",
+      "base03": "#3e4b59",
+      "base04": "#bfbdb6",
+      "base05": "#e6e1cf",
+      "base06": "#ece8db",
+      "base07": "#f2f0e7",
+      "base08": "#f07178",
+      "base09": "#ff8f40",
+      "base0a": "#ffb454",
+      "base0b": "#aad94c",
+      "base0c": "#95e6cb",
+      "base0d": "#59c2ff",
+      "base0e": "#d2a6ff",
+      "base0f": "#e6b450"
     }
   },
   {
@@ -648,6 +744,30 @@
     }
   },
   {
+    "id": "gruvbox-material-dark-medium",
+    "name": "Gruvbox Material Dark",
+    "author": "Mayush Kumar (https://github.com/MayushKumar), sainnhe (https://github.com/sainnhe/gruvbox-material-vscode)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#292828",
+      "base01": "#32302f",
+      "base02": "#504945",
+      "base03": "#665c54",
+      "base04": "#bdae93",
+      "base05": "#ddc7a1",
+      "base06": "#ebdbb2",
+      "base07": "#fbf1c7",
+      "base08": "#ea6962",
+      "base09": "#e78a4e",
+      "base0a": "#d8a657",
+      "base0b": "#a9b665",
+      "base0c": "#89b482",
+      "base0d": "#7daea3",
+      "base0e": "#d3869b",
+      "base0f": "#bd6f3e"
+    }
+  },
+  {
     "id": "papercolor-light",
     "name": "PaperColor Light",
     "author": "Jon Leopard (http://github.com/jonleopard), Tinted Theming (https://github.com/tinted-theming), based on PaperColor Theme (https://github.com/NLKNguyen/papercolor-theme)",
@@ -669,6 +789,30 @@
       "base0d": "#005f87",
       "base0e": "#8700af",
       "base0f": "#af0000"
+    }
+  },
+  {
+    "id": "papercolor-dark",
+    "name": "PaperColor Dark",
+    "author": "Jon Leopard (http://github.com/jonleopard), Tinted Theming (https://github.com/tinted-theming), based on PaperColor Theme (https://github.com/NLKNguyen/papercolor-theme)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#1c1c1c",
+      "base01": "#363636",
+      "base02": "#424242",
+      "base03": "#585858",
+      "base04": "#808080",
+      "base05": "#9e9e9e",
+      "base06": "#b8b8b8",
+      "base07": "#d0d0d0",
+      "base08": "#ff5faf",
+      "base09": "#d7af5f",
+      "base0a": "#ffaf00",
+      "base0b": "#5faf5f",
+      "base0c": "#00afaf",
+      "base0d": "#5fafd7",
+      "base0e": "#af87d7",
+      "base0f": "#af005f"
     }
   },
   {
@@ -696,6 +840,30 @@
     }
   },
   {
+    "id": "flexoki-dark",
+    "name": "Flexoki Dark",
+    "author": "Steph Ango (https://github.com/kepano/flexoki)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#100f0f",
+      "base01": "#1c1b1a",
+      "base02": "#282726",
+      "base03": "#575653",
+      "base04": "#878580",
+      "base05": "#cecdc3",
+      "base06": "#e6e4d9",
+      "base07": "#fffcf0",
+      "base08": "#d14d41",
+      "base09": "#da702c",
+      "base0a": "#d0a215",
+      "base0b": "#879a39",
+      "base0c": "#3aa99f",
+      "base0d": "#4385be",
+      "base0e": "#8b7ec8",
+      "base0f": "#ce5d97"
+    }
+  },
+  {
     "id": "edge-light",
     "name": "Edge Light",
     "author": "cjayross (https://github.com/cjayross), Tinted Theming (https://github.com/tinted-theming)",
@@ -720,6 +888,30 @@
     }
   },
   {
+    "id": "edge-dark",
+    "name": "Edge Dark",
+    "author": "cjayross (https://github.com/cjayross), Tinted Theming (https://github.com/tinted-theming)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#262729",
+      "base01": "#313235",
+      "base02": "#3d3f42",
+      "base03": "#4a4c4f",
+      "base04": "#95989d",
+      "base05": "#afb2b5",
+      "base06": "#caccce",
+      "base07": "#e4e5e6",
+      "base08": "#e77171",
+      "base09": "#eba31a",
+      "base0a": "#dbb774",
+      "base0b": "#a1bf78",
+      "base0c": "#5ebaa5",
+      "base0d": "#73b3e7",
+      "base0e": "#d390e7",
+      "base0f": "#5ebaa5"
+    }
+  },
+  {
     "id": "selenized-light",
     "name": "Selenized Light",
     "author": "Jan Warchol (https://github.com/jan-warchol/selenized) / adapted to base16 by ali",
@@ -741,6 +933,294 @@
       "base0d": "#006dce",
       "base0e": "#825dc0",
       "base0f": "#c44392"
+    }
+  },
+  {
+    "id": "selenized-dark",
+    "name": "Selenized Dark",
+    "author": "Jan Warchol (https://github.com/jan-warchol/selenized) / adapted to base16 by ali",
+    "variant": "dark",
+    "palette": {
+      "base00": "#103c48",
+      "base01": "#184956",
+      "base02": "#2d5b69",
+      "base03": "#72898f",
+      "base04": "#72898f",
+      "base05": "#adbcbc",
+      "base06": "#cad8d9",
+      "base07": "#cad8d9",
+      "base08": "#fa5750",
+      "base09": "#ed8649",
+      "base0a": "#dbb32d",
+      "base0b": "#75b938",
+      "base0c": "#41c7b9",
+      "base0d": "#4695f7",
+      "base0e": "#af88eb",
+      "base0f": "#f275be"
+    }
+  },
+  {
+    "id": "horizon-dark",
+    "name": "Horizon Dark",
+    "author": "Michaël Ball (http://github.com/michael-ball/)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#1c1e26",
+      "base01": "#232530",
+      "base02": "#2e303e",
+      "base03": "#6f6f70",
+      "base04": "#9da0a2",
+      "base05": "#cbced0",
+      "base06": "#dcdfe4",
+      "base07": "#e3e6ee",
+      "base08": "#e93c58",
+      "base09": "#e58d7d",
+      "base0a": "#efb993",
+      "base0b": "#efaf8e",
+      "base0c": "#24a8b4",
+      "base0d": "#df5273",
+      "base0e": "#b072d1",
+      "base0f": "#e4a382"
+    }
+  },
+  {
+    "id": "horizon-light",
+    "name": "Horizon Light",
+    "author": "Michaël Ball (http://github.com/michael-ball/)",
+    "variant": "light",
+    "palette": {
+      "base00": "#fdf0ed",
+      "base01": "#fadad1",
+      "base02": "#f9cbbe",
+      "base03": "#bdb3b1",
+      "base04": "#948c8a",
+      "base05": "#403c3d",
+      "base06": "#302c2d",
+      "base07": "#201c1d",
+      "base08": "#f7939b",
+      "base09": "#f6661e",
+      "base0a": "#fbe0d9",
+      "base0b": "#94e1b0",
+      "base0c": "#dc3318",
+      "base0d": "#da103f",
+      "base0e": "#1d8991",
+      "base0f": "#e58c92"
+    }
+  },
+  {
+    "id": "neovim-light",
+    "name": "Neovim Light",
+    "author": "https://github.com/neovim/neovim/blob/master/src/nvim/highlight_group.c",
+    "variant": "light",
+    "palette": {
+      "base00": "#e0e2ea",
+      "base01": "#eef1f8",
+      "base02": "#9b9ea4",
+      "base03": "#4f5258",
+      "base04": "#2c2e33",
+      "base05": "#14161b",
+      "base06": "#07080d",
+      "base07": "#07080d",
+      "base08": "#590008",
+      "base09": "#8b4513",
+      "base0a": "#6b5300",
+      "base0b": "#005523",
+      "base0c": "#007373",
+      "base0d": "#004c73",
+      "base0e": "#470045",
+      "base0f": "#a52a2a"
+    }
+  },
+  {
+    "id": "neovim-dark",
+    "name": "Neovim Dark",
+    "author": "https://github.com/neovim/neovim/blob/master/src/nvim/highlight_group.c",
+    "variant": "dark",
+    "palette": {
+      "base00": "#14161b",
+      "base01": "#07080d",
+      "base02": "#4f5258",
+      "base03": "#9b9ea4",
+      "base04": "#c4c6cd",
+      "base05": "#e0e2ea",
+      "base06": "#eef1f8",
+      "base07": "#eef1f8",
+      "base08": "#ffc0b9",
+      "base09": "#ffa500",
+      "base0a": "#fce094",
+      "base0b": "#b3f6c0",
+      "base0c": "#8cf8f7",
+      "base0d": "#a6dbff",
+      "base0e": "#ffcaff",
+      "base0f": "#cd853f"
+    }
+  },
+  {
+    "id": "primer-light",
+    "name": "Primer Light",
+    "author": "Jimmy Lin",
+    "variant": "light",
+    "palette": {
+      "base00": "#fafbfc",
+      "base01": "#e1e4e8",
+      "base02": "#d1d5da",
+      "base03": "#959da5",
+      "base04": "#444d56",
+      "base05": "#2f363d",
+      "base06": "#24292e",
+      "base07": "#1b1f23",
+      "base08": "#d73a49",
+      "base09": "#f66a0a",
+      "base0a": "#ffd33d",
+      "base0b": "#28a745",
+      "base0c": "#79b8ff",
+      "base0d": "#0366d6",
+      "base0e": "#ea4aaa",
+      "base0f": "#a04100"
+    }
+  },
+  {
+    "id": "primer-dark",
+    "name": "Primer Dark",
+    "author": "Jimmy Lin",
+    "variant": "dark",
+    "palette": {
+      "base00": "#010409",
+      "base01": "#21262d",
+      "base02": "#30363d",
+      "base03": "#484f58",
+      "base04": "#8b949e",
+      "base05": "#b1bac4",
+      "base06": "#c9d1d9",
+      "base07": "#f0f6fc",
+      "base08": "#ff7b72",
+      "base09": "#f0883e",
+      "base0a": "#d29922",
+      "base0b": "#3fb950",
+      "base0c": "#a5d6ff",
+      "base0d": "#58a6ff",
+      "base0e": "#f778ba",
+      "base0f": "#bd561d"
+    }
+  },
+  {
+    "id": "tomorrow",
+    "name": "Tomorrow",
+    "author": "Chris Kempson (http://chriskempson.com)",
+    "variant": "light",
+    "palette": {
+      "base00": "#ffffff",
+      "base01": "#e0e0e0",
+      "base02": "#c5c8c6",
+      "base03": "#b4b7b4",
+      "base04": "#969896",
+      "base05": "#373b41",
+      "base06": "#282a2e",
+      "base07": "#1d1f21",
+      "base08": "#c82829",
+      "base09": "#f5871f",
+      "base0a": "#eab700",
+      "base0b": "#718c00",
+      "base0c": "#3e999f",
+      "base0d": "#4271ae",
+      "base0e": "#8959a8",
+      "base0f": "#a3685a"
+    }
+  },
+  {
+    "id": "tomorrow-night",
+    "name": "Tomorrow Night",
+    "author": "Chris Kempson (http://chriskempson.com)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#1d1f21",
+      "base01": "#282a2e",
+      "base02": "#373b41",
+      "base03": "#969896",
+      "base04": "#b4b7b4",
+      "base05": "#c5c8c6",
+      "base06": "#e0e0e0",
+      "base07": "#ffffff",
+      "base08": "#cc6666",
+      "base09": "#de935f",
+      "base0a": "#f0c674",
+      "base0b": "#b5bd68",
+      "base0c": "#8abeb7",
+      "base0d": "#81a2be",
+      "base0e": "#b294bb",
+      "base0f": "#a3685a"
+    }
+  },
+  {
+    "id": "sakura",
+    "name": "Sakura",
+    "author": "Misterio77 (http://github.com/Misterio77)",
+    "variant": "light",
+    "palette": {
+      "base00": "#feedf3",
+      "base01": "#f8e2e7",
+      "base02": "#e0ccd1",
+      "base03": "#755f64",
+      "base04": "#665055",
+      "base05": "#564448",
+      "base06": "#42383a",
+      "base07": "#33292b",
+      "base08": "#df2d52",
+      "base09": "#f6661e",
+      "base0a": "#c29461",
+      "base0b": "#2e916d",
+      "base0c": "#1d8991",
+      "base0d": "#006e93",
+      "base0e": "#5e2180",
+      "base0f": "#ba0d35"
+    }
+  },
+  {
+    "id": "oxocarbon-light",
+    "name": "Oxocarbon Light",
+    "author": "shaunsingh/IBM, Tinted Theming (https://github.com/tinted-theming)",
+    "variant": "light",
+    "palette": {
+      "base00": "#f2f4f8",
+      "base01": "#dde1e6",
+      "base02": "#bec6cf",
+      "base03": "#a1acba",
+      "base04": "#68788d",
+      "base05": "#525f70",
+      "base06": "#3d4652",
+      "base07": "#272d35",
+      "base08": "#ff7eb6",
+      "base09": "#ee5396",
+      "base0a": "#ff6f00",
+      "base0b": "#42be65",
+      "base0c": "#673ab7",
+      "base0d": "#0f62fe",
+      "base0e": "#be95ff",
+      "base0f": "#803800"
+    }
+  },
+  {
+    "id": "oxocarbon-dark",
+    "name": "Oxocarbon Dark",
+    "author": "shaunsingh/IBM, Tinted Theming (https://github.com/tinted-theming)",
+    "variant": "dark",
+    "palette": {
+      "base00": "#161616",
+      "base01": "#262626",
+      "base02": "#393939",
+      "base03": "#525252",
+      "base04": "#dde1e6",
+      "base05": "#f2f4f8",
+      "base06": "#ffffff",
+      "base07": "#08bdba",
+      "base08": "#ee5396",
+      "base09": "#ff7eb6",
+      "base0a": "#ff6f00",
+      "base0b": "#42be65",
+      "base0c": "#3ddbd9",
+      "base0d": "#33b1ff",
+      "base0e": "#be95ff",
+      "base0f": "#82cfff"
     }
   }
 ]
