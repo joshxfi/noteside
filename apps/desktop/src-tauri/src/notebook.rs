@@ -43,7 +43,7 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
         // a note (the watcher mirrors this in `targeted_updates`).
         .filter_entry(|e| {
             e.depth() == 0
-                || (!is_hidden(e.path()) && !(e.file_type().is_dir() && has_md_extension(e.path())))
+                || !(is_hidden(e.path()) || e.file_type().is_dir() && has_md_extension(e.path()))
         })
     {
         let entry = entry.map_err(walk_error)?;

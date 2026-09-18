@@ -536,6 +536,12 @@ export const Vim = Extension.create<VimOptions>({
           vim = result.state;
           runIntents(result.intents);
           if (result.intents.length > 0 && vim.mode !== "insert") syncDomSelection(editor);
+          // If this keypress just entered insert mode (and no transaction fired to carry
+          // the DOM sync with it), force-sync now so the browser's selection points at
+          // the correct PM position before the first typed character lands.
+          // Note: vim.mode was narrowed to "normal"|"visual" before runIntents, so this
+          // branch fires only when runIntents itself caused the transition into insert.
+          else if (vim.mode === "insert") syncDomSelection(editor);
           publishPending();
           return result.handled;
         },
