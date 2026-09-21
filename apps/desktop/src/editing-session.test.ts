@@ -481,6 +481,52 @@ describe("editingSession", () => {
     expect(session.getSnapshot().initialText).toBe("external");
   });
 
+  // reconcile() used to bail on `activeId === CONFIG_ID`, so the note parked
+  // under the overlay was never checked against disk: :q reseeded the editor
+  // from pre-overlay text and called it clean, and the next keystroke autosaved
+  // that stale text over whatever git/sync had written.
+  it("reconcile() under the config overlay refreshes the held note so :q reseeds from disk", async () => {
+    const { session, notices, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.openConfig("x");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    // No toast and no remount: the user is editing the config, not that note.
+    expect(notices).not.toContain("reloaded from disk");
+    await session.quit();
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("a.md");
+    expect(s.initialText).toBe("external");
+    expect(s.savedText).toBe("external");
+    expect(s.dirty).toBe(false);
+  });
+
+  it("reconcile() under the overlay never touches a dirty held buffer", async () => {
+    const { session, bodies, calls } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.change("typed", true);
+    session.openConfig("x");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    expect(session.getSnapshot().dirty).toBe(true);
+    expect(bodies.get("a.md")).toBe("external"); // the reconcile wrote nothing
+    // The dirty guard short-circuits BEFORE readNote, so the held buffer's
+    // baseline can't be replaced: only the initial open ever read this note.
+    // (initialText/savedText report the CONFIG buffer while the overlay is up,
+    // so the read count is what's observable here.)
+    expect(calls.filter((c) => c === "read:a.md")).toHaveLength(1);
+  });
+
+  it("reconcile() under the overlay forgets a held note that vanished", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.openConfig("x");
+    bodies.delete("a.md");
+    await session.reconcile();
+    await session.quit();
+    expect(session.getSnapshot().status).toBe("empty");
+  });
+
   it("reconcile() goes empty when the active note vanished", async () => {
     const { session, bodies, notesChanged } = makeSession({ "a.md": "A" });
     await session.open("a.md");

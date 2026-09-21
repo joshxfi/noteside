@@ -425,8 +425,13 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     if (isStale()) return; // the list belongs to a notebook that is no longer open
     onNotesChanged(list); // sidebar refresh is independent of the active buffer
     if (token !== loadToken) return; // user navigated during the scan
-    if (activeId === null || activeId === CONFIG_ID) return;
-    const id = activeId; // pin the note we're reconciling across the read
+    // The buffer to reconcile: the open note, or — while the config overlay is
+    // up — the note parked under it. Skipping the held note used to let :q
+    // reseed the editor from pre-overlay text and report it clean, so the next
+    // keystroke autosaved stale text over an external edit.
+    const underOverlay = activeId === CONFIG_ID;
+    const id = underOverlay ? lastNoteId : activeId;
+    if (id === null || id === CONFIG_ID) return;
     if (!list.some((n) => n.id === id)) {
       if (noteDirty) {
         // A transient scan/read failure is indistinguishable from an external
@@ -434,8 +439,11 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
         notify("note unavailable on disk; unsaved buffer preserved", "error");
         return;
       }
-      clearNoteBuffer(); // the active note vanished out from under us
-      commit();
+      if (underOverlay) forgetNote(id); // :q lands on the empty state, not a dead path
+      else {
+        clearNoteBuffer(); // the active note vanished out from under us
+        commit();
+      }
       return;
     }
     if (noteDirty) return; // never clobber unsaved edits
@@ -448,7 +456,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       // so this older/slower read must not overwrite the buffer with staler content.
       if (
         token !== loadToken ||
-        activeId !== id ||
+        (underOverlay ? lastNoteId !== id || activeId !== CONFIG_ID : activeId !== id) ||
         noteDirty ||
         myReconcile !== reconcileSeq ||
         isStale()
@@ -458,9 +466,14 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
         noteInitial = doc.body;
         noteSaved = doc.body;
         noteTitle = doc.title;
-        reloadNonce += 1; // remount so the editor reseeds from disk
+        // Under the overlay the editor shows `config-N`, so there is nothing to
+        // remount and nothing the user did to explain a toast — `:q` reseeds
+        // from the refreshed noteInitial by itself.
+        if (!underOverlay) {
+          reloadNonce += 1; // remount so the editor reseeds from disk
+          notify("reloaded from disk");
+        }
         commit();
-        notify("reloaded from disk");
       }
     } catch {
       // transient external read glitch — the next watcher event retries.
