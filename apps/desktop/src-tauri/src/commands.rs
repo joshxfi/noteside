@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
+use notify::RecommendedWatcher;
+use notify_debouncer_full::{Debouncer, FileIdMap};
 use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, Result};
@@ -21,6 +23,30 @@ where
     tauri::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| AppError::Msg(format!("worker failed: {e}")))?
+}
+
+/// Take the notebook lock, recovering from poisoning. A panic inside a command
+/// while the guard is held would otherwise make EVERY later unwrapped lock on
+/// it panic too (dev/test builds unwind; release aborts on the first panic). The
+/// index is rebuildable state — the next `finish_load` restores every invariant
+/// — so continuing with the inner value is the right call (frecency::save uses
+/// the same idiom for its own lock).
+fn notebook_lock(state: &AppState) -> std::sync::MutexGuard<'_, NotebookState> {
+    state
+        .notebook
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+type WatcherHandle = Debouncer<RecommendedWatcher, FileIdMap>;
+
+/// Same recovery for the watcher slot: a poisoned watcher mutex would wedge
+/// every notebook open, and the worst case here is re-installing a debouncer.
+fn watcher_lock(state: &AppState) -> std::sync::MutexGuard<'_, Option<WatcherHandle>> {
+    state
+        .watcher
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Wall-clock unix ms, taken once per command and passed down so `search`/
@@ -66,12 +92,7 @@ fn sorted_metas(records: &[Arc<NoteRecord>]) -> Vec<NoteMeta> {
 }
 
 fn notebook_context(state: &AppState) -> Result<(PathBuf, u64)> {
-    state
-        .notebook
-        .lock()
-        .unwrap()
-        .context()
-        .ok_or(AppError::NoNotebook)
+    notebook_lock(state).context().ok_or(AppError::NoNotebook)
 }
 
 fn ensure_context(state: &NotebookState, root: &Path, generation: u64) -> Result<()> {
@@ -139,7 +160,7 @@ pub async fn open_notebook(
     if !requested_root.is_dir() {
         return Err(AppError::Msg(format!("not a directory: {path}")));
     }
-    let load_token = state.notebook.lock().unwrap().begin_load();
+    let load_token = notebook_lock(&state).begin_load();
     let store = frecency_file(&app);
     let (root, scan, frec) = blocking(move || {
         let scan_root = std::fs::canonicalize(&requested_root)?;
@@ -152,7 +173,7 @@ pub async fn open_notebook(
     .await?;
     let metas = sorted_metas(&scan.records);
     let generation = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         let generation = g
             .finish_load(load_token, root.clone(), scan.records, scan.folders, frec)
             .ok_or_else(|| {
@@ -161,7 +182,7 @@ pub async fn open_notebook(
         // Stop the previous notebook's watcher as part of the same ordered
         // commit. Keeping the notebook lock while taking the watcher lock also
         // establishes the lock order used by the installation below.
-        *state.watcher.lock().unwrap() = None;
+        *watcher_lock(&state) = None;
         generation
     };
     // Grant the asset protocol read access to THIS notebook's folder so the
@@ -182,9 +203,9 @@ pub async fn open_notebook(
             // A newer open may have committed while this watcher was starting.
             // Hold the generation check across the watcher swap so a newer open
             // cannot commit between those two operations.
-            let g = state.notebook.lock().unwrap();
+            let g = notebook_lock(&state);
             if g.matches_context(&root, generation) {
-                *state.watcher.lock().unwrap() = Some(d);
+                *watcher_lock(&state) = Some(d);
             }
         }
         Err(e) => eprintln!("noteside: file watcher failed to start: {e}"),
@@ -194,13 +215,13 @@ pub async fn open_notebook(
 
 #[tauri::command]
 pub fn current_notebook(state: State<AppState>) -> Option<String> {
-    let g = state.notebook.lock().unwrap();
+    let g = notebook_lock(&state);
     g.root.as_ref().map(|p| p.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn list_notes(state: State<AppState>) -> Vec<NoteMeta> {
-    let g = state.notebook.lock().unwrap();
+    let g = notebook_lock(&state);
     sorted_metas(&g.records)
 }
 
@@ -212,7 +233,7 @@ pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteD
         .ok_or_else(|| AppError::Msg("path is not a markdown note in the notebook".into()))?;
     let disk_root = root.clone();
     let rec = blocking(move || Ok(notebook::read_record(&disk_root, &abs)?)).await?;
-    ensure_context(&state.notebook.lock().unwrap(), &root, generation)?;
+    ensure_context(&notebook_lock(&state), &root, generation)?;
     Ok(NoteDoc {
         meta: rec.meta,
         body: rec.body,
@@ -226,7 +247,7 @@ pub fn preview_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
     // Clone the record's Arc under the lock; the string copies for the IPC
     // payload happen after it is released.
     let rec = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         if g.root.is_none() {
             return Err(AppError::NoNotebook);
         }
@@ -252,7 +273,7 @@ pub async fn save_note(path: String, body: String, state: State<'_, AppState>) -
         Ok((meta, body))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), body, Instant::now());
     Ok(meta)
@@ -295,7 +316,7 @@ pub async fn create_note(
         Ok((meta, initial, folder))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), initial, Instant::now());
     g.add_folder(&folder);
@@ -318,7 +339,7 @@ pub async fn rename_note(
     // body bytes: a stale body can only mis-derive the slug, not lose content.
     // The body-REWRITING commands (retitle/pin/duplicate) read disk instead.
     let (root, generation, recorded) = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
         let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
         (root, generation, body)
@@ -354,7 +375,7 @@ pub async fn rename_note(
     })
     .await?;
     let snapshot = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         ensure_context(&g, &root, generation)?;
         if renamed {
             g.record_own_rename(&path, meta.clone(), body, Instant::now());
@@ -375,7 +396,7 @@ pub async fn rename_note(
 /// same snapshot discipline as `records`.
 #[tauri::command]
 pub fn list_folders(state: State<AppState>) -> Vec<String> {
-    let g = state.notebook.lock().unwrap();
+    let g = notebook_lock(&state);
     g.folders.as_ref().clone()
 }
 
@@ -396,7 +417,7 @@ pub async fn move_note(
     // Index-first body, exactly like rename_note: a move relinks the inode and
     // never writes body bytes, so a stale body cannot lose content.
     let (root, generation, recorded) = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         let (root, generation) = g.context().ok_or(AppError::NoNotebook)?;
         let body = find_record(&g.records, &path).map(|i| g.records[i].body.clone());
         (root, generation, body)
@@ -446,7 +467,7 @@ pub async fn move_note(
     })
     .await?;
     let snapshot = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         ensure_context(&g, &root, generation)?;
         if moved {
             g.record_own_rename(&path, meta.clone(), body, Instant::now());
@@ -497,7 +518,7 @@ pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<St
         Ok(notebook::disk_rel_dir(&disk_root, &abs))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     g.add_folder(&rel);
     Ok(rel)
@@ -560,7 +581,7 @@ pub async fn rename_folder(
     })
     .await?;
     let snapshot = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         ensure_context(&g, &root, generation)?;
         g.record_own_folder_rename(&dir, &new_rel, Instant::now());
         g.frecency.clone()
@@ -596,7 +617,7 @@ pub async fn delete_folder(dir: String, app: AppHandle, state: State<'_, AppStat
     })
     .await?;
     let snapshot = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         ensure_context(&g, &root, generation)?;
         g.record_own_folder_delete(&dir, Instant::now());
         g.frecency.clone()
@@ -616,7 +637,7 @@ pub async fn delete_note(path: String, state: State<'_, AppState>) -> Result<()>
         Ok(())
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     g.record_own_delete(&path, Instant::now());
     Ok(())
@@ -651,7 +672,7 @@ pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<
         Ok((meta, new_body))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     g.record_own_write(meta.clone(), new_body, Instant::now());
     Ok(meta)
@@ -705,7 +726,7 @@ pub async fn retitle_note(
     })
     .await?;
     let snapshot = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         ensure_context(&g, &root, generation)?;
         if renamed {
             g.record_own_rename(&path, meta.clone(), new_body, Instant::now());
@@ -753,7 +774,7 @@ pub async fn set_note_pinned(
         Ok((true, meta, new_body))
     })
     .await?;
-    let mut g = state.notebook.lock().unwrap();
+    let mut g = notebook_lock(&state);
     ensure_context(&g, &root, generation)?;
     // Only a real write arms echo suppression — recording a write that never
     // happened could swallow a genuine external event for this path.
@@ -768,7 +789,7 @@ pub async fn set_note_pinned(
 pub fn reveal_note(path: String, app: AppHandle, state: State<AppState>) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let root = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         g.root.clone().ok_or(AppError::NoNotebook)?
     };
     let abs = notebook::safe_note_path(&root, &path)
@@ -786,7 +807,7 @@ pub fn reveal_note(path: String, app: AppHandle, state: State<AppState>) -> Resu
 pub async fn record_open(path: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let now = now_ms();
     let (root, snapshot) = {
-        let mut g = state.notebook.lock().unwrap();
+        let mut g = notebook_lock(&state);
         let Some(root) = g.root.clone() else {
             return Ok(());
         };
@@ -806,7 +827,7 @@ pub async fn record_open(path: String, app: AppHandle, state: State<'_, AppState
 pub async fn search_files(query: String, state: State<'_, AppState>) -> Result<Vec<FileHit>> {
     let now = now_ms();
     let (records, frecency) = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         (g.records.clone(), g.frecency.clone())
     };
     blocking(move || {
@@ -828,7 +849,7 @@ pub async fn search_content(
     state: State<'_, AppState>,
 ) -> Result<Vec<ContentHit>> {
     let records = {
-        let g = state.notebook.lock().unwrap();
+        let g = notebook_lock(&state);
         g.records.clone()
     };
     blocking(move || {
@@ -888,5 +909,24 @@ mod tests {
             )
             .unwrap();
         assert!(ensure_context(&state, Path::new("/first"), first_generation).is_err());
+    }
+
+    #[test]
+    fn notebook_lock_recovers_from_a_poisoned_mutex() {
+        use crate::state::AppState;
+        let state = std::sync::Arc::new(AppState::default());
+        let poisoner = std::sync::Arc::clone(&state);
+        let _ = std::thread::spawn(move || {
+            let _g = poisoner.notebook.lock().unwrap();
+            panic!("poison on purpose");
+        })
+        .join();
+        assert!(
+            state.notebook.lock().is_err(),
+            "precondition: the mutex is poisoned"
+        );
+        // The helper hands back the inner state instead of propagating the poison.
+        let g = super::notebook_lock(&state);
+        assert!(g.root.is_none());
     }
 }
