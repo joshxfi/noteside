@@ -59,7 +59,7 @@ fn now_ms() -> u64 {
 
 /// The shared frecency store: `frecency.json` in the per-app data dir (one
 /// file for all notebooks, keyed inside by notebook root path).
-fn frecency_file(app: &AppHandle) -> Option<PathBuf> {
+fn frecency_file<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     app.path()
         .app_data_dir()
         .ok()
@@ -69,8 +69,8 @@ fn frecency_file(app: &AppHandle) -> Option<PathBuf> {
 /// Persist a notebook's frecency snapshot, off the state lock. Best-effort:
 /// frecency is reconstructible ranking data, so I/O problems (including a
 /// missing app-data dir resolution) never fail the calling command.
-async fn persist_frecency(
-    app: &AppHandle,
+async fn persist_frecency<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     root: &Path,
     snapshot: Arc<HashMap<String, FrecencyEntry>>,
     now_ms: u64,
@@ -170,9 +170,9 @@ pub async fn create_notebook(parent: String, name: String) -> Result<String> {
 /// Open (or switch to) a notebook folder: scan all Markdown files into the in-memory
 /// index, start the file watcher, and return the note list.
 #[tauri::command]
-pub async fn open_notebook(
+pub async fn open_notebook<R: tauri::Runtime>(
     path: String,
-    app: AppHandle,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Vec<NoteMeta>> {
     let requested_root = PathBuf::from(&path);
@@ -367,9 +367,9 @@ pub async fn create_note(
 /// root). No-op when the filename already represents the title (returns the current
 /// meta).
 #[tauri::command]
-pub async fn rename_note(
+pub async fn rename_note<R: tauri::Runtime>(
     path: String,
-    app: AppHandle,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
     // The body comes from the in-memory index (save_note just recorded it) — no
@@ -447,10 +447,10 @@ pub async fn list_folders(state: State<'_, AppState>) -> Result<Vec<String>> {
 /// jump the note to the top of the updated-sort for nothing — the pin
 /// short-circuit's reasoning).
 #[tauri::command]
-pub async fn move_note(
+pub async fn move_note<R: tauri::Runtime>(
     path: String,
     dir: String,
-    app: AppHandle,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
     // Index-first body, exactly like rename_note: a move relinks the inode and
@@ -574,10 +574,10 @@ pub async fn create_folder(dir: String, state: State<'_, AppState>) -> Result<St
 /// `Work` and `work` can be two real directories, and POSIX rename would
 /// silently replace an empty one.
 #[tauri::command]
-pub async fn rename_folder(
+pub async fn rename_folder<R: tauri::Runtime>(
     dir: String,
     name: String,
-    app: AppHandle,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let (root, generation) = notebook_context(&state)?;
@@ -655,7 +655,11 @@ pub async fn folder_contents_of(dir: String, state: State<'_, AppState>) -> Resu
 /// note, so the flurry of child Remove events disk-verifies as gone and is
 /// swallowed.
 #[tauri::command]
-pub async fn delete_folder(dir: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+pub async fn delete_folder<R: tauri::Runtime>(
+    dir: String,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<()> {
     let (root, generation) = notebook_context(&state)?;
     let disk_root = root.clone();
     let persist_root = root.clone();
@@ -740,10 +744,10 @@ pub async fn duplicate_note(path: String, state: State<'_, AppState>) -> Result<
 /// rename the file to the new slug within its directory. Returns the new meta.
 /// Both edits are own-writes, so the watcher ignores the resulting events.
 #[tauri::command]
-pub async fn retitle_note(
+pub async fn retitle_note<R: tauri::Runtime>(
     path: String,
     title: String,
-    app: AppHandle,
+    app: AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<NoteMeta> {
     let (root, generation) = notebook_context(&state)?;
@@ -844,7 +848,11 @@ pub async fn set_note_pinned(
 
 /// Reveal a note's file in the OS file manager (Finder / File Explorer / …).
 #[tauri::command]
-pub async fn reveal_note(path: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+pub async fn reveal_note<R: tauri::Runtime>(
+    path: String,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let root = {
         let g = notebook_lock(&state);
@@ -862,7 +870,11 @@ pub async fn reveal_note(path: String, app: AppHandle, state: State<'_, AppState
 /// nudge), then persist the notebook's map — opens are human-paced, so an
 /// immediate write is cheap and durable. Never fails over bookkeeping.
 #[tauri::command]
-pub async fn record_open(path: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+pub async fn record_open<R: tauri::Runtime>(
+    path: String,
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<()> {
     let now = now_ms();
     let (root, snapshot) = {
         let mut g = notebook_lock(&state);
@@ -938,10 +950,9 @@ mod tests {
     /// `open_notebook`): these tests are about the command layer's own
     /// disk→state protocol, and a watcher thread would race the assertions.
     ///
-    /// Commands that take `app: AppHandle` (= `AppHandle<Wry>`) are NOT callable
-    /// here — the mock app hands out an `AppHandle<MockRuntime>`. Covering
-    /// `move_note`/`retitle_note`/`delete_folder` needs those commands made
-    /// generic over `R: tauri::Runtime`, which is a production change.
+    /// Every command is generic over `R: tauri::Runtime`, so `handle()` hands
+    /// the mock's `AppHandle<MockRuntime>` straight to the ones that take an
+    /// app handle (`move_note`/`retitle_note`/`delete_folder`).
     struct Harness {
         app: tauri::App<tauri::test::MockRuntime>,
         root: PathBuf,
@@ -981,6 +992,10 @@ mod tests {
 
         fn state(&self) -> tauri::State<'_, AppState> {
             self.app.state::<AppState>()
+        }
+
+        fn handle(&self) -> tauri::AppHandle<tauri::test::MockRuntime> {
+            self.app.handle().clone()
         }
 
         fn read(&self, rel: &str) -> String {
@@ -1217,6 +1232,104 @@ mod tests {
                 seed,
                 "the old notebook's note was rewritten"
             );
+        });
+    }
+
+    #[test]
+    fn move_note_preserves_the_stem_and_registers_the_folder() {
+        block_on(async {
+            let h = Harness::new("move", &[("a.md", "# A\n")]);
+            let meta = super::move_note("a.md".into(), "work".into(), h.handle(), h.state())
+                .await
+                .unwrap();
+            // A move is a location change, not a rename: the stem survives.
+            assert_eq!(meta.path, "work/a.md");
+            assert!(!h.exists("a.md"));
+            assert_eq!(h.read("work/a.md"), "# A\n");
+            assert!(h.has_folder("work"));
+            let ids = h.ids();
+            assert!(ids.contains(&"work/a.md".to_string()));
+            assert!(!ids.contains(&"a.md".to_string()));
+        });
+    }
+
+    #[test]
+    fn move_note_into_its_own_dir_is_byte_free() {
+        block_on(async {
+            let h = Harness::new("move-noop", &[("work/a.md", "# A\n")]);
+            let before = crate::notebook::mtime_millis(&h.root.join("work/a.md"));
+            // Sleep so a real rewrite/relink would move the ms-resolution mtime;
+            // without it this could pass vacuously.
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            let meta = super::move_note("work/a.md".into(), "work".into(), h.handle(), h.state())
+                .await
+                .unwrap();
+            assert_eq!(meta.path, "work/a.md");
+            assert_eq!(h.read("work/a.md"), "# A\n");
+            assert_eq!(
+                crate::notebook::mtime_millis(&h.root.join("work/a.md")),
+                before,
+                "a same-dir move touched the file (mtime IS the sidebar sort key)"
+            );
+            assert_eq!(h.ids(), vec!["work/a.md".to_string()]);
+        });
+    }
+
+    #[test]
+    fn retitle_note_renames_within_the_directory_or_rewrites_in_place() {
+        block_on(async {
+            let h = Harness::new("retitle", &[("work/a.md", "# A\n")]);
+            let meta = super::retitle_note(
+                "work/a.md".into(),
+                "Brand New".into(),
+                h.handle(),
+                h.state(),
+            )
+            .await
+            .unwrap();
+            // Renamed WITHIN its own directory — never hoisted to the root.
+            assert_eq!(meta.path, "work/brand-new.md");
+            assert_eq!(h.read("work/brand-new.md"), "# Brand New\n");
+            assert!(!h.exists("work/a.md"));
+
+            // A new title whose slug still matches the stem rewrites in place.
+            let meta = super::retitle_note(
+                "work/brand-new.md".into(),
+                "Brand New!".into(),
+                h.handle(),
+                h.state(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(meta.path, "work/brand-new.md");
+            assert_eq!(h.read("work/brand-new.md"), "# Brand New!\n");
+        });
+    }
+
+    #[test]
+    fn delete_folder_is_recursive_and_idempotent() {
+        block_on(async {
+            let h = Harness::new(
+                "rmdir",
+                &[
+                    ("work/a.md", "# A\n"),
+                    ("work/sub/b.md", "# B\n"),
+                    ("work/img.png", "notpng"),
+                ],
+            );
+            super::delete_folder("work".into(), h.handle(), h.state())
+                .await
+                .unwrap();
+            assert!(!h.exists("work"), "remove_dir_all takes the whole subtree");
+            let ids = h.ids();
+            assert!(!ids.contains(&"work/a.md".to_string()));
+            assert!(!ids.contains(&"work/sub/b.md".to_string()));
+            assert!(!h.has_folder("work"));
+            assert!(!h.has_folder("work/sub"));
+            // Already gone: idempotent success.
+            super::delete_folder("work".into(), h.handle(), h.state())
+                .await
+                .unwrap();
         });
     }
 

@@ -295,8 +295,8 @@ fn echo_matches_disk(root: &Path, rel: &str, indexed_mtime: Option<i64>) -> bool
 /// the reported paths when the batch is unambiguous, rebuilding it whole otherwise —
 /// and notify the frontend via the `notebook:changed` event. Our own writes are
 /// skipped only when every relevant path is an own-write echo.
-pub fn start_watcher(
-    app: AppHandle,
+pub fn start_watcher<R: tauri::Runtime>(
+    app: AppHandle<R>,
     notebook: Arc<Mutex<NotebookState>>,
     root: PathBuf,
     generation: u64,
