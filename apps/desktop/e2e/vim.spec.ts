@@ -387,6 +387,52 @@ test.describe("vim mode", () => {
     await expect(mode(page)).toHaveText("NORMAL");
   });
 
+  // Issue #31: a vim edit that EMPTIES a textblock and then enters insert
+  // (`V c` on the title, `v e d` then `i`) left the native caret where the
+  // deleted text had been, so the first typed characters landed nowhere
+  // visible. The pure exec harness cannot see a DOM-selection bug, which is
+  // why it lives here, in both engines.
+  test("typing lands after V c on the title and after v e d i on a body line (issue #31)", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    // a fresh note is the issue's repro: its title is a real `# Untitled` heading
+    await page.locator(".av-sidefoot").getByRole("button", { name: "New note" }).click();
+    await expect(page.locator(".av-file")).toContainText("Untitled");
+    const title = page.locator(".av-cm .tiptap > h1").first();
+    await expect(title).toHaveText("Untitled");
+    await page.keyboard.press("g");
+    await page.keyboard.press("g");
+    await expect(mode(page)).toHaveText("NORMAL");
+    await page.keyboard.press("V");
+    await expect(mode(page)).toHaveText("VISUAL");
+    await page.keyboard.press("c");
+    await expect(mode(page)).toHaveText("INSERT");
+    await page.keyboard.type("Renamed");
+    await expect(title).toHaveText("Renamed");
+    await page.keyboard.press("Escape");
+
+    await freshLine(page, "hello world");
+    await page.keyboard.press("v");
+    await page.keyboard.press("e");
+    await page.keyboard.press("d");
+    await expect(lastBlock(page)).toHaveText(" world");
+    await page.keyboard.press("i");
+    await expect(mode(page)).toHaveText("INSERT");
+    await page.keyboard.type("bye");
+    await expect(lastBlock(page)).toHaveText("bye world");
+    await page.keyboard.press("Escape");
+
+    await freshLine(page, "gone");
+    await page.keyboard.press("v");
+    await page.keyboard.press("$");
+    await page.keyboard.press("d");
+    await expect(lastBlock(page)).toHaveText("");
+    await page.keyboard.press("i");
+    await page.keyboard.type("typed");
+    await expect(lastBlock(page)).toHaveText("typed");
+  });
+
   test("a mouse drag enters visual mode; Esc leaves it", async ({ page }) => {
     await bootVim(page);
     await freshLine(page, "drag across me");

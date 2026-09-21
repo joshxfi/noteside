@@ -480,6 +480,51 @@ describe("visual mode", () => {
     expect(esc.mode).toBe("normal");
     expect(esc.under).toBe("c");
   });
+
+  // Regression: issue #31 — v e d i on a heading that becomes empty after the delete.
+  // The PM state (mode, cursor position) must be correct so the next typed character
+  // lands in the right place. The DOM sync (syncDomSelection) is view-only, so it is
+  // pinned in e2e/vim.spec.ts; this harness pins the PM-state contract.
+  it("v e d i on a heading: mode is insert, cursor inside the now-empty heading", () => {
+    // "# Untitled" — cursor on "U", select to end of word (e), delete (d), insert (i)
+    const r = drive("# Untitled", "U", keys("vedi"));
+    expect(r.mode).toBe("insert");
+    // heading must be empty — the whole word was selected and deleted
+    expect(r.doc.child(0).type.name).toBe("heading");
+    expect(r.doc.child(0).textContent).toBe("");
+    // cursor must be at parentOffset 0 inside the empty heading (position 1 in the doc)
+    expect(r.col).toBe(0);
+    expect(r.head).toBe(1);
+    expect(r.vsel).toBeNull();
+  });
+
+  it("v e d i on a body paragraph: mode is insert, cursor inside the now-empty paragraph", () => {
+    // Same sequence on a plain paragraph (not a heading)
+    const r = drive("hello world\n\nnext", "hello", keys("vedi"));
+    expect(r.mode).toBe("insert");
+    expect(r.doc.child(0).type.name).toBe("paragraph");
+    expect(r.doc.child(0).textContent).toBe(" world"); // only "hello" was selected (v e)
+    // the caret sits at the start of what remains (position 1 in the doc)
+    expect(r.col).toBe(0);
+    expect(r.head).toBe(1);
+    expect(r.vsel).toBeNull();
+  });
+
+  it("v $ d i on a heading: deletes to end of line, enters insert at the empty node", () => {
+    // v $ selects to the end of the line; d deletes; i enters insert
+    const r = drive("# Untitled", "U", keys("v$di"));
+    expect(r.mode).toBe("insert");
+    expect(r.doc.child(0).type.name).toBe("heading");
+    expect(r.doc.child(0).textContent).toBe("");
+    expect(r.head).toBe(1);
+  });
+
+  it("v $ d i on a body paragraph: deletes to end, enters insert", () => {
+    const r = drive("hello world\n\nnext", "h", keys("v$di"));
+    expect(r.mode).toBe("insert");
+    expect(r.doc.child(0).textContent).toBe("");
+    expect(r.head).toBe(1);
+  });
 });
 
 describe("logical j/k (no view): lineStep keeps the column", () => {
