@@ -1359,8 +1359,13 @@ export function App() {
     if (token !== notebookLoad.current) return; // a newer open owns the UI
     setNotes(metas);
     setFolders(folderList);
-    void backend.setLastNotebook(path);
-    void backend.rememberNotebook(path); // feed the switcher's recents (MRU)
+    void backend
+      .setLastNotebook(path)
+      .catch((e) => flash(`couldn't remember notebook: ${e}`, "error"));
+    // feed the switcher's recents (MRU)
+    void backend
+      .rememberNotebook(path)
+      .catch((e) => flash(`couldn't update recents: ${e}`, "error"));
     setNotebookPath(path);
     setStatus("ready");
     if (metas.length) await session.open(metas[0].id);
@@ -1390,7 +1395,9 @@ export function App() {
       // Superseded (incl. the Rust side rejecting an out-of-date open): the
       // newer switch owns the UI and the folder isn't at fault — do nothing.
       if (token !== notebookLoad.current) return;
-      void backend.removeRecentNotebook(path); // a folder that's gone shouldn't linger in recents
+      // a folder that's gone shouldn't linger in recents; best-effort cleanup —
+      // the open failure is already toasted below
+      void backend.removeRecentNotebook(path).catch(() => {});
       session.reopenLast(); // the old backend context remains authoritative when open fails
       flash(`couldn't open notebook: ${e}`, "error");
     }

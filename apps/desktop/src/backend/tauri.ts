@@ -24,6 +24,18 @@ async function readNotebooks(s: Store): Promise<NotebookRef[]> {
   return last ? [{ path: last, name: notebookName(last), lastOpened: 0 }] : [];
 }
 
+// The recents list is a read-modify-write on ONE store key. Two overlapping
+// notebook switches (or a failed-open cleanup racing a remember) interleaved
+// their read→write cycles and dropped an entry — every write goes through this
+// tail so each one reads what the previous one wrote (app.tsx's configWriteTail
+// is the same pattern for the config key).
+let notebooksTail: Promise<void> = Promise.resolve();
+function queueNotebooksWrite(run: () => Promise<void>): Promise<void> {
+  const next = notebooksTail.then(run, run);
+  notebooksTail = next.catch(() => {});
+  return next;
+}
+
 /** Real backend: talks to the Rust notebook over Tauri IPC; settings via the store plugin. */
 export const tauriBackend: Backend = {
   live: true,
@@ -37,23 +49,25 @@ export const tauriBackend: Backend = {
   async listNotebooks() {
     return await readNotebooks(await store());
   },
-  async rememberNotebook(path) {
-    const s = await store();
-    const list = await readNotebooks(s);
-    const next = [
-      { path, name: notebookName(path), lastOpened: Date.now() },
-      ...list.filter((n) => n.path !== path),
-    ].slice(0, RECENTS_CAP);
-    await s.set("notebooks", next);
-  },
-  async removeRecentNotebook(path) {
-    const s = await store();
-    const list = await readNotebooks(s);
-    await s.set(
-      "notebooks",
-      list.filter((n) => n.path !== path),
-    );
-  },
+  rememberNotebook: (path) =>
+    queueNotebooksWrite(async () => {
+      const s = await store();
+      const list = await readNotebooks(s);
+      const next = [
+        { path, name: notebookName(path), lastOpened: Date.now() },
+        ...list.filter((n) => n.path !== path),
+      ].slice(0, RECENTS_CAP);
+      await s.set("notebooks", next);
+    }),
+  removeRecentNotebook: (path) =>
+    queueNotebooksWrite(async () => {
+      const s = await store();
+      const list = await readNotebooks(s);
+      await s.set(
+        "notebooks",
+        list.filter((n) => n.path !== path),
+      );
+    }),
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
   previewNote: (path) => invoke<NoteDoc>("preview_note", { path }),
