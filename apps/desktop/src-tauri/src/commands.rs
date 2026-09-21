@@ -924,9 +924,317 @@ pub async fn search_content(
 #[cfg(test)]
 mod tests {
     use super::{ensure_context, sanitize_folder};
-    use crate::state::NotebookState;
+    use crate::state::{AppState, NotebookState};
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tauri::Manager;
+
+    static HARNESS_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    /// A real `AppState` holding a scanned temp notebook, inside Tauri's mock
+    /// app so commands can take `State<'_, AppState>`. The watcher is
+    /// deliberately NOT started (load goes through begin/finish_load, not
+    /// `open_notebook`): these tests are about the command layer's own
+    /// disk→state protocol, and a watcher thread would race the assertions.
+    ///
+    /// Commands that take `app: AppHandle` (= `AppHandle<Wry>`) are NOT callable
+    /// here — the mock app hands out an `AppHandle<MockRuntime>`. Covering
+    /// `move_note`/`retitle_note`/`delete_folder` needs those commands made
+    /// generic over `R: tauri::Runtime`, which is a production change.
+    struct Harness {
+        app: tauri::App<tauri::test::MockRuntime>,
+        root: PathBuf,
+    }
+
+    impl Harness {
+        fn new(label: &str, files: &[(&str, &str)]) -> Self {
+            let n = HARNESS_SEQ.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir()
+                .join(format!("noteside-cmd-{label}-{}-{n}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(&root).unwrap();
+            for (rel, body) in files {
+                let abs = root.join(rel);
+                std::fs::create_dir_all(abs.parent().unwrap()).unwrap();
+                std::fs::write(&abs, body).unwrap();
+            }
+            let root = std::fs::canonicalize(&root).unwrap();
+            let app = tauri::test::mock_app();
+            app.manage(AppState::default());
+            let scan = crate::notebook::scan_notebook(&root).unwrap();
+            {
+                let state = app.state::<AppState>();
+                let mut g = super::notebook_lock(&state);
+                let token = g.begin_load();
+                g.finish_load(
+                    token,
+                    root.clone(),
+                    scan.records,
+                    scan.folders,
+                    HashMap::new(),
+                )
+                .unwrap();
+            }
+            Harness { app, root }
+        }
+
+        fn state(&self) -> tauri::State<'_, AppState> {
+            self.app.state::<AppState>()
+        }
+
+        fn read(&self, rel: &str) -> String {
+            std::fs::read_to_string(self.root.join(rel)).unwrap()
+        }
+
+        fn exists(&self, rel: &str) -> bool {
+            self.root.join(rel).exists()
+        }
+
+        fn ids(&self) -> Vec<String> {
+            let state = self.state();
+            let g = super::notebook_lock(&state);
+            g.records.iter().map(|r| r.meta.path.clone()).collect()
+        }
+
+        fn has_folder(&self, rel: &str) -> bool {
+            let state = self.state();
+            let g = super::notebook_lock(&state);
+            g.has_folder(rel)
+        }
+
+        /// Simulate a notebook switch: a newer load wins, pointing at a
+        /// different (empty) root, so the old generation is stale.
+        fn swap_notebook(&self) {
+            let other = self.root.parent().unwrap().join(format!(
+                "{}-other",
+                self.root.file_name().unwrap().to_string_lossy()
+            ));
+            std::fs::create_dir_all(&other).unwrap();
+            let other = std::fs::canonicalize(&other).unwrap();
+            let state = self.state();
+            let mut g = super::notebook_lock(&state);
+            let token = g.begin_load();
+            g.finish_load(token, other, vec![], vec![], HashMap::new())
+                .unwrap();
+        }
+    }
+
+    impl Drop for Harness {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+            let other = self.root.parent().unwrap().join(format!(
+                "{}-other",
+                self.root.file_name().unwrap().to_string_lossy()
+            ));
+            let _ = std::fs::remove_dir_all(other);
+        }
+    }
+
+    fn block_on<F: std::future::Future>(f: F) -> F::Output {
+        tauri::async_runtime::block_on(f)
+    }
+
+    #[test]
+    fn create_note_lands_in_the_root_or_the_folder_and_registers_it() {
+        block_on(async {
+            let h = Harness::new("create", &[]);
+            let meta = super::create_note(Some("Hello World".into()), None, h.state())
+                .await
+                .unwrap();
+            assert_eq!(meta.path, "hello-world.md");
+            assert_eq!(h.read("hello-world.md"), "# Hello World\n\n");
+            assert!(h.ids().contains(&"hello-world.md".to_string()));
+
+            // No title => "Untitled"; a dir that does not exist yet is created
+            // and registered (with its ancestors) in the folder list.
+            let meta = super::create_note(None, Some("work".into()), h.state())
+                .await
+                .unwrap();
+            assert_eq!(meta.path, "work/untitled.md");
+            assert_eq!(h.read("work/untitled.md"), "# Untitled\n\n");
+            assert!(h.has_folder("work"));
+        });
+    }
+
+    #[test]
+    fn create_note_twice_with_the_same_title_gets_a_numbered_sibling() {
+        block_on(async {
+            let h = Harness::new("create-collide", &[]);
+            let a = super::create_note(Some("Notes".into()), None, h.state())
+                .await
+                .unwrap();
+            let b = super::create_note(Some("Notes".into()), None, h.state())
+                .await
+                .unwrap();
+            let c = super::create_note(Some("Notes".into()), None, h.state())
+                .await
+                .unwrap();
+            // candidate_note_path: n == 1 is bare, n >= 2 gets "-{n}".
+            assert_eq!(a.path, "notes.md");
+            assert_eq!(b.path, "notes-2.md");
+            assert_eq!(c.path, "notes-3.md");
+            assert!(h.exists("notes.md") && h.exists("notes-2.md") && h.exists("notes-3.md"));
+        });
+    }
+
+    #[test]
+    fn save_note_rejects_paths_outside_the_notebook() {
+        block_on(async {
+            let h = Harness::new("escape", &[("a.md", "# A\n")]);
+            for bad in ["../x.md", "/etc/x.md", ".hidden/x.md"] {
+                assert!(
+                    super::save_note(bad.into(), "pwned".into(), h.state())
+                        .await
+                        .is_err(),
+                    "{bad} should be rejected"
+                );
+            }
+            assert!(!h.exists("../x.md"));
+            assert!(!h.exists(".hidden/x.md"));
+            // The legitimate neighbour is untouched.
+            assert_eq!(h.read("a.md"), "# A\n");
+        });
+    }
+
+    #[test]
+    fn set_note_pinned_is_idempotent_and_round_trips_bytes() {
+        block_on(async {
+            let seed = "# A\n\nbody\n";
+            let h = Harness::new("pin", &[("a.md", seed)]);
+            let meta = super::set_note_pinned("a.md".into(), true, h.state())
+                .await
+                .unwrap();
+            assert!(meta.pinned);
+            let pinned_bytes = h.read("a.md");
+            assert!(
+                pinned_bytes.starts_with("---\npinned: true\n---\n"),
+                "got {pinned_bytes:?}"
+            );
+            let mtime = crate::notebook::mtime_millis(&h.root.join("a.md"));
+
+            // Sleep so a redundant write would move the ms-resolution mtime —
+            // without it the assertion could pass vacuously.
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            super::set_note_pinned("a.md".into(), true, h.state())
+                .await
+                .unwrap();
+            assert_eq!(
+                h.read("a.md"),
+                pinned_bytes,
+                "a redundant pin rewrote bytes"
+            );
+            assert_eq!(
+                crate::notebook::mtime_millis(&h.root.join("a.md")),
+                mtime,
+                "a redundant pin bumped mtime (which IS the sidebar sort key)"
+            );
+
+            // Unpin removes the key and the block it emptied: byte-identical.
+            super::set_note_pinned("a.md".into(), false, h.state())
+                .await
+                .unwrap();
+            assert_eq!(h.read("a.md"), seed);
+        });
+    }
+
+    #[test]
+    fn delete_note_is_idempotent_and_updates_the_index() {
+        block_on(async {
+            let h = Harness::new("delete", &[("a.md", "# A\n"), ("b.md", "# B\n")]);
+            super::delete_note("a.md".into(), h.state()).await.unwrap();
+            assert!(!h.exists("a.md"));
+            assert_eq!(h.ids(), vec!["b.md".to_string()]);
+            // Already gone: idempotent success, not an error.
+            super::delete_note("a.md".into(), h.state()).await.unwrap();
+            assert_eq!(h.ids(), vec!["b.md".to_string()]);
+        });
+    }
+
+    #[test]
+    fn create_folder_is_idempotent_and_nested_segments_register() {
+        block_on(async {
+            let h = Harness::new("mkdir", &[]);
+            let rel = super::create_folder("work/projects".into(), h.state())
+                .await
+                .unwrap();
+            assert_eq!(rel, "work/projects");
+            assert!(h.root.join("work/projects").is_dir());
+            assert!(h.has_folder("work"), "ancestors register too");
+            assert!(h.has_folder("work/projects"));
+            // Existing folder is an idempotent success.
+            let again = super::create_folder("work/projects".into(), h.state())
+                .await
+                .unwrap();
+            assert_eq!(again, "work/projects");
+        });
+    }
+
+    #[test]
+    fn folder_contents_of_counts_the_walk() {
+        block_on(async {
+            let h = Harness::new(
+                "walk",
+                &[
+                    ("work/a.md", "# A\n"),
+                    ("work/img.png", "notpng"),
+                    ("work/sub/b.md", "# B\n"),
+                ],
+            );
+            let got = super::folder_contents_of("work".into(), h.state())
+                .await
+                .unwrap();
+            assert_eq!(
+                got,
+                crate::models::FolderContents {
+                    notes: 2,
+                    other_files: 1,
+                    dirs: 1
+                }
+            );
+        });
+    }
+
+    #[test]
+    fn commands_never_write_to_a_notebook_that_was_switched_away() {
+        block_on(async {
+            let seed = "# A\n\nbody\n";
+            let h = Harness::new("switched", &[("a.md", seed)]);
+            h.swap_notebook();
+
+            // Every command now resolves against the NEW (empty) root, so none
+            // of them may touch the old notebook's file. `set_note_pinned`
+            // reads fresh from disk and fails; `delete_note` is idempotent on a
+            // missing target; `save_note` writes into the NEW notebook. What
+            // matters for the old notebook is that its bytes never move.
+            let _ = super::save_note("a.md".into(), "pwned".into(), h.state()).await;
+            let _ = super::set_note_pinned("a.md".into(), true, h.state()).await;
+            let _ = super::delete_note("a.md".into(), h.state()).await;
+
+            assert!(h.exists("a.md"), "the old notebook's note was deleted");
+            assert_eq!(
+                h.read("a.md"),
+                seed,
+                "the old notebook's note was rewritten"
+            );
+        });
+    }
+
+    #[test]
+    fn list_notes_and_list_folders_report_the_loaded_scan() {
+        block_on(async {
+            let h = Harness::new(
+                "list",
+                &[("b.md", "# B\n"), ("work/a.md", "# A\n"), ("z.md", "# Z\n")],
+            );
+            let notes = super::list_notes(h.state()).await.unwrap();
+            let mut ids: Vec<&str> = notes.iter().map(|m| m.path.as_str()).collect();
+            ids.sort_unstable();
+            assert_eq!(ids, vec!["b.md", "work/a.md", "z.md"]);
+            let folders = super::list_folders(h.state()).await.unwrap();
+            assert_eq!(folders, vec!["work".to_string()]);
+        });
+    }
 
     #[test]
     fn sanitize_folder_strips_reserved_chars_and_edge_dots() {
