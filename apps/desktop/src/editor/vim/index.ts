@@ -535,13 +535,13 @@ export const Vim = Extension.create<VimOptions>({
           });
           vim = result.state;
           runIntents(result.intents);
-          if (result.intents.length > 0 && vim.mode !== "insert") syncDomSelection(editor);
-          // If this keypress just entered insert mode (and no transaction fired to carry
-          // the DOM sync with it), force-sync now so the browser's selection points at
-          // the correct PM position before the first typed character lands.
-          // Note: vim.mode was narrowed to "normal"|"visual" before runIntents, so this
-          // branch fires only when runIntents itself caused the transition into insert.
-          else if (vim.mode === "insert") syncDomSelection(editor);
+          // Every handled key re-syncs the DOM selection, INCLUDING the one
+          // that entered insert mode: after `V c` / `v e d i` emptied a
+          // textblock, PM's own selectionToDOM left the native caret where the
+          // deleted text had been and the first typed characters landed nowhere
+          // visible (issue #31, pinned in e2e/vim.spec.ts). Collapsing onto
+          // state here puts them at the insert point.
+          if (result.intents.length > 0) syncDomSelection(editor);
           publishPending();
           return result.handled;
         },

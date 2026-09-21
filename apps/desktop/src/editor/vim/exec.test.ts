@@ -481,10 +481,10 @@ describe("visual mode", () => {
     expect(esc.under).toBe("c");
   });
 
-  // Regression: issue #1 — v e d i on a heading that becomes empty after the delete.
+  // Regression: issue #31 — v e d i on a heading that becomes empty after the delete.
   // The PM state (mode, cursor position) must be correct so the next typed character
-  // lands in the right place. The DOM sync (syncDomSelection) is view-only and is
-  // covered by the manual repro; the harness pins the PM-state contract.
+  // lands in the right place. The DOM sync (syncDomSelection) is view-only, so it is
+  // pinned in e2e/vim.spec.ts; this harness pins the PM-state contract.
   it("v e d i on a heading: mode is insert, cursor inside the now-empty heading", () => {
     // "# Untitled" — cursor on "U", select to end of word (e), delete (d), insert (i)
     const r = drive("# Untitled", "U", keys("vedi"));
@@ -504,8 +504,10 @@ describe("visual mode", () => {
     expect(r.mode).toBe("insert");
     expect(r.doc.child(0).type.name).toBe("paragraph");
     expect(r.doc.child(0).textContent).toBe(" world"); // only "hello" was selected (v e)
-    // Cursor is in insert mode at the start of what remains
-    expect(r.mode).toBe("insert");
+    // the caret sits at the start of what remains (position 1 in the doc)
+    expect(r.col).toBe(0);
+    expect(r.head).toBe(1);
+    expect(r.vsel).toBeNull();
   });
 
   it("v $ d i on a heading: deletes to end of line, enters insert at the empty node", () => {
