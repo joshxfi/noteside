@@ -73,8 +73,12 @@ import { sanitizeChordOverrides } from "./shortcut";
 import {
   allDirs,
   buildSidebarRows,
+  insertMeta,
+  metaOrder,
   noteDir,
+  relTime,
   rewritePrefix,
+  sameMetaList,
   type SidebarRow,
   stepVisibleNote,
 } from "./note-groups";
@@ -164,23 +168,6 @@ function writeUpdateCache(c: UpdateCache): void {
 
 type Status = "boot" | "no-notebook" | "ready";
 type FinderMode = "all" | "files" | "content";
-
-function relTime(ms: number, now: number): string {
-  const diff = now - ms;
-  const s = Math.round(diff / 1000);
-  if (s < 45) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 7) return `${d}d ago`;
-  const w = Math.round(d / 7);
-  if (w < 5) return `${w}w ago`;
-  const mo = Math.round(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.round(d / 365)}y ago`;
-}
 
 // Landing-demo-only chrome (the native app shows the OS traffic lights instead
 // and never renders this — see the !isTauri() gate at the render site). Red
@@ -915,38 +902,6 @@ const Sidebar = memo(function Sidebar({
     </aside>
   );
 });
-
-// Sidebar list order (matches the backend: pinned desc, then updated desc) — so
-// create/delete can patch the list locally instead of refetching it over IPC.
-function metaOrder(a: NoteMeta, b: NoteMeta): number {
-  return Number(b.pinned) - Number(a.pinned) || b.updated - a.updated;
-}
-function insertMeta(list: NoteMeta[], meta: NoteMeta): NoteMeta[] {
-  // Stable re-sort of the whole list, not just an insert: the old code refetched
-  // listNotes here, which also re-slotted any note whose `updated` bumped since
-  // (autosaves patch metas in place without re-sorting) — keep that behavior.
-  return [...list, meta].sort(metaOrder);
-}
-
-// Watcher events often rescan to an identical list — keep the old array identity
-// so the memoized sidebar doesn't re-render for nothing.
-function sameMetaList(a: NoteMeta[], b: NoteMeta[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i];
-    const y = b[i];
-    if (
-      x.id !== y.id ||
-      x.title !== y.title ||
-      x.updated !== y.updated ||
-      x.pinned !== y.pinned ||
-      x.tags[0] !== y.tags[0]
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
 
 function NotebookPicker({ onPick }: { onPick: () => void }) {
   return (
