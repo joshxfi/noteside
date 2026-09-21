@@ -39,8 +39,8 @@ export interface FileHit {
   tags: string[];
   pinned: boolean;
   score: number;
-  positions: number[]; // indices into `path`
-  titlePositions: number[]; // indices into `title`
+  positions: number[]; // UTF-16 code-unit indices into `path`
+  titlePositions: number[]; // UTF-16 code-unit indices into `title`
 }
 
 export interface ContentHit {
@@ -49,7 +49,7 @@ export interface ContentHit {
   title: string;
   lineNumber: number;
   line: string;
-  ranges: [number, number][];
+  ranges: [number, number][]; // [start, end) UTF-16 code-unit offsets into `line`
 }
 
 export interface Backend {

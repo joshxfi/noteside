@@ -25,8 +25,9 @@ pub struct NoteDoc {
     pub body: String,
 }
 
-/// A fuzzy file/title match. `positions` index into `path`; `title_positions`
-/// index into `title`.
+/// A fuzzy file/title match. `positions` / `title_positions` index into
+/// `path` / `title` in **UTF-16 code units** (the unit JS slices strings by —
+/// converted at the producer, see the offset-encoding block in `search.rs`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileHit {
@@ -40,7 +41,8 @@ pub struct FileHit {
     pub title_positions: Vec<u32>,
 }
 
-/// A single line-level content match. `ranges` are byte offsets into `line`.
+/// A single line-level content match. `ranges` are `[start, end)` **UTF-16
+/// code unit** offsets into `line` (not bytes — see `search.rs`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentHit {
