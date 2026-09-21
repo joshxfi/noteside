@@ -459,6 +459,28 @@ describe("editingSession", () => {
     expect(notices).toContain("reloaded from disk");
   });
 
+  // Every mutating App op fences its UI patch on the notebook generation; the
+  // watcher path had no fence, so a listNotes() resolving just after a notebook
+  // switch planted the OLD notebook's rows into the new one. The nav token can't
+  // serve here — every open() bumps it, which would suppress real refreshes.
+  it("reconcile(isStale) drops the list and the reload when the notebook changed under it", async () => {
+    const { session, notesChanged, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    bodies.set("a.md", "external");
+    await session.reconcile(() => true);
+    expect(notesChanged).toHaveLength(0); // the sidebar keeps the new notebook's rows
+    expect(session.getSnapshot().initialText).toBe("A"); // and the buffer is untouched
+  });
+
+  it("reconcile() without isStale still publishes the list", async () => {
+    const { session, notesChanged, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    expect(notesChanged).toHaveLength(1);
+    expect(session.getSnapshot().initialText).toBe("external");
+  });
+
   it("reconcile() goes empty when the active note vanished", async () => {
     const { session, bodies, notesChanged } = makeSession({ "a.md": "A" });
     await session.open("a.md");

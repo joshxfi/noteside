@@ -76,8 +76,11 @@ export interface EditingSession {
   // ---- rarer verbs ----
   /** Enter the config buffer with serialized text — an overlay; the note buffer is preserved. */
   openConfig(text: string): void;
-  /** Watcher fired: refresh the list and non-clobberingly reload the active note. */
-  reconcile(): Promise<void>;
+  /** Watcher fired: refresh the list and non-clobberingly reload the active note.
+   *  `isStale` (App's notebook-generation check) drops the result when a
+   *  notebook switch landed while the IPC was in flight — the nav token can't
+   *  serve here, since every open() bumps it. */
+  reconcile(isStale?: () => boolean): Promise<void>;
   /** Reopen the last real note (EmptyState). */
   reopenLast(): void;
   /** Drop the active buffer and go empty (after a delete, no flush). */
@@ -409,7 +412,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     commit();
   }
 
-  async function reconcile(): Promise<void> {
+  async function reconcile(isStale: () => boolean = () => false): Promise<void> {
     const token = loadToken; // reactive: bail if the user navigates mid-scan
     const myReconcile = ++reconcileSeq; // this call is now the latest reconcile
     let list: NoteMeta[];
@@ -419,6 +422,7 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       return;
     }
     if (myReconcile !== reconcileSeq) return; // a newer reconcile superseded us
+    if (isStale()) return; // the list belongs to a notebook that is no longer open
     onNotesChanged(list); // sidebar refresh is independent of the active buffer
     if (token !== loadToken) return; // user navigated during the scan
     if (activeId === null || activeId === CONFIG_ID) return;
@@ -442,7 +446,13 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       // note's body, and the next keystroke would autosave it into the wrong file.
       // ...and bail if a newer reconcile started: its read is at least as fresh,
       // so this older/slower read must not overwrite the buffer with staler content.
-      if (token !== loadToken || activeId !== id || noteDirty || myReconcile !== reconcileSeq)
+      if (
+        token !== loadToken ||
+        activeId !== id ||
+        noteDirty ||
+        myReconcile !== reconcileSeq ||
+        isStale()
+      )
         return;
       if (doc.body !== noteSaved) {
         noteInitial = doc.body;

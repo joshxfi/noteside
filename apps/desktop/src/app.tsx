@@ -1035,9 +1035,10 @@ export function App() {
   // refresh is the eventual-consistency backstop, identity-guarded so an
   // unchanged list never re-renders the memoized sidebar.
   const [folders, setFolders] = useState<string[]>([]);
-  const refreshFolders = useCallback(async () => {
+  const refreshFolders = useCallback(async (isStale: () => boolean = () => false) => {
     try {
       const dirs = await backend.listFolders();
+      if (isStale()) return; // a notebook switch landed while listFolders was in flight
       setFolders((prev) =>
         prev.length === dirs.length && prev.every((d, i) => d === dirs[i]) ? prev : dirs,
       );
@@ -1490,8 +1491,12 @@ export function App() {
     let cancelled = false;
     backend
       .watchNotebook(() => {
-        void session.reconcile();
-        void refreshFolders(); // external mkdir/rmdir/mv-dir refreshes the groups too
+        // Fence like every mutating op: a listNotes()/listFolders() in flight
+        // across a notebook switch must not plant the OLD notebook's rows.
+        const gen = notebookLoad.current;
+        const stale = () => notebookChangedSince(gen);
+        void session.reconcile(stale);
+        void refreshFolders(stale); // external mkdir/rmdir/mv-dir refreshes the groups too
       })
       .then((u) => {
         if (cancelled) u();
