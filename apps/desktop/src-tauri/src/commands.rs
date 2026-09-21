@@ -9,7 +9,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, Result};
 use crate::frecency::{self, FrecencyEntry};
-use crate::models::{ContentHit, FileHit, NoteDoc, NoteMeta};
+use crate::models::{ContentHit, FileHit, FolderContents, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
 use crate::search;
 use crate::state::{find_record, AppState, NotebookState};
@@ -103,6 +103,25 @@ fn ensure_context(state: &NotebookState, root: &Path, generation: u64) -> Result
             "notebook changed while the operation was running".into(),
         ))
     }
+}
+
+/// Count the files and subdirectories under `abs`, recursively, following no
+/// symlinks. `notes` = `.md` files, `other_files` = everything else (hidden
+/// files included — they are removed too), `dirs` = subdirectories (not `abs`).
+fn folder_contents(abs: &Path) -> std::io::Result<FolderContents> {
+    let mut out = FolderContents::default();
+    for entry in walkdir::WalkDir::new(abs).min_depth(1).follow_links(false) {
+        let entry = entry?;
+        let ft = entry.file_type();
+        if ft.is_dir() {
+            out.dirs += 1;
+        } else if entry.path().extension().and_then(|x| x.to_str()) == Some("md") {
+            out.notes += 1;
+        } else {
+            out.other_files += 1;
+        }
+    }
+    Ok(out)
 }
 
 /// Sanitize a user-typed notebook name into a single safe path segment: drop
@@ -593,11 +612,30 @@ pub async fn rename_folder(
     Ok(new_rel)
 }
 
-/// Delete a folder RECURSIVELY (the frontend confirms with the contained note
-/// count first — this is the permanent-delete precedent, folder-sized).
-/// `remove_dir_all` does not traverse symlink targets. The commit drops the
-/// subtree from the index and arms suppression per removed note, so the
-/// flurry of child Remove events disk-verifies as gone and is swallowed.
+/// Dry run for `delete_folder`: what the confirm dialog should say. Read-only.
+#[tauri::command]
+pub async fn folder_contents_of(dir: String, state: State<'_, AppState>) -> Result<FolderContents> {
+    let (root, generation) = notebook_context(&state)?;
+    let disk_root = root.clone();
+    let contents = blocking(move || {
+        let abs = notebook::safe_dir_path(&disk_root, &dir)
+            .ok_or_else(|| AppError::Msg("not a folder in the notebook".into()))?;
+        if !abs.is_dir() {
+            return Ok(FolderContents::default());
+        }
+        Ok(folder_contents(&abs)?)
+    })
+    .await?;
+    ensure_context(&notebook_lock(&state), &root, generation)?;
+    Ok(contents)
+}
+
+/// Delete a folder RECURSIVELY (the frontend confirms first, with the walk
+/// `folder_contents_of` returns — this is the permanent-delete precedent,
+/// folder-sized). `remove_dir_all` does not traverse symlink targets. The
+/// commit drops the subtree from the index and arms suppression per removed
+/// note, so the flurry of child Remove events disk-verifies as gone and is
+/// swallowed.
 #[tauri::command]
 pub async fn delete_folder(dir: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let (root, generation) = notebook_context(&state)?;
@@ -911,6 +949,28 @@ mod tests {
             )
             .unwrap();
         assert!(ensure_context(&state, Path::new("/first"), first_generation).is_err());
+    }
+
+    #[test]
+    fn folder_contents_counts_notes_other_files_and_dirs() {
+        let n = std::process::id();
+        let dir = std::env::temp_dir().join(format!("noteside-folder-contents-{n}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub/deeper")).unwrap();
+        std::fs::write(dir.join("a.md"), "# a").unwrap();
+        std::fs::write(dir.join("sub/b.md"), "# b").unwrap();
+        std::fs::write(dir.join("sub/deeper/shot.png"), [0u8; 4]).unwrap();
+        std::fs::write(dir.join(".hidden"), "x").unwrap();
+        let got = super::folder_contents(&dir).unwrap();
+        assert_eq!(
+            got,
+            crate::models::FolderContents {
+                notes: 2,
+                other_files: 2,
+                dirs: 2
+            }
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

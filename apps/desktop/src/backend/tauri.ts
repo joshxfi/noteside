@@ -3,7 +3,15 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Config } from "../settings";
-import type { Backend, ContentHit, FileHit, NoteDoc, NoteMeta, NotebookRef } from "./types";
+import type {
+  Backend,
+  ContentHit,
+  FileHit,
+  FolderContents,
+  NoteDoc,
+  NoteMeta,
+  NotebookRef,
+} from "./types";
 
 let storeP: Promise<Store> | null = null;
 const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults: {} }));
@@ -65,6 +73,7 @@ export const tauriBackend: Backend = {
   moveNote: (path, dir) => invoke<NoteMeta>("move_note", { path, dir }),
   createFolder: (dir) => invoke<string>("create_folder", { dir }),
   renameFolder: (dir, name) => invoke<string>("rename_folder", { dir, name }),
+  folderContents: (dir) => invoke<FolderContents>("folder_contents_of", { dir }),
   deleteFolder: (dir) => invoke<void>("delete_folder", { dir }),
   duplicateNote: (path) => invoke<NoteMeta>("duplicate_note", { path }),
   retitleNote: (path, title) => invoke<NoteMeta>("retitle_note", { path, title }),

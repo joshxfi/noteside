@@ -3,6 +3,7 @@ import type { NoteMeta } from "./backend/types";
 import {
   allDirs,
   buildSidebarRows,
+  folderDeleteSummary,
   noteDir,
   rewritePrefix,
   stepVisibleNote,
@@ -153,5 +154,18 @@ describe("rewritePrefix", () => {
     expect(rewritePrefix("work/sub/a.md", "work", "archive")).toBe("archive/sub/a.md");
     expect(rewritePrefix("worked/a.md", "work", "archive")).toBe("worked/a.md"); // prefix trap
     expect(rewritePrefix("other.md", "work", "archive")).toBe("other.md");
+  });
+});
+
+describe("folderDeleteSummary", () => {
+  it("names only the non-zero parts", () => {
+    expect(folderDeleteSummary({ notes: 3, otherFiles: 0, dirs: 0 })).toBe("3 notes");
+    expect(folderDeleteSummary({ notes: 1, otherFiles: 12, dirs: 2 })).toBe(
+      "1 note, 12 other files and 2 subfolders",
+    );
+  });
+
+  it("is empty for an empty folder, so the dialog can say so", () => {
+    expect(folderDeleteSummary({ notes: 0, otherFiles: 0, dirs: 0 })).toBe("");
   });
 });

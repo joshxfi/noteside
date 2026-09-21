@@ -25,6 +25,13 @@ export interface NotebookRef {
   lastOpened: number; // unix ms; 0 when unknown (e.g. migrated from lastNotebook)
 }
 
+/** What a recursive delete of a folder would remove (see Backend.folderContents). */
+export interface FolderContents {
+  notes: number;
+  otherFiles: number;
+  dirs: number;
+}
+
 export interface FileHit {
   id: string;
   path: string;
@@ -84,7 +91,11 @@ export interface Backend {
   /** Rename a folder's LAST segment ("work/projects" + "archive" →
    *  "work/archive"); the subtree's note ids all change. Returns the new dir. */
   renameFolder(dir: string, name: string): Promise<string>;
-  /** Delete a folder RECURSIVELY (callers confirm with the note count first). */
+  /** Dry run for deleteFolder: what a recursive delete of `dir` would remove
+   *  (notes, other files incl. hidden, subfolders). The confirm dialog is
+   *  built from this so the approved count is the destroyed count. */
+  folderContents(dir: string): Promise<FolderContents>;
+  /** Delete a folder RECURSIVELY (callers confirm with folderContents first). */
   deleteFolder(dir: string): Promise<void>;
   /** Copy a note to a "<title> copy" sibling (same directory, retitled so the two
    *  don't share a title); returns the new note's meta. */

@@ -28,7 +28,7 @@ import {
   SlidersHorizontal,
   SquareChevronRight,
 } from "lucide-react";
-import { backend, type NoteMeta } from "./backend";
+import { backend, type FolderContents, type NoteMeta } from "./backend";
 import type { AppCommand } from "./editor/commands";
 import { Finder } from "./components/finder";
 import { SettingsPanel } from "./components/settings-panel";
@@ -73,6 +73,7 @@ import { sanitizeChordOverrides } from "./shortcut";
 import {
   allDirs,
   buildSidebarRows,
+  folderDeleteSummary,
   noteDir,
   rewritePrefix,
   type SidebarRow,
@@ -1145,11 +1146,12 @@ export function App() {
   const [pendingMove, setPendingMove] = useState<{ id: string; title: string } | null>(null);
   // Folder-name prompt (New folder / New subfolder); `parent` "" = the root.
   const [pendingNewFolder, setPendingNewFolder] = useState<{ parent: string } | null>(null);
-  // Folder being renamed (last segment) / recursively deleted (with note count).
+  // Folder being renamed (last segment) / recursively deleted (with the walk of
+  // everything remove_dir_all would take, not just the indexed notes).
   const [pendingFolderRename, setPendingFolderRename] = useState<{ dir: string } | null>(null);
   const [pendingFolderDelete, setPendingFolderDelete] = useState<{
     dir: string;
-    count: number;
+    contents: FolderContents;
   } | null>(null);
   // Open in-app folder context menu (web/demo only — Tauri pops the native one).
   const [folderMenu, setFolderMenu] = useState<{ dir: string; x: number; y: number } | null>(null);
@@ -1890,8 +1892,16 @@ export function App() {
 
   // Recursive folder delete, behind a ConfirmDialog stating the note count.
   const requestFolderDelete = useCallback((dir: string) => {
-    const count = notesRef.current.filter((n) => n.path.startsWith(dir + "/")).length;
-    setPendingFolderDelete({ dir, count });
+    // Open the dialog immediately with the indexed-note count, then refine it
+    // with a real walk: remove_dir_all takes attachments and dotfiles too.
+    const noteCount = notesRef.current.filter((n) => n.path.startsWith(dir + "/")).length;
+    setPendingFolderDelete({ dir, contents: { notes: noteCount, otherFiles: 0, dirs: 0 } });
+    void backend
+      .folderContents(dir)
+      .then((contents) =>
+        setPendingFolderDelete((cur) => (cur && cur.dir === dir ? { dir, contents } : cur)),
+      )
+      .catch(() => {}); // keep the provisional count; the dialog still works
   }, []);
 
   const deleteFolder = async (dir: string) => {
@@ -2641,10 +2651,10 @@ export function App() {
           <ConfirmDialog
             title={`Delete folder “${pendingFolderDelete.dir}”?`}
             message={
-              pendingFolderDelete.count > 0
-                ? `This permanently removes the folder and the ${pendingFolderDelete.count} ${
-                    pendingFolderDelete.count === 1 ? "note" : "notes"
-                  } inside it — it can't be undone.`
+              folderDeleteSummary(pendingFolderDelete.contents)
+                ? `This permanently removes the folder and the ${folderDeleteSummary(
+                    pendingFolderDelete.contents,
+                  )} inside it — it can't be undone.`
                 : "This permanently removes the (empty) folder."
             }
             confirmLabel="Delete"

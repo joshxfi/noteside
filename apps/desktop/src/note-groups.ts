@@ -11,7 +11,7 @@
 // sidebar list variants render rows as direct children in row order, which is
 // what keeps scrollRowIntoView's child-index mapping and the virtualizer's
 // count exact (the divider is a row for the same reason).
-import type { NoteMeta } from "./backend/types";
+import type { FolderContents, NoteMeta } from "./backend/types";
 
 export type SidebarRow =
   | { kind: "note"; note: NoteMeta; dir: string }
@@ -119,4 +119,17 @@ export function stepVisibleNote(
 export function rewritePrefix(path: string, oldDir: string, newDir: string): string {
   if (path === oldDir) return newDir;
   return path.startsWith(oldDir + "/") ? newDir + path.slice(oldDir.length) : path;
+}
+
+/** "3 notes, 12 other files and 2 subfolders" — the delete-folder dialog's
+ *  count line; omits zero parts, "" when everything is zero. */
+export function folderDeleteSummary(c: FolderContents): string {
+  const parts: string[] = [];
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (c.notes) parts.push(plural(c.notes, "note", "notes"));
+  if (c.otherFiles) parts.push(plural(c.otherFiles, "other file", "other files"));
+  if (c.dirs) parts.push(plural(c.dirs, "subfolder", "subfolders"));
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }

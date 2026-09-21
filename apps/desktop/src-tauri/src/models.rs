@@ -51,3 +51,14 @@ pub struct ContentHit {
     pub line: String,
     pub ranges: Vec<[u32; 2]>,
 }
+
+/// What deleting a folder would remove — shown in the confirm dialog so the
+/// number the user approves is the number that disappears (`remove_dir_all`
+/// takes attachments and dotfiles too, not just indexed notes).
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderContents {
+    pub notes: u32,
+    pub other_files: u32,
+    pub dirs: u32,
+}

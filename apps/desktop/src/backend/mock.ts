@@ -629,6 +629,15 @@ export const mockBackend: Backend = {
     }
     return newDir;
   },
+  async folderContents(dir) {
+    const prefix = `${dir}/`;
+    let notes = 0;
+    for (const p of recs.keys()) if (p.startsWith(prefix)) notes++;
+    let dirs = 0;
+    for (const f of folders) if (f.startsWith(prefix)) dirs++;
+    // The in-memory demo holds only notes — no attachments to count.
+    return { notes, otherFiles: 0, dirs };
+  },
   async deleteFolder(dir) {
     const prefix = `${dir}/`;
     folders.delete(dir);
