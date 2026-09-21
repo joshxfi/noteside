@@ -5,11 +5,11 @@ use std::time::{Instant, SystemTime};
 
 use notify::RecommendedWatcher;
 use notify_debouncer_full::{Debouncer, FileIdMap};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::error::{AppError, Result};
 use crate::frecency::{self, FrecencyEntry};
-use crate::models::{ContentHit, FileHit, FolderContents, NoteDoc, NoteMeta};
+use crate::models::{ContentHit, Degradation, FileHit, FolderContents, NoteDoc, NoteMeta};
 use crate::notebook::{self, NoteRecord};
 use crate::search;
 use crate::state::{find_record, AppState, NotebookState};
@@ -211,10 +211,19 @@ pub async fn open_notebook(
     // notebooks the user actually opened this session. Grants are additive and
     // session-scoped; there is no revoke API, which matches the trust model
     // (the user opened the folder).
+    // `start_watcher` MOVES `app`, so keep a handle for the degradation emits.
+    let emitter = app.clone();
     if let Err(e) = app.asset_protocol_scope().allow_directory(&root, true) {
         eprintln!(
             "noteside: asset scope grant failed for {}: {e}",
             root.display()
+        );
+        let _ = emitter.emit(
+            "notebook:degraded",
+            Degradation {
+                kind: "asset-scope".into(),
+                message: e.to_string(),
+            },
         );
     }
     match watcher::start_watcher(app, state.notebook.clone(), root.clone(), generation) {
@@ -227,7 +236,16 @@ pub async fn open_notebook(
                 *watcher_lock(&state) = Some(d);
             }
         }
-        Err(e) => eprintln!("noteside: file watcher failed to start: {e}"),
+        Err(e) => {
+            eprintln!("noteside: file watcher failed to start: {e}");
+            let _ = emitter.emit(
+                "notebook:degraded",
+                Degradation {
+                    kind: "watcher".into(),
+                    message: e.to_string(),
+                },
+            );
+        }
     }
     Ok(metas)
 }

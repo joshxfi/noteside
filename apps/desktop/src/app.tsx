@@ -1495,6 +1495,34 @@ export function App() {
     };
   }, [session, refreshFolders]);
 
+  // "Opened, but degraded": a failed watcher start means external edits are
+  // never picked up (and get overwritten by the next autosave); a failed asset
+  // scope grant means relative-path images render broken. Both used to be an
+  // eprintln nobody sees in a bundled app.
+  useEffect(() => {
+    let un: (() => void) | null = null;
+    let cancelled = false;
+    backend
+      .watchDegraded((d) => {
+        const what =
+          d.kind === "watcher"
+            ? "external changes to this notebook won't be detected"
+            : d.kind === "asset-scope"
+              ? "images in this notebook may not display"
+              : "a notebook feature is unavailable";
+        flash(`${what}: ${d.message}`, "error");
+      })
+      .then((u) => {
+        if (cancelled) u();
+        else un = u;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      un?.();
+    };
+  }, [flash]);
+
   const pickNotebook = async () => {
     const path = await backend.pickNotebook();
     if (path) {

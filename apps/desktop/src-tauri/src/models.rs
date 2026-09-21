@@ -54,6 +54,18 @@ pub struct ContentHit {
     pub ranges: Vec<[u32; 2]>,
 }
 
+/// A notebook opened, but one of its supporting capabilities did not come up.
+/// Emitted as `notebook:degraded`; the frontend toasts it — an `eprintln!` is
+/// invisible in a bundled app, and a silently dead watcher means external
+/// edits get overwritten by the next autosave.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Degradation {
+    /// "watcher" | "asset-scope"
+    pub kind: String,
+    pub message: String,
+}
+
 /// What deleting a folder would remove — shown in the confirm dialog so the
 /// number the user approves is the number that disappears (`remove_dir_all`
 /// takes attachments and dotfiles too, not just indexed notes).

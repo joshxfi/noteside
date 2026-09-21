@@ -25,6 +25,14 @@ export interface NotebookRef {
   lastOpened: number; // unix ms; 0 when unknown (e.g. migrated from lastNotebook)
 }
 
+/** A notebook opened, but a supporting capability did not come up (see
+ *  Backend.watchDegraded). `kind` stays open-ended so a newer backend can
+ *  report a reason this build doesn't know about. */
+export interface Degradation {
+  kind: "watcher" | "asset-scope" | string;
+  message: string;
+}
+
 /** What a recursive delete of a folder would remove (see Backend.folderContents). */
 export interface FolderContents {
   notes: number;
@@ -121,4 +129,7 @@ export interface Backend {
   setLastNotebook(path: string): Promise<void>;
   /** Subscribe to external notebook changes (watcher); resolves to an unsubscribe fn. */
   watchNotebook(onChange: () => void): Promise<() => void>;
+  /** Subscribe to "opened, but degraded" notices (watcher failed to start, asset
+   *  scope not granted); resolves to an unsubscribe fn. The mock never fires it. */
+  watchDegraded(onDegraded: (d: Degradation) => void): Promise<() => void>;
 }

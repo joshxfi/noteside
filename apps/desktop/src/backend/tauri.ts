@@ -6,6 +6,7 @@ import type { Config } from "../settings";
 import type {
   Backend,
   ContentHit,
+  Degradation,
   FileHit,
   FolderContents,
   NoteDoc,
@@ -97,5 +98,8 @@ export const tauriBackend: Backend = {
   },
   async watchNotebook(onChange) {
     return await listen("notebook:changed", () => onChange());
+  },
+  async watchDegraded(onDegraded) {
+    return await listen<Degradation>("notebook:degraded", (e) => onDegraded(e.payload));
   },
 };

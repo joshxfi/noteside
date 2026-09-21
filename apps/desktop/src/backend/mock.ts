@@ -767,4 +767,7 @@ export const mockBackend: Backend = {
   async watchNotebook() {
     return () => {};
   },
+  async watchDegraded() {
+    return () => {};
+  },
 };
