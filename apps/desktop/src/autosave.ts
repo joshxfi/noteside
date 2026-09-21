@@ -19,9 +19,18 @@ export interface Autosave {
   repin(oldId: string, newId: string): void;
 }
 
+export interface AutosaveOptions {
+  /** A lazy `text` thunk threw while being materialized. The save is dropped
+   *  (nothing was produced to write) and the pending buffer stays dirty; the
+   *  caller surfaces the error to the user. Without this hook the throw used to
+   *  reject the coordinator's tail and every later flush() with it. */
+  onMaterializeError?: (id: string, error: unknown) => void;
+}
+
 export function createAutosave(
   save: (id: string, text: string, version?: number) => unknown,
   delayMs: number,
+  options: AutosaveOptions = {},
 ): Autosave {
   type PendingSave = { id: string; text: string | (() => string); version?: number };
   let pending: PendingSave | null = null;
@@ -43,7 +52,14 @@ export function createAutosave(
   const enqueue = (p: PendingSave): Promise<void> => {
     queued.add(p);
     const run = async () => {
-      await save(p.id, typeof p.text === "function" ? p.text() : p.text, p.version);
+      let text: string;
+      try {
+        text = typeof p.text === "function" ? p.text() : p.text;
+      } catch (e) {
+        options.onMaterializeError?.(p.id, e);
+        return;
+      }
+      await save(p.id, text, p.version);
     };
     // Preserve the coordinator's historical synchronous start: when idle, calling
     // flush() or firing the timer invokes `save` in that same turn. Later work is
@@ -68,8 +84,10 @@ export function createAutosave(
         timer = null;
         const p = pending;
         pending = null;
-        // The timer has no caller to observe a rejection, but `tail` deliberately
-        // remains rejected so a later flush can still observe it.
+        // The timer has no caller to observe a rejection. A thunk that throws is
+        // reported through onMaterializeError and resolves, so `tail` can now
+        // only reject when `save` itself does — which a later flush() would
+        // rethrow. The session's `save` never rejects (persistNote catches).
         if (p) void enqueue(p).catch(() => {});
       }, delayMs);
     },

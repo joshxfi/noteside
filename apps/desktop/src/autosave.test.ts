@@ -47,6 +47,50 @@ describe("createAutosave", () => {
     expect(reads).toBe(1);
   });
 
+  // The thunk runs one layer ABOVE persistNote's try/catch, so a serializer that
+  // can't render a node used to reject the coordinator's tail — and flush()
+  // rethrew it into every later open()/quit()/notebook switch.
+  it("a thunk that throws reports through onMaterializeError, writes nothing, and flush() resolves", async () => {
+    const saved: Array<[string, string]> = [];
+    const reported: Array<[string, unknown]> = [];
+    const a = createAutosave((id, text) => saved.push([id, text]), 800, {
+      onMaterializeError: (id, e) => reported.push([id, e]),
+    });
+    a.schedule("a.md", () => {
+      throw new Error("boom");
+    });
+    await vi.advanceTimersByTimeAsync(800);
+    expect(saved).toEqual([]);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.[0]).toBe("a.md");
+    await expect(a.flush()).resolves.toBeUndefined();
+  });
+
+  it("a later save still lands after a thunk failure", async () => {
+    const saved: Array<[string, string]> = [];
+    const a = createAutosave((id, text) => saved.push([id, text]), 800, {
+      onMaterializeError: () => {},
+    });
+    a.schedule("a.md", () => {
+      throw new Error("boom");
+    });
+    await vi.advanceTimersByTimeAsync(800);
+    a.schedule("a.md", "ok");
+    await vi.advanceTimersByTimeAsync(800);
+    expect(saved).toEqual([["a.md", "ok"]]);
+  });
+
+  it("without the option a throwing thunk is still swallowed and flush() resolves", async () => {
+    const saved: Array<[string, string]> = [];
+    const a = createAutosave((id, text) => saved.push([id, text]), 800);
+    a.schedule("a.md", () => {
+      throw new Error("boom");
+    });
+    await vi.advanceTimersByTimeAsync(800);
+    await expect(a.flush()).resolves.toBeUndefined();
+    expect(saved).toEqual([]);
+  });
+
   // The bug the v1 review caught: a queued save fired against the *active* note
   // instead of the note it was scheduled for, corrupting the new note.
   it("REGRESSION: a queued save always targets its own note", async () => {

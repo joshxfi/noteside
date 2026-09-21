@@ -229,6 +229,12 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     // its read after it).
     (id, text, seq) => queueNoteOperation(() => persistNote(id, text, seq)),
     deps.autosaveMs ?? DEFAULT_AUTOSAVE_MS,
+    {
+      // The editor's serialize thunk threw: nothing was written, the buffer is
+      // still dirty (the [+] is honest), and the user hears about it — the same
+      // toast persistNote raises for a failed disk write.
+      onMaterializeError: (_id, e) => notify(`save failed: ${e}`, "error"),
+    },
   );
 
   async function flush(): Promise<void> {

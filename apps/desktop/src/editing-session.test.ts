@@ -158,6 +158,25 @@ describe("editingSession", () => {
     expect(bodies.get("a.md")).toBe("new text");
   });
 
+  // The serialize thunk runs inside the autosave coordinator, one layer above
+  // persistNote's try/catch. A serializer that can't render a node used to leave
+  // the tail rejected, and flush() rethrew it into every later navigation.
+  // (`dirty` is passed explicitly, exactly as editor.tsx's onChange does — a
+  // thunk-only change() would materialize it synchronously to compute dirtiness.)
+  it("REGRESSION: a serialize thunk that throws toasts 'save failed' and open() still navigates", async () => {
+    const { session, notices, bodies } = makeSession({ "a.md": "A", "b.md": "B" });
+    await session.open("a.md");
+    session.change(() => {
+      throw new Error("serializer exploded");
+    }, true);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("a.md")).toBe("A"); // nothing written
+    expect(notices.some((n) => n.startsWith("save failed"))).toBe(true);
+    expect(session.getSnapshot().dirty).toBe(true); // still honest about unsaved work
+    await session.open("b.md"); // used to reject: flush() rethrew the poisoned tail
+    expect(session.getSnapshot().activeId).toBe("b.md");
+  });
+
   it("change() with a clean dirty flag cancels a pending autosave", async () => {
     const { session, bodies, calls } = makeSession({ "a.md": "old" });
     await session.open("a.md");
