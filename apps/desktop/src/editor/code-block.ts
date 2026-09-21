@@ -79,7 +79,10 @@ const ALIASES: Record<string, string> = {
   dsconfig: "ini",
 };
 
-const loading = new Set<string>();
+// One in-flight import per language, shared by every editor that asks while
+// it loads — a Set here dropped the second requester's onReady, so the note
+// opened during the import stayed unhighlighted until an unrelated repaint.
+const loading = new Map<string, Promise<void>>();
 
 function canonical(lang: string | null | undefined): string | null {
   if (!lang) return null;
@@ -90,19 +93,23 @@ function canonical(lang: string | null | undefined): string | null {
 /** Kick the lazy grammar load for `lang`; `onReady` fires once registered. */
 function ensureLanguage(lang: string | null | undefined, onReady: () => void): void {
   const canon = canonical(lang);
-  if (!canon || loading.has(canon) || lowlight.registered(canon)) return;
+  if (!canon || lowlight.registered(canon)) return;
+  const inflight = loading.get(canon);
+  if (inflight) {
+    void inflight.then(onReady, () => {});
+    return;
+  }
   const load = LOADERS[canon];
   if (!load) return; // unknown language — renders unhighlighted, still correct
-  loading.add(canon);
-  load()
+  const p = load()
     .then((mod) => {
       lowlight.register(canon, mod.default);
-      onReady();
-    })
-    .catch(() => {
-      /* offline chunk-load failure: plain text is fine */
     })
     .finally(() => loading.delete(canon));
+  loading.set(canon, p);
+  void p.then(onReady, () => {
+    /* offline chunk-load failure: plain text is fine */
+  });
 }
 
 /** Content-neutral nudge so the lowlight plugin recomputes decorations. */

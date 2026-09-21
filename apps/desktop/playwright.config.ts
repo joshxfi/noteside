@@ -13,7 +13,8 @@ export default defineConfig({
   reporter: CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
   use: {
     baseURL: "http://localhost:1420",
-    trace: "on-first-retry",
+    // Locally there are no retries, so "on-first-retry" recorded nothing at all.
+    trace: CI ? "on-first-retry" : "retain-on-failure",
   },
   // Chromium ≈ the Windows webview (WebView2); WebKit ≈ the macOS/Linux webview
   // (WKWebView / WebKitGTK) — engine-level parity for CSS/animation quirks.

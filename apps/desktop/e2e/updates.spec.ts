@@ -5,7 +5,7 @@ import { boot, expect, test } from "./fixtures";
 // setting's UI: the switch is on by default, toggles, and persists to the config.
 test.describe("automatic updates", () => {
   // The row label carries a hint span ("check on launch"), so match the label
-  // text unanchored rather than with ^…$ (the Blink row has no hint; this does).
+  // text unanchored rather than with ^…$.
   const row = (page: import("@playwright/test").Page) =>
     page
       .locator(".set-row")

@@ -1,0 +1,9 @@
+# LF everywhere: the round-trip fixtures are byte-exact serializer vectors and
+# every formatter deliberately skips them, so git must not renormalize them on a
+# Windows checkout either.
+* text=auto eol=lf
+apps/desktop/src/test-vectors/round-trip/** -text
+*.png binary
+*.ico binary
+*.icns binary
+*.woff2 binary
