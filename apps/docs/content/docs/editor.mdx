@@ -65,8 +65,9 @@ Prefer the mouse? Two ways in:
 - **In a list.** Nest the item one level. `⇧Tab` unnests it.
 - **Anywhere else.** Insert `tab-width` spaces at the caret.
 
-With vim on, `Tab` does nothing in normal or visual mode. It's swallowed so focus can't
-escape the editor.
+With vim on, `Tab` in normal mode nests the list item under the cursor and `⇧Tab`
+unnests it, the same as `>>` and `<<`. On a paragraph it does nothing, and in visual
+mode it does nothing. It is swallowed in every mode, so focus can't escape the editor.
 
 ## Blocks
 

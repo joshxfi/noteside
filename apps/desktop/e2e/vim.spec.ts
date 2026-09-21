@@ -505,13 +505,13 @@ test.describe("vim mode", () => {
     await expect(show).toHaveCount(0);
   });
 
-  test("Tab is swallowed in normal mode, indents in insert (issue #23 semantics)", async ({
+  test("Tab on a paragraph is a swallowed no-op in normal mode, indents in insert (issue #23 semantics)", async ({
     page,
   }) => {
     await bootVim(page);
     const content = page.locator(".av-cm .tiptap");
     const blocks = await content.locator("> *").count();
-    await page.keyboard.press("Tab"); // normal: swallowed, still focused, no edit
+    await page.keyboard.press("Tab"); // normal, on a paragraph: swallowed, still focused, no edit
     await expect(content.locator("> *")).toHaveCount(blocks);
     await expect(content).toBeFocused();
     await expect(page.locator(".av-dirty")).toHaveCount(0);
@@ -532,5 +532,89 @@ test.describe("vim mode", () => {
         ),
       )
       .toBe(true);
+  });
+
+  // Issue #33: the item below a freshly inserted one "could not be indented" —
+  // in normal mode Tab was swallowed outright (the focus trap), and a vim user
+  // reads a dead Tab as a broken editor. Now Tab is `>>` and Shift-Tab `<<`,
+  // still handled so focus never leaves. A keyboard fires keydown("Shift")
+  // before the Tab, so the shifted press is driven with an explicit down/up.
+  test("Tab nests the list item under the normal-mode cursor and Shift-Tab unnests it (issue #33)", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    const content = page.locator(".av-cm .tiptap");
+    const list = content.locator("> ol").last(); // top-level: nesting adds an inner ol
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("1. First item");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Second item");
+    await page.keyboard.press("Escape");
+    // insert a new item between them, then land on the one below it
+    await page.keyboard.press("k");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Inserted");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("j");
+    await expect(mode(page)).toHaveText("NORMAL");
+    await expect(list.locator("> li")).toHaveCount(3);
+    await page.keyboard.press("Tab");
+    await expect(list.locator("> li")).toHaveCount(2);
+    await expect(list.locator("> li").nth(1).locator("ol > li")).toHaveText(["Second item"]);
+    await expect(mode(page)).toHaveText("NORMAL");
+    await expect(content).toBeFocused();
+    await page.keyboard.down("Shift");
+    await page.keyboard.press("Tab");
+    await page.keyboard.up("Shift");
+    await expect(list.locator("> li")).toHaveCount(3);
+    await expect(list.locator("> li").nth(2)).toHaveText("Second item");
+    await expect(content).toBeFocused();
+  });
+
+  // Issue #32: on an EMPTY list item, `o`/`O` opened nothing — splitListItem
+  // refuses an empty item (Enter's "an empty bullet ends the list") and the
+  // layer bailed, so typing landed in the empty item itself. (The `i` half of
+  // the report was the issue-#31 DOM desync, pinned above.)
+  test("i types into an empty list item; o / O open a real sibling item around it (issue #32)", async ({
+    page,
+  }) => {
+    await bootVim(page);
+    const list = page.locator(".av-cm .tiptap ol").last();
+    const items = list.locator("> li");
+    await page.keyboard.press("G");
+    await page.keyboard.press("A");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("1. First item");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(items).toHaveText(["First item", ""]);
+    // i on the empty item: the text lands THERE, not at the end of item 1
+    await page.keyboard.press("i");
+    await expect(mode(page)).toHaveText("INSERT");
+    await page.keyboard.type("Second");
+    await expect(items).toHaveText(["First item", "Second"]);
+    await page.keyboard.press("Escape");
+    // an empty third item, reached by k then j (the coords probe onto an empty line)
+    await page.keyboard.press("o");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("k");
+    await page.keyboard.press("j");
+    await expect(items).toHaveText(["First item", "Second", ""]);
+    // o on the empty item opens a fourth item below it and types there
+    await page.keyboard.press("o");
+    await expect(mode(page)).toHaveText("INSERT");
+    await page.keyboard.type("Fourth");
+    await expect(items).toHaveText(["First item", "Second", "", "Fourth"]);
+    await page.keyboard.press("Escape");
+    // O on the empty item opens one ABOVE it
+    await page.keyboard.press("k");
+    await page.keyboard.press("O");
+    await page.keyboard.type("Third");
+    await expect(items).toHaveText(["First item", "Second", "Third", "", "Fourth"]);
+    await page.keyboard.press("Escape");
+    await expect(mode(page)).toHaveText("NORMAL");
   });
 });

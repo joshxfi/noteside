@@ -96,8 +96,9 @@ one undo step**: `cw` + typing + `Esc`, then `u`, brings the whole word back.
 
 **The line-unit rule.** Linewise commands act on what the line _is_: `dd` deletes a
 heading, a list item, a table row, a source line inside a code block, or a paragraph inside
-a quote. `o` / `O` open a sibling item in a list and a new **row** in a table. `>>` / `<<`
-nest and unnest list items and indent code lines by `tab-width`.
+a quote. `o` / `O` open a sibling item in a list (an empty item included) and a new
+**row** in a table. `>>` / `<<` nest and unnest list items and indent code lines by
+`tab-width`; `Tab` / `⇧Tab` in normal mode do the same.
 
 **Search.** `/` opens the same find bar as `⌘F`; `n` / `N` step through matches, `*` /
 `#` search the word under the cursor, and `:noh` clears the highlights.

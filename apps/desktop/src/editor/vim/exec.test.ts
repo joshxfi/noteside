@@ -49,7 +49,10 @@ function driveDoc(doc: PMNode, at: string | number, keys: string[], tabWidth = 2
   let mode: VimMode = "normal";
   const notes: string[] = [];
   for (const k of keys) {
-    const r = feedKey(vim, { key: k, ctrl: false, shift: false, allowCtrlScroll: true });
+    // "S-Tab" spells a shifted key (the machine looks through the Shift keydown itself)
+    const shift = k.startsWith("S-");
+    const key = shift ? k.slice(2) : k;
+    const r = feedKey(vim, { key, ctrl: false, shift, allowCtrlScroll: true });
     vim = r.state;
     for (const intent of r.intents) {
       if (intent.kind === "mode") {
@@ -414,6 +417,26 @@ describe("small edits", () => {
     expect(drive("```\n    x\n```", "x", keys("<<"), 4).md).toBe("```\nx\n```");
     // a paragraph has nothing to indent in markdown — quiet no-op
     expect(drive("para", "para", keys(">>")).md).toBe("para");
+  });
+
+  it("Tab nests the item under the cursor and Shift-Tab unnests it, as >> and << do (issue #33)", () => {
+    // the item BELOW a freshly inserted one — the issue's repro, a numbered list
+    const inserted = drive("1. First\n2. Second", "Second", ["O"]); // O reports openLine; the doc is unchanged
+    expect(inserted.notes).toEqual(["openLine:above"]);
+    expect(drive("1. First\n2. Inserted\n3. Second", "Second", ["Tab"]).md).toBe(
+      "1. First\n2. Inserted\n   1. Second",
+    );
+    expect(drive("1. First\n   1. Second", "Second", ["S-Tab"]).md).toBe("1. First\n2. Second");
+    expect(drive("- a\n- b\n- c", "b", ["2", "Tab"]).md).toBe("- a\n  - b\n  - c");
+    // the first item has nothing to nest under, a paragraph has no indent: quiet no-ops
+    expect(drive("- a\n- b", "a", ["Tab"]).md).toBe("- a\n- b");
+    expect(drive("para", "para", ["Tab"]).md).toBe("para");
+    expect(drive("para", "para", ["S-Tab"]).md).toBe("para");
+    expect(drive("```\nx\n```", "x", ["Tab"], 4).md).toBe("```\n    x\n```");
+    // the cursor stays a normal-mode cursor, on the item's first character
+    const r = drive("- a\n- b", "b", ["Tab"]);
+    expect(r.mode).toBe("normal");
+    expect(r.under).toBe("b");
   });
 
   it("o / O are reported for the glue (the view runs the split)", () => {

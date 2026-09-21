@@ -152,11 +152,15 @@ function syncDomSelection(editor: Editor): void {
 /** WebKit fires a stale selectionchange after a keydown that inserted a node
  *  and selected into it, bouncing the caret back — reassert on the next task
  *  and collapse the DOM selection by hand (selectionToDOM into a node
- *  inserted during a keydown silently fails there). */
-function reassertCaret(editor: Editor): void {
+ *  inserted during a keydown silently fails there). `stale` reports whether
+ *  another key reached the layer first: then the caret is wherever THAT put
+ *  it, and re-parking it at the open-time position would teleport a fast
+ *  typist's next characters (or undo a `k`) — the bounce this guards against
+ *  lands before any later keydown anyway. */
+function reassertCaret(editor: Editor, stale: () => boolean): void {
   const intended = editor.state.selection.head;
   setTimeout(() => {
-    if (editor.isDestroyed) return;
+    if (editor.isDestroyed || stale()) return;
     const v = editor.view;
     if (intended > v.state.doc.content.size) return;
     if (v.state.selection.head !== intended) {
@@ -177,7 +181,7 @@ function reassertCaret(editor: Editor): void {
  *  the caret back). In a table the line is a ROW; in a code block a source
  *  line. Called with the mode already switched to insert, so the normal-mode
  *  clamp never fights the intermediate selection placements. */
-function openLine(editor: Editor, above: boolean): void {
+function openLine(editor: Editor, above: boolean, stale: () => boolean): void {
   const { state, view } = editor;
   const doc = state.doc;
   const head = Math.min(state.selection.head, doc.content.size);
@@ -199,12 +203,27 @@ function openLine(editor: Editor, above: boolean): void {
     const s = editor.state;
     const at = Math.min((above ? unit.from : unit.to) + 1, s.doc.content.size);
     view.dispatch(s.tr.setSelection(Selection.near(s.doc.resolve(at), 1)).scrollIntoView());
-    reassertCaret(editor);
+    reassertCaret(editor, stale);
     return;
   }
 
   const isItem =
     unitNode && (unitNode.type.name === "listItem" || unitNode.type.name === "taskItem");
+  const emptyItem = isItem && unitNode.childCount === 1 && unitNode.firstChild!.content.size === 0;
+  if (emptyItem) {
+    // splitListItem on an EMPTY item is Enter's "an empty bullet ends the
+    // list": it refuses a top-level item and LIFTS a nested one out. Right
+    // for Enter, wrong for o/O, which always open a line — so a fresh empty
+    // sibling goes in directly and the caret steps into it (issue #32; the
+    // table-row path's reassert covers WebKit's bounce).
+    const at = above ? unit.from : unit.to;
+    const fresh = unitNode.type.create(null, state.schema.nodes.paragraph.create());
+    const tr = state.tr.insert(at, fresh);
+    tr.setSelection(Selection.near(tr.doc.resolve(at + 1), 1));
+    view.dispatch(tr.scrollIntoView());
+    reassertCaret(editor, stale);
+    return;
+  }
   const edge = above
     ? Selection.near(doc.resolve(Math.min(unit.from + 1, doc.content.size)), 1)
     : Selection.near(doc.resolve(Math.max(unit.to - 1, 0)), -1);
@@ -224,7 +243,7 @@ function openLine(editor: Editor, above: boolean): void {
     );
   }
   view.dispatch(editor.state.tr.scrollIntoView());
-  reassertCaret(editor);
+  reassertCaret(editor, stale);
 }
 
 interface ChangeRecord {
@@ -267,6 +286,13 @@ export const Vim = Extension.create<VimOptions>({
     let lastChange: ChangeRecord | null = null;
     let recording: { intents: Intent[]; from: number } | null = null;
     let shownPending = "";
+    /** Bumped by every keydown the layer sees; a deferred caret reassert
+     *  scheduled under an older value has been overtaken (see reassertCaret). */
+    let keySerial = 0;
+    const staleAfterNow = (): (() => boolean) => {
+      const at = keySerial;
+      return () => keySerial !== at;
+    };
 
     const clearPending = (s: VimState): VimState => ({
       ...s,
@@ -394,7 +420,7 @@ export const Vim = Extension.create<VimOptions>({
         const r = execIntent(editor.state, intent, { ...env(), vsel: null });
         if (!r) continue;
         if (r.tr) editor.view.dispatch(mark(r.tr));
-        if (r.openLine) openLine(editor, r.openLine === "above");
+        if (r.openLine) openLine(editor, r.openLine === "above", staleAfterNow());
         if (r.notify) options.hooks.notify(r.notify);
       }
       if (lastChange.text !== null) {
@@ -454,7 +480,7 @@ export const Vim = Extension.create<VimOptions>({
             if (r.openLine) {
               // seal, so the split + typing form their own undo group
               editor.view.dispatch(mark(closeHistory(editor.state.tr)));
-              openLine(editor, r.openLine === "above");
+              openLine(editor, r.openLine === "above", staleAfterNow());
             }
             if (r.searchWord) {
               setFindQuery(editor, r.searchWord.word);
@@ -488,6 +514,7 @@ export const Vim = Extension.create<VimOptions>({
       key,
       props: {
         handleKeyDown(view, e) {
+          keySerial++;
           if (e.isComposing || e.metaKey) return false;
 
           // ── insert mode: Esc (Ctrl-[) + the escMap sequence only ──
