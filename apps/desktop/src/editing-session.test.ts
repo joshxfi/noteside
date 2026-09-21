@@ -513,6 +513,54 @@ describe("editingSession", () => {
     expect(s.initialText).toBe("A body"); // the note buffer underneath was preserved
   });
 
+  // Delete's counterpart to migrateId: the held note is gone, not relocated, so
+  // `:q` must land on the empty state rather than reseed a vanished file.
+  it("forgetNote under the config overlay makes :q land on the empty state", async () => {
+    const { session } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.openConfig("x");
+    session.forgetNote("a.md");
+    await session.quit();
+    const s = session.getSnapshot();
+    expect(s.status).toBe("empty");
+    expect(s.activeId).toBe(null);
+  });
+
+  it("forgetNote after :q clears the reopenLast target", async () => {
+    const { session, calls } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    await session.quit();
+    session.forgetNote("a.md");
+    session.reopenLast();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.filter((c) => c === "read:a.md")).toHaveLength(1); // the initial open only
+    expect(session.getSnapshot().status).toBe("empty");
+  });
+
+  it("forgetNote is a no-op for the active note and unrelated ids", async () => {
+    const { session } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.forgetNote("a.md"); // active → the caller navigates away instead
+    expect(session.getSnapshot().activeId).toBe("a.md");
+    session.forgetNote("zzz.md"); // never held
+    expect(session.getSnapshot().activeId).toBe("a.md");
+  });
+
+  // The bug: delete gated its autosave pause on the note being ACTIVE, so a note
+  // typed in and then covered by the config overlay kept its queued save. The
+  // file was removed and the 800ms timer recreated it.
+  it("REGRESSION: cancelAutosave + forgetNote under the overlay drops the held note's queued save", async () => {
+    const { session, bodies, calls } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.change("typed", true);
+    session.openConfig("x");
+    await session.cancelAutosave();
+    session.forgetNote("a.md");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(bodies.get("a.md")).toBe("A body"); // never rewritten
+    expect(calls.filter((c) => c === "save:a.md")).toEqual([]);
+  });
+
   // REGRESSION (stability pass): an autosave landing while the config buffer
   // overlays the note must still advance the note's baseline — otherwise :q
   // reseeds the editor from pre-edit text and the next autosave overwrites the

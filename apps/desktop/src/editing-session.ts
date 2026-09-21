@@ -95,6 +95,11 @@ export interface EditingSession {
    *  buffer is still active) activeId/title. No remount — editorKey excludes
    *  activeId, so the cursor survives. The caller patches the sidebar list. */
   migrateId(oldId: string, meta: NoteMeta): void;
+  /** The backend deleted `id` (or a folder containing it) while it was the
+   *  buffer parked under the config overlay or remembered after :q. Drop it so
+   *  `:q`/reopenLast can't aim at a dead path. A no-op for unrelated ids and
+   *  for the ACTIVE note (callers navigate away from that one instead). */
+  forgetNote(id: string): void;
 }
 
 export function createEditingSession(deps: EditingSessionDeps): EditingSession {
@@ -290,6 +295,23 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
     commit();
   }
 
+  // migrateId's destructive twin: the note is gone, not relocated. Only the HELD
+  // buffer (under the config overlay, or remembered after :q) lands here — the
+  // active note is handled by the caller navigating away from it.
+  function forgetNote(id: string): void {
+    if (!id || id === CONFIG_ID || activeId === id) return;
+    if (lastNoteId !== id) return;
+    lastNoteId = null;
+    if (latestSaveRequest?.id === id) latestSaveRequest = null;
+    // The preserved note buffer is the deleted note's; empty it so a :q from the
+    // overlay lands on the empty state instead of reseeding a vanished file.
+    noteTitle = null;
+    noteInitial = "";
+    noteSaved = "";
+    noteDirty = false;
+    commit();
+  }
+
   async function open(id: string, line = 0): Promise<void> {
     // A successful navigation after a delete discards any edits captured while
     // autosave was paused. A failed delete calls resumeAutosave() instead.
@@ -477,5 +499,6 @@ export function createEditingSession(deps: EditingSessionDeps): EditingSession {
       if (request) autosaver.schedule(request.id, request.text, request.seq);
     },
     migrateId,
+    forgetNote,
   };
 }

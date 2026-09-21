@@ -1564,9 +1564,13 @@ export function App() {
   // note leaves the current buffer untouched.
   const deleteNoteById = async (id: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
+    // The buffer under the config overlay / remembered after :q still has this
+    // id: its queued autosave would recreate the file after the delete, and its
+    // :q target would point at a dead path (the heldNoteId rule move/rename use).
+    const held = heldNoteId() === id;
     const gen = notebookLoad.current;
     try {
-      if (wasActive) await session.cancelAutosave();
+      if (held) await session.cancelAutosave();
       await backend.deleteNote(id);
       if (notebookChangedSince(gen)) return;
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
@@ -1578,10 +1582,12 @@ export function App() {
         const next = remaining[0]?.id ?? null;
         if (next) await session.open(next);
         else session.close();
+      } else if (held) {
+        session.forgetNote(id);
       }
       flash("note deleted");
     } catch (e) {
-      if (wasActive) session.resumeAutosave();
+      if (held && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`delete failed: ${e}`, "error");
     }
   };
@@ -1897,9 +1903,14 @@ export function App() {
   const deleteFolder = async (dir: string) => {
     const prefix = dir + "/";
     const wasActiveInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(prefix);
+    // Same held-note rule as deleteNoteById: a note parked under the config
+    // overlay (or remembered after :q) that lives in this folder must drop its
+    // queued save too, or it recreates the file the recursive delete removed.
+    const heldId = heldNoteId();
+    const heldInside = !!heldId && heldId.startsWith(prefix);
     const gen = notebookLoad.current;
     try {
-      if (wasActiveInside) await session.cancelAutosave();
+      if (heldInside) await session.cancelAutosave();
       await backend.deleteFolder(dir);
       if (notebookChangedSince(gen)) return;
       setNotes((ns) => ns.filter((n) => !n.path.startsWith(prefix)).sort(metaOrder));
@@ -1916,10 +1927,12 @@ export function App() {
         const next = remaining[0]?.id ?? null;
         if (next) await session.open(next);
         else session.close();
+      } else if (heldInside && heldId) {
+        session.forgetNote(heldId);
       }
       flash("folder deleted");
     } catch (e) {
-      if (wasActiveInside && !notebookChangedSince(gen)) session.resumeAutosave();
+      if (heldInside && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`delete failed: ${e}`, "error");
     }
   };

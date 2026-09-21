@@ -41,6 +41,49 @@ test.describe("delete note", () => {
     await expect(page.locator(".av-item.is-active")).not.toContainText(activeTitle);
   });
 
+  // The held-note bug: delete gated its autosave pause on the note being ACTIVE.
+  // Typing in a note and opening the config overlay within the 800ms debounce
+  // left the queued save alive — it recreated the file after deleteNote — and
+  // lastNoteId kept pointing at the dead path, so :q reseeded a vanished note
+  // instead of going to the empty state.
+  test("deleting the note under the config overlay drops its queued save and :q lands on the empty state", async ({
+    page,
+  }) => {
+    await boot(page);
+    await page.locator(".av-cm .tiptap").click();
+    const activeTitle = await page.locator(".av-item.is-active .av-item-titletext").innerText();
+
+    // Queue an autosave, then cover the note with the config overlay INSIDE the
+    // 800ms debounce — no wait between these two, that race is the bug.
+    await page.keyboard.type(" edited");
+    await page.keyboard.press("ControlOrMeta+Shift+p");
+    await page.keyboard.type("notesiderc");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".av-plain")).toBeVisible();
+
+    // Delete the (now non-active) note through the row's context menu.
+    await page.locator(".av-item", { hasText: activeTitle }).click({ button: "right" });
+    await page.locator(".ctx-menu").getByRole("menuitem", { name: "Delete" }).click();
+    await page.locator(".cfm-btn", { hasText: "Delete" }).click();
+    await expect(page.locator(".av-toast")).toContainText("note deleted");
+    await expect(page.locator(".av-item").filter({ hasText: activeTitle })).toHaveCount(0);
+
+    // Deliberate sleep past the 800ms autosave debounce: the cancelled save must
+    // not fire and recreate the row.
+    await page.waitForTimeout(1000);
+    await expect(page.locator(".av-item").filter({ hasText: activeTitle })).toHaveCount(0);
+
+    // :q from the overlay has no note to return to — the empty state, not a
+    // buffer reseeded from the deleted file. (The editor-crash boundary is also
+    // .av-empty but carries no .av-mark.) Refocus the textarea first: the confirm
+    // modal left focus on <body>, where the quit chord doesn't reach the buffer.
+    await page.locator(".av-plain").click();
+    await page.keyboard.press("ControlOrMeta+w");
+    await expect(page.locator(".av-plain")).toHaveCount(0);
+    await expect(page.locator(".av-empty .av-mark")).toBeVisible();
+    await expect(page.locator(".av-empty")).not.toContainText("The editor failed to load");
+  });
+
   test("cancelling the modal (Esc / Cancel) deletes nothing", async ({ page }) => {
     await boot(page);
     await page.locator(".av-cm .tiptap").click();
