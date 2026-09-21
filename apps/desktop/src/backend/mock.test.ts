@@ -301,6 +301,30 @@ describe("setPinnedBody (mirror of Rust set_pinned)", () => {
     expect(setPinnedBody("---\npinned: true\n---\nbody", false)).toBe("body");
   });
 
+  // bodyStart is module-private and now delegates the RULE to markdown.ts's
+  // frontmatterEndLine, so these pin the boundary through the one exported
+  // consumer: a block it recognizes is edited in place, one it doesn't gets a
+  // fresh block opened above the untouched text.
+  describe("frontmatter boundary", () => {
+    it("recognizes a CRLF block and edits it in place", () => {
+      expect(setPinnedBody("---\r\ntitle: X\r\n---\r\n# Body\r\n", true)).toBe(
+        "---\r\npinned: true\r\ntitle: X\r\n---\r\n# Body\r\n",
+      );
+    });
+
+    it("treats an unclosed block as no frontmatter", () => {
+      expect(setPinnedBody("---\ntitle: X\n# Body\n", true)).toBe(
+        "---\npinned: true\n---\n---\ntitle: X\n# Body\n",
+      );
+    });
+
+    it("treats a `---` behind leading whitespace on line 0 as no frontmatter", () => {
+      expect(setPinnedBody(" ---\nx\n---\nbody", true)).toBe(
+        "---\npinned: true\n---\n ---\nx\n---\nbody",
+      );
+    });
+  });
+
   it("round-trips every frontmatter shape back to the original bytes", () => {
     roundTrip("# Note\n\nbody\n");
     roundTrip("plain text, no heading");

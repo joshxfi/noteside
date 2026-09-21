@@ -3,6 +3,7 @@
 // the demo. Config/last-notebook persist to localStorage.
 import { NOTES } from "../data";
 import { slugifyTitle, stemMatchesSlug } from "../links";
+import { frontmatterEndLine } from "../markdown";
 import type { Config } from "../settings";
 import type {
   Backend,
@@ -156,20 +157,17 @@ function metas(): NoteMeta[] {
 }
 
 /** Byte offset where the body starts, past a leading `---` frontmatter block
- *  (0 when there is none). Mirrors Rust `split_frontmatter`, which is tolerant:
- *  an unclosed block counts as no frontmatter. */
+ *  (0 when there is none). The RULE lives in markdown.ts (`frontmatterEndLine`,
+ *  the editor's mirror of Rust `split_frontmatter`) — this only turns its
+ *  closing-line index back into an offset, so the mock can't drift from the
+ *  editor on what counts as frontmatter. CRLF: lines are compared without `\r`. */
 function bodyStart(text: string): number {
-  const open = /^---\r?\n/.exec(text);
-  if (!open) return 0;
-  let i = open[0].length;
-  while (i < text.length) {
-    const nl = text.indexOf("\n", i);
-    const end = nl < 0 ? text.length : nl + 1;
-    if (text.slice(i, end).trimEnd() === "---") return end;
-    if (nl < 0) break;
-    i = end;
-  }
-  return 0;
+  const raw = text.split("\n");
+  const end = frontmatterEndLine(raw.length, (i) => raw[i].replace(/\r$/, ""));
+  if (end < 0) return 0;
+  let offset = 0;
+  for (let i = 0; i <= end; i++) offset += raw[i].length + 1; // +1 = the "\n"
+  return Math.min(offset, text.length);
 }
 
 function titleFromBody(text: string): string | null {
