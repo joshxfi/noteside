@@ -14,7 +14,7 @@
 //   else (chords, tabWidth) reconfigures live through refs.
 // - Typing must never re-render React beyond this component's own status bar:
 //   shouldRerenderOnTransaction is false and all node views are plain DOM.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -203,60 +203,82 @@ function RichEditor(props: EditorProps) {
     });
   };
 
-  const serializeNow = (editor: TiptapEditor): string => {
-    const doc = editor.state.doc;
-    const text = serializeDoc(editor, io, doc);
-    lastSerializedRef.current = { text, doc };
-    return text;
-  };
-
-  // Run a table command in the editor's context: AppCommands go to onCommand,
-  // editor actions act on the live editor. Powers the always-on Mod- chords.
-  const dispatchCommand = (cmd: Command) => {
-    const editor = editorRef.current;
-    const p = propsRef.current;
-    if (cmd.command) {
-      p.onCommand(cmd.command);
-      return;
-    }
-    if (!editor) return;
-    if (cmd.editor === "save") p.onSave(serializeNow(editor));
-    else if (cmd.editor === "quit") p.onQuit();
-    else if (cmd.editor === "saveQuit") {
-      p.onSave(serializeNow(editor));
-      p.onQuit();
-    } else if (cmd.editor === "follow") {
-      const url = urlAtCaret(editor);
-      if (url) p.onOpenUrl(url);
-    } else if (cmd.editor === "search") {
-      setFindOpen((open) => !open);
-    } else if (cmd.editor === "searchNext") {
-      findNext(editor);
-    } else if (cmd.editor === "searchPrev") {
-      findPrev(editor);
-    } else if (cmd.editor === "tableAddRow") {
-      runTableOp(editor.chain().focus().addRowAfter());
-    } else if (cmd.editor === "tableDelRow") {
-      runTableOp(editor.chain().focus().deleteRow());
-    } else if (cmd.editor === "tableAddCol") {
-      runTableOp(editor.chain().focus().addColumnAfter());
-    } else if (cmd.editor === "tableDelCol") {
-      runTableOp(editor.chain().focus().deleteColumn());
-    }
-  };
+  // Mount-stable like dispatchCommand below, which closes over both: `io` is
+  // mount-once state and everything else is a ref.
+  const serializeNow = useCallback(
+    (editor: TiptapEditor): string => {
+      const doc = editor.state.doc;
+      const text = serializeDoc(editor, io, doc);
+      lastSerializedRef.current = { text, doc };
+      return text;
+    },
+    [io],
+  );
 
   // Table ops arrive from the palette/ex bar/toolbar with the caret anywhere;
   // focus() first (the palette blurred the editor), honest flash otherwise.
-  const runTableOp = (chained: { run: () => boolean }) => {
+  const runTableOp = useCallback((chained: { run: () => boolean }) => {
     if (!chained.run()) propsRef.current.onNotify?.("not in a table");
-  };
+  }, []);
 
-  const editor = useEditor({
-    // The callbacks below read the latest-props ref at EVENT time (keydown,
-    // click, image resolve) — the extension factory only stores them. The
-    // lint rule can't see past the render-time call and flags the reads.
-    // oxlint-disable-next-line react/refs
-    extensions: buildExtensions({
+  // Run a table command in the editor's context: AppCommands go to onCommand,
+  // editor actions act on the live editor. Powers the always-on Mod- chords.
+  //
+  // Mount-stable: onCreate registers this function with App and onDestroy
+  // retires it BY IDENTITY (app.tsx onRegisterDispatch). @tiptap/react routes
+  // both callbacks through the LATEST render's options, so a per-render arrow
+  // registered render-1's closure and retired render-N's — the retire never
+  // matched and App kept a dead editor's dispatcher. Everything it touches is
+  // a ref or mount-stable, so this never rebuilds.
+  const dispatchCommand = useCallback(
+    (cmd: Command) => {
+      const editor = editorRef.current;
+      const p = propsRef.current;
+      if (cmd.command) {
+        p.onCommand(cmd.command);
+        return;
+      }
+      if (!editor) return;
+      if (cmd.editor === "save") p.onSave(serializeNow(editor));
+      else if (cmd.editor === "quit") p.onQuit();
+      else if (cmd.editor === "saveQuit") {
+        p.onSave(serializeNow(editor));
+        p.onQuit();
+      } else if (cmd.editor === "follow") {
+        const url = urlAtCaret(editor);
+        if (url) p.onOpenUrl(url);
+      } else if (cmd.editor === "search") {
+        setFindOpen((open) => !open);
+      } else if (cmd.editor === "searchNext") {
+        findNext(editor);
+      } else if (cmd.editor === "searchPrev") {
+        findPrev(editor);
+      } else if (cmd.editor === "tableAddRow") {
+        runTableOp(editor.chain().focus().addRowAfter());
+      } else if (cmd.editor === "tableDelRow") {
+        runTableOp(editor.chain().focus().deleteRow());
+      } else if (cmd.editor === "tableAddCol") {
+        runTableOp(editor.chain().focus().addColumnAfter());
+      } else if (cmd.editor === "tableDelCol") {
+        runTableOp(editor.chain().focus().deleteColumn());
+      }
+    },
+    [setFindOpen, runTableOp, serializeNow],
+  );
+
+  // Built ONCE per mount. @tiptap/react compares `extensions` by element
+  // identity on every render and calls editor.setOptions() (→ view.updateState
+  // → every plugin view's update, incl. the table toolbar's rect reads) when it
+  // differs — a per-render buildExtensions() failed that compare on every caret
+  // move. Every callback reads live values through refs, and vimMode is part of
+  // the remount key, so nothing here needs a rebuild.
+  //
+  // The callbacks below read the latest-props ref at EVENT time (keydown,
+  // click, image resolve) — the extension factory only stores them. The
+  // lint rule can't see past the render-time call and flags the reads.
+  // oxlint-disable-next-line react/refs
+  const [extensions] = useState(() =>
+    buildExtensions({
       chords: {
         getOverrides: () => propsRef.current.chordOverrides,
         dispatch: dispatchCommand,
@@ -289,6 +311,10 @@ function RichEditor(props: EditorProps) {
           }
         : null,
     }),
+  );
+
+  const editor = useEditor({
+    extensions,
     content: io.body,
     contentType: "markdown",
     // Focus is dispatched from onCreate below, NOT via the autofocus option:

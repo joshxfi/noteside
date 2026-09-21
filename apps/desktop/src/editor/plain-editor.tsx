@@ -32,8 +32,12 @@ function textStat(value: string, selStart: number, dirty: boolean): EditorStat {
 
 export function PlainEditor(props: PlainEditorProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // Written from an effect, never during render (the editor.tsx rule): a render
+  // React discards must not leak its props into the save/dispatch closures.
   const propsRef = useRef(props);
-  propsRef.current = props;
+  useEffect(() => {
+    propsRef.current = props;
+  });
   const [stat, setStat] = useState<EditorStat>(() => textStat(props.initialText, 0, false));
 
   const refreshStat = (dirty?: boolean) => {
