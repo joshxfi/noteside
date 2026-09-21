@@ -214,15 +214,17 @@ pub async fn open_notebook(
 }
 
 #[tauri::command]
-pub fn current_notebook(state: State<AppState>) -> Option<String> {
+pub async fn current_notebook(state: State<'_, AppState>) -> Result<Option<String>> {
     let g = notebook_lock(&state);
-    g.root.as_ref().map(|p| p.to_string_lossy().to_string())
+    Ok(g.root.as_ref().map(|p| p.to_string_lossy().to_string()))
 }
 
 #[tauri::command]
-pub fn list_notes(state: State<AppState>) -> Vec<NoteMeta> {
-    let g = notebook_lock(&state);
-    sorted_metas(&g.records)
+pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteMeta>> {
+    // Snapshot the Arc under the lock; the per-meta clones + sort run after it
+    // is released (the session's reconcile calls this on every external change).
+    let records = notebook_lock(&state).records.clone();
+    Ok(sorted_metas(&records))
 }
 
 /// Read the raw file text fresh from disk (authoritative source of truth).
@@ -243,7 +245,7 @@ pub async fn read_note(path: String, state: State<'_, AppState>) -> Result<NoteD
 /// Read preview text from the in-memory index. Opening/editing still uses
 /// `read_note`, which reads the authoritative file from disk.
 #[tauri::command]
-pub fn preview_note(path: String, state: State<AppState>) -> Result<NoteDoc> {
+pub async fn preview_note(path: String, state: State<'_, AppState>) -> Result<NoteDoc> {
     // Clone the record's Arc under the lock; the string copies for the IPC
     // payload happen after it is released.
     let rec = {
@@ -395,9 +397,9 @@ pub async fn rename_note(
 /// Folders are first-class sidebar data, kept on `NotebookState` under the
 /// same snapshot discipline as `records`.
 #[tauri::command]
-pub fn list_folders(state: State<AppState>) -> Vec<String> {
+pub async fn list_folders(state: State<'_, AppState>) -> Result<Vec<String>> {
     let g = notebook_lock(&state);
-    g.folders.as_ref().clone()
+    Ok(g.folders.as_ref().clone())
 }
 
 /// Move a note into another folder (`dir`; "" = the notebook root), preserving
@@ -786,7 +788,7 @@ pub async fn set_note_pinned(
 
 /// Reveal a note's file in the OS file manager (Finder / File Explorer / …).
 #[tauri::command]
-pub fn reveal_note(path: String, app: AppHandle, state: State<AppState>) -> Result<()> {
+pub async fn reveal_note(path: String, app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let root = {
         let g = notebook_lock(&state);
