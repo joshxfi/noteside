@@ -15,15 +15,41 @@
       // Theme mirror (written by the config-apply effect): set data-theme + the
       // theme's inline vars BEFORE first paint, so a dark/base16 user never sees
       // a light flash while the config store loads. The store stays the source of
-      // truth — this is a paint-time hint only.
+      // truth — this is a paint-time hint only. Defensive: only the vars the app
+      // itself writes (themes.ts THEME_VARS — boot-theme.test.ts pins this list to
+      // it), only color-shaped values, and the whole hint is dropped on any
+      // surprise. Persisted state must not become a pre-paint styling primitive.
       try {
+        var BOOT_VARS = [
+          "--paper",
+          "--paper-2",
+          "--paper-3",
+          "--ink",
+          "--ink-soft",
+          "--ink-faint",
+          "--rule",
+          "--rule-soft",
+          "--accent",
+          "--accent-ink",
+          "--danger",
+        ];
+        // hex colors and color-mix(in oklab, #a, #b N%) — letters, digits, # ( ) , . % space -
+        var BOOT_VALUE = /^[#0-9a-zA-Z(),.% -]{1,120}$/;
         var t = JSON.parse(localStorage.getItem("noteside:boot-theme"));
         if (t && (t.mode === "dark" || t.mode === "light")) {
+          var vars = t.vars && typeof t.vars === "object" ? t.vars : {};
+          var keys = Object.keys(vars);
+          var ok = keys.length <= BOOT_VARS.length;
+          for (var i = 0; ok && i < keys.length; i++) {
+            ok =
+              BOOT_VARS.indexOf(keys[i]) !== -1 &&
+              typeof vars[keys[i]] === "string" &&
+              BOOT_VALUE.test(vars[keys[i]]);
+          }
           document.documentElement.setAttribute("data-theme", t.mode);
-          if (t.vars)
-            for (var k in t.vars)
-              if (k.indexOf("--") === 0 && typeof t.vars[k] === "string")
-                document.documentElement.style.setProperty(k, t.vars[k]);
+          if (ok)
+            for (var j = 0; j < keys.length; j++)
+              document.documentElement.style.setProperty(keys[j], vars[keys[j]]);
         }
       } catch (e) {}
     </script>
