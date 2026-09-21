@@ -87,7 +87,7 @@ export function PlainEditor(props: PlainEditorProps) {
   }, [props.savedText]);
 
   return (
-    <div className="av-editor" data-cursor="bar">
+    <div className="av-editor">
       <div className="av-cm">
         <textarea
           ref={taRef}

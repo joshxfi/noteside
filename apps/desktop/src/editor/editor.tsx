@@ -45,9 +45,6 @@ export interface EditorProps {
    *  (the config buffer). */
   dirty?: boolean;
   vimMode: boolean;
-  cursorBlink: boolean;
-  /** Caret shape for insert / non-vim mode (vim normal mode is always a block). */
-  cursor: "block" | "bar" | "underline";
   /** Indent width in spaces — what Tab inserts (code blocks, loose text). */
   tabWidth: number;
   /** Non-vim chord overrides (`bind` lines), read live by the chord layer. */
@@ -436,11 +433,7 @@ function RichEditor(props: EditorProps) {
   );
 
   return (
-    <div
-      className="av-editor"
-      data-cursor={props.cursor}
-      data-vim-mode={props.vimMode ? mode : undefined}
-    >
+    <div className="av-editor" data-vim-mode={props.vimMode ? mode : undefined}>
       <div className="av-cm">
         {findOpen && editor && (
           <FindBar editor={editor} skipCurrent={props.vimMode} onClose={() => setFindOpen(false)} />

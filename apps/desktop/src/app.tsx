@@ -2324,8 +2324,6 @@ export function App() {
                     savedText={s.savedText}
                     dirty={s.status === "note" ? s.dirty : undefined}
                     vimMode={cfg.vimMode}
-                    cursorBlink={cfg.cursorBlink}
-                    cursor={cfg.cursor}
                     tabWidth={cfg.tabWidth}
                     chordOverrides={cfg.chords}
                     escMap={cfg.escMap}
