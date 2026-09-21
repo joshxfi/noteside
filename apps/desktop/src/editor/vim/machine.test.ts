@@ -431,8 +431,26 @@ describe("key hygiene", () => {
     expect(feed(["Backspace"]).handled).toBe(true);
   });
 
-  it("Tab is swallowed; arrows pass through (and cancel a pending operator)", () => {
-    expect(feedKey(initialVimState, input("Tab")).handled).toBe(true);
+  it("Tab is >> and Shift-Tab is << in normal mode, swallowed in visual and after an operator (issue #33)", () => {
+    expect(feedKey(initialVimState, input("Tab"))).toMatchObject({
+      handled: true,
+      intents: [{ kind: "operateLines", op: ">", count: 1 }],
+    });
+    expect(feedKey(initialVimState, input("Tab", { shift: true })).intents).toEqual([
+      { kind: "operateLines", op: "<", count: 1 },
+    ]);
+    expect(feed(["3", "Tab"]).intents).toEqual([{ kind: "operateLines", op: ">", count: 3 }]);
+    // a keyboard fires keydown("Shift") first — transparent, like every modifier
+    expect(feed(["Shift", "Tab"]).intents).toEqual([{ kind: "operateLines", op: ">", count: 1 }]);
+    const vis = feed(["Tab"], visualState);
+    expect(vis.handled).toBe(true);
+    expect(vis.intents).toEqual([]);
+    const afterOp = feed(["d", "Tab"]);
+    expect(afterOp.handled).toBe(true);
+    expect(afterOp.intents).toEqual([]);
+  });
+
+  it("arrows pass through (and cancel a pending operator)", () => {
     expect(feedKey(initialVimState, input("ArrowDown")).handled).toBe(false);
     const r = feed(["d", "ArrowDown"]);
     expect(r.handled).toBe(false);

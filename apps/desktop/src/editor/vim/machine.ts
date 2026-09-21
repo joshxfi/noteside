@@ -469,7 +469,15 @@ export function feedKey(s: VimState, input: KeyInput): FeedResult {
 
   // arrows, Home/End, PageUp/Down pass through to the editor
   if (key.length > 1) {
-    if (key === "Tab") return out([]); // swallowed: focus never Tabs out
+    if (key === "Tab") {
+      // Tab nests the list item under the cursor and Shift-Tab unnests it —
+      // the block editor's own Tab, spelled as `>>` / `<<` (a paragraph is a
+      // quiet no-op; a code line indents). Always handled, so focus never
+      // Tabs out of the editor (issue #33: a swallowed Tab read as "broken").
+      // Visual keeps swallowing — `>` / `<` shift a selection there.
+      if (visual) return out([]);
+      return out([{ kind: "operateLines", op: input.shift ? "<" : ">", count }]);
+    }
     return { state: clearPending(s), intents: [], handled: false };
   }
 
