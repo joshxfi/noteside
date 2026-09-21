@@ -562,11 +562,19 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
     onDropRef.current = onDrop;
   }, [onDrop]);
   return useMemo<ListDnd>(() => {
-    const clear = (nav: Element | null) => {
+    // Hide the rings/zones. Does NOT forget the drag source: dragleave fires
+    // when the pointer swings out over the editor mid-gesture, and the next
+    // dragover back inside must still know what is being dragged — otherwise
+    // it can't preventDefault(), no target rings, and drop never fires.
+    const hideAffordances = (nav: Element | null) => {
       marked.current?.classList.remove("is-drop");
       marked.current = null;
-      from.current = null;
       nav?.classList.remove("is-dragging", "is-drag-nested", "is-drop-root");
+    };
+    // The gesture ended (drop, or dragend after Esc/cancel): forget everything.
+    const end = (nav: Element | null) => {
+      hideAffordances(nav);
+      from.current = null;
     };
     return {
       // dragstart bubbles from the row (which already set the payload).
@@ -585,6 +593,9 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
         e.preventDefault();
         const nav = e.currentTarget;
         nav.classList.add("is-dragging");
+        // Re-entering after a dragleave: the root drop zone for a nested note
+        // was hidden with the other affordances — show it again.
+        nav.classList.toggle("is-drag-nested", from.current.dir !== "");
         const hit = resolveDrop(nav, e.target as Element, from.current);
         // "none" shows the no-drop cursor and suppresses the drop event.
         e.dataTransfer.dropEffect = hit ? "move" : "none";
@@ -604,7 +615,7 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
         // Resolve against the payload, not the dragstart ref — the ref is what
         // dragover used, but the payload is authoritative for the id.
         const hit = resolveDrop(nav, e.target as Element, { id, dir: noteDir(id) });
-        clear(nav);
+        end(nav);
         if (!hit) return; // dropped back where it came from / onto itself
         onDropRef.current(
           hit.kind === "group"
@@ -630,11 +641,11 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
             e.clientY < r.bottom;
           if (inside) return;
         }
-        clear(nav);
+        hideAffordances(nav);
       },
       // dragend bubbles from the dragged row — covers an Esc-cancelled drag.
       onDragEnd(e) {
-        clear(e.currentTarget);
+        end(e.currentTarget);
       },
     };
   }, []);
