@@ -1113,6 +1113,48 @@ mod tests {
         }
     }
 
+    /// The pin/unpin frontmatter rewrite is mirrored in the mock backend
+    /// (`mock.ts setPinnedBody`). These vectors are the SAME file the Vitest
+    /// suite reads, so a divergence fails on one side or the other.
+    #[test]
+    fn pin_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["pin"].as_array().unwrap() {
+            let input = case["in"].as_str().unwrap();
+            let pinned = case["pinned"].as_bool().unwrap();
+            let expected = case["out"].as_str().unwrap();
+            assert_eq!(
+                set_pinned(input, pinned),
+                expected,
+                "pin parity for {input:?}"
+            );
+        }
+        for s in v["pinRoundTrip"].as_array().unwrap() {
+            let s = s.as_str().unwrap();
+            assert_eq!(
+                set_pinned(&set_pinned(s, true), false),
+                s,
+                "pin round-trip for {s:?}"
+            );
+        }
+    }
+
+    /// The frontmatter boundary rule, mirrored by `markdown.ts
+    /// frontmatterEndLine` plus the offset sum. The vector is the BYTE offset
+    /// where the body starts; 0 means "no frontmatter here".
+    #[test]
+    fn frontmatter_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["frontmatter"].as_array().unwrap() {
+            let input = case["in"].as_str().unwrap();
+            let expected = case["bodyStart"].as_u64().unwrap() as usize;
+            let (_, start) = split_frontmatter(input);
+            assert_eq!(start, expected, "frontmatter boundary for {input:?}");
+        }
+    }
+
     #[test]
     fn stem_matches_slug_exact_and_numbered() {
         assert!(stem_matches_slug("hello-world", "hello-world"));

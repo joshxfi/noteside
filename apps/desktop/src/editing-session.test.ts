@@ -158,6 +158,25 @@ describe("editingSession", () => {
     expect(bodies.get("a.md")).toBe("new text");
   });
 
+  // The serialize thunk runs inside the autosave coordinator, one layer above
+  // persistNote's try/catch. A serializer that can't render a node used to leave
+  // the tail rejected, and flush() rethrew it into every later navigation.
+  // (`dirty` is passed explicitly, exactly as editor.tsx's onChange does — a
+  // thunk-only change() would materialize it synchronously to compute dirtiness.)
+  it("REGRESSION: a serialize thunk that throws toasts 'save failed' and open() still navigates", async () => {
+    const { session, notices, bodies } = makeSession({ "a.md": "A", "b.md": "B" });
+    await session.open("a.md");
+    session.change(() => {
+      throw new Error("serializer exploded");
+    }, true);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(bodies.get("a.md")).toBe("A"); // nothing written
+    expect(notices.some((n) => n.startsWith("save failed"))).toBe(true);
+    expect(session.getSnapshot().dirty).toBe(true); // still honest about unsaved work
+    await session.open("b.md"); // used to reject: flush() rethrew the poisoned tail
+    expect(session.getSnapshot().activeId).toBe("b.md");
+  });
+
   it("change() with a clean dirty flag cancels a pending autosave", async () => {
     const { session, bodies, calls } = makeSession({ "a.md": "old" });
     await session.open("a.md");
@@ -440,6 +459,74 @@ describe("editingSession", () => {
     expect(notices).toContain("reloaded from disk");
   });
 
+  // Every mutating App op fences its UI patch on the notebook generation; the
+  // watcher path had no fence, so a listNotes() resolving just after a notebook
+  // switch planted the OLD notebook's rows into the new one. The nav token can't
+  // serve here — every open() bumps it, which would suppress real refreshes.
+  it("reconcile(isStale) drops the list and the reload when the notebook changed under it", async () => {
+    const { session, notesChanged, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    bodies.set("a.md", "external");
+    await session.reconcile(() => true);
+    expect(notesChanged).toHaveLength(0); // the sidebar keeps the new notebook's rows
+    expect(session.getSnapshot().initialText).toBe("A"); // and the buffer is untouched
+  });
+
+  it("reconcile() without isStale still publishes the list", async () => {
+    const { session, notesChanged, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    expect(notesChanged).toHaveLength(1);
+    expect(session.getSnapshot().initialText).toBe("external");
+  });
+
+  // reconcile() used to bail on `activeId === CONFIG_ID`, so the note parked
+  // under the overlay was never checked against disk: :q reseeded the editor
+  // from pre-overlay text and called it clean, and the next keystroke autosaved
+  // that stale text over whatever git/sync had written.
+  it("reconcile() under the config overlay refreshes the held note so :q reseeds from disk", async () => {
+    const { session, notices, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.openConfig("x");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    // No toast and no remount: the user is editing the config, not that note.
+    expect(notices).not.toContain("reloaded from disk");
+    await session.quit();
+    const s = session.getSnapshot();
+    expect(s.activeId).toBe("a.md");
+    expect(s.initialText).toBe("external");
+    expect(s.savedText).toBe("external");
+    expect(s.dirty).toBe(false);
+  });
+
+  it("reconcile() under the overlay never touches a dirty held buffer", async () => {
+    const { session, bodies, calls } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.change("typed", true);
+    session.openConfig("x");
+    bodies.set("a.md", "external");
+    await session.reconcile();
+    expect(session.getSnapshot().dirty).toBe(true);
+    expect(bodies.get("a.md")).toBe("external"); // the reconcile wrote nothing
+    // The dirty guard short-circuits BEFORE readNote, so the held buffer's
+    // baseline can't be replaced: only the initial open ever read this note.
+    // (initialText/savedText report the CONFIG buffer while the overlay is up,
+    // so the read count is what's observable here.)
+    expect(calls.filter((c) => c === "read:a.md")).toHaveLength(1);
+  });
+
+  it("reconcile() under the overlay forgets a held note that vanished", async () => {
+    const { session, bodies } = makeSession({ "a.md": "A" });
+    await session.open("a.md");
+    session.openConfig("x");
+    bodies.delete("a.md");
+    await session.reconcile();
+    await session.quit();
+    expect(session.getSnapshot().status).toBe("empty");
+  });
+
   it("reconcile() goes empty when the active note vanished", async () => {
     const { session, bodies, notesChanged } = makeSession({ "a.md": "A" });
     await session.open("a.md");
@@ -492,6 +579,54 @@ describe("editingSession", () => {
     expect(s.status).toBe("note");
     expect(s.activeId).toBe("a.md");
     expect(s.initialText).toBe("A body"); // the note buffer underneath was preserved
+  });
+
+  // Delete's counterpart to migrateId: the held note is gone, not relocated, so
+  // `:q` must land on the empty state rather than reseed a vanished file.
+  it("forgetNote under the config overlay makes :q land on the empty state", async () => {
+    const { session } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.openConfig("x");
+    session.forgetNote("a.md");
+    await session.quit();
+    const s = session.getSnapshot();
+    expect(s.status).toBe("empty");
+    expect(s.activeId).toBe(null);
+  });
+
+  it("forgetNote after :q clears the reopenLast target", async () => {
+    const { session, calls } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    await session.quit();
+    session.forgetNote("a.md");
+    session.reopenLast();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.filter((c) => c === "read:a.md")).toHaveLength(1); // the initial open only
+    expect(session.getSnapshot().status).toBe("empty");
+  });
+
+  it("forgetNote is a no-op for the active note and unrelated ids", async () => {
+    const { session } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.forgetNote("a.md"); // active → the caller navigates away instead
+    expect(session.getSnapshot().activeId).toBe("a.md");
+    session.forgetNote("zzz.md"); // never held
+    expect(session.getSnapshot().activeId).toBe("a.md");
+  });
+
+  // The bug: delete gated its autosave pause on the note being ACTIVE, so a note
+  // typed in and then covered by the config overlay kept its queued save. The
+  // file was removed and the 800ms timer recreated it.
+  it("REGRESSION: cancelAutosave + forgetNote under the overlay drops the held note's queued save", async () => {
+    const { session, bodies, calls } = makeSession({ "a.md": "A body" });
+    await session.open("a.md");
+    session.change("typed", true);
+    session.openConfig("x");
+    await session.cancelAutosave();
+    session.forgetNote("a.md");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(bodies.get("a.md")).toBe("A body"); // never rewritten
+    expect(calls.filter((c) => c === "save:a.md")).toEqual([]);
   });
 
   // REGRESSION (stability pass): an autosave landing while the config buffer

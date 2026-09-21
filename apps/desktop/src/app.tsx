@@ -74,8 +74,12 @@ import {
   allDirs,
   buildSidebarRows,
   folderDeleteSummary,
+  insertMeta,
+  metaOrder,
   noteDir,
+  relTime,
   rewritePrefix,
+  sameMetaList,
   type SidebarRow,
   stepVisibleNote,
 } from "./note-groups";
@@ -165,23 +169,6 @@ function writeUpdateCache(c: UpdateCache): void {
 
 type Status = "boot" | "no-notebook" | "ready";
 type FinderMode = "all" | "files" | "content";
-
-function relTime(ms: number, now: number): string {
-  const diff = now - ms;
-  const s = Math.round(diff / 1000);
-  if (s < 45) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 7) return `${d}d ago`;
-  const w = Math.round(d / 7);
-  if (w < 5) return `${w}w ago`;
-  const mo = Math.round(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.round(d / 365)}y ago`;
-}
 
 // Landing-demo-only chrome (the native app shows the OS traffic lights instead
 // and never renders this — see the !isTauri() gate at the render site). Red
@@ -563,11 +550,19 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
     onDropRef.current = onDrop;
   }, [onDrop]);
   return useMemo<ListDnd>(() => {
-    const clear = (nav: Element | null) => {
+    // Hide the rings/zones. Does NOT forget the drag source: dragleave fires
+    // when the pointer swings out over the editor mid-gesture, and the next
+    // dragover back inside must still know what is being dragged — otherwise
+    // it can't preventDefault(), no target rings, and drop never fires.
+    const hideAffordances = (nav: Element | null) => {
       marked.current?.classList.remove("is-drop");
       marked.current = null;
-      from.current = null;
       nav?.classList.remove("is-dragging", "is-drag-nested", "is-drop-root");
+    };
+    // The gesture ended (drop, or dragend after Esc/cancel): forget everything.
+    const end = (nav: Element | null) => {
+      hideAffordances(nav);
+      from.current = null;
     };
     return {
       // dragstart bubbles from the row (which already set the payload).
@@ -586,6 +581,9 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
         e.preventDefault();
         const nav = e.currentTarget;
         nav.classList.add("is-dragging");
+        // Re-entering after a dragleave: the root drop zone for a nested note
+        // was hidden with the other affordances — show it again.
+        nav.classList.toggle("is-drag-nested", from.current.dir !== "");
         const hit = resolveDrop(nav, e.target as Element, from.current);
         // "none" shows the no-drop cursor and suppresses the drop event.
         e.dataTransfer.dropEffect = hit ? "move" : "none";
@@ -605,7 +603,7 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
         // Resolve against the payload, not the dragstart ref — the ref is what
         // dragover used, but the payload is authoritative for the id.
         const hit = resolveDrop(nav, e.target as Element, { id, dir: noteDir(id) });
-        clear(nav);
+        end(nav);
         if (!hit) return; // dropped back where it came from / onto itself
         onDropRef.current(
           hit.kind === "group"
@@ -631,11 +629,11 @@ function useListDnd(onDrop: (drop: NoteDrop) => void): ListDnd {
             e.clientY < r.bottom;
           if (inside) return;
         }
-        clear(nav);
+        hideAffordances(nav);
       },
       // dragend bubbles from the dragged row — covers an Esc-cancelled drag.
       onDragEnd(e) {
-        clear(e.currentTarget);
+        end(e.currentTarget);
       },
     };
   }, []);
@@ -906,38 +904,6 @@ const Sidebar = memo(function Sidebar({
   );
 });
 
-// Sidebar list order (matches the backend: pinned desc, then updated desc) — so
-// create/delete can patch the list locally instead of refetching it over IPC.
-function metaOrder(a: NoteMeta, b: NoteMeta): number {
-  return Number(b.pinned) - Number(a.pinned) || b.updated - a.updated;
-}
-function insertMeta(list: NoteMeta[], meta: NoteMeta): NoteMeta[] {
-  // Stable re-sort of the whole list, not just an insert: the old code refetched
-  // listNotes here, which also re-slotted any note whose `updated` bumped since
-  // (autosaves patch metas in place without re-sorting) — keep that behavior.
-  return [...list, meta].sort(metaOrder);
-}
-
-// Watcher events often rescan to an identical list — keep the old array identity
-// so the memoized sidebar doesn't re-render for nothing.
-function sameMetaList(a: NoteMeta[], b: NoteMeta[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i];
-    const y = b[i];
-    if (
-      x.id !== y.id ||
-      x.title !== y.title ||
-      x.updated !== y.updated ||
-      x.pinned !== y.pinned ||
-      x.tags[0] !== y.tags[0]
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function NotebookPicker({ onPick }: { onPick: () => void }) {
   return (
     <div className="av-empty">
@@ -1025,9 +991,10 @@ export function App() {
   // refresh is the eventual-consistency backstop, identity-guarded so an
   // unchanged list never re-renders the memoized sidebar.
   const [folders, setFolders] = useState<string[]>([]);
-  const refreshFolders = useCallback(async () => {
+  const refreshFolders = useCallback(async (isStale: () => boolean = () => false) => {
     try {
       const dirs = await backend.listFolders();
+      if (isStale()) return; // a notebook switch landed while listFolders was in flight
       setFolders((prev) =>
         prev.length === dirs.length && prev.every((d, i) => d === dirs[i]) ? prev : dirs,
       );
@@ -1488,8 +1455,12 @@ export function App() {
     let cancelled = false;
     backend
       .watchNotebook(() => {
-        void session.reconcile();
-        void refreshFolders(); // external mkdir/rmdir/mv-dir refreshes the groups too
+        // Fence like every mutating op: a listNotes()/listFolders() in flight
+        // across a notebook switch must not plant the OLD notebook's rows.
+        const gen = notebookLoad.current;
+        const stale = () => notebookChangedSince(gen);
+        void session.reconcile(stale);
+        void refreshFolders(stale); // external mkdir/rmdir/mv-dir refreshes the groups too
       })
       .then((u) => {
         if (cancelled) u();
@@ -1601,9 +1572,13 @@ export function App() {
   // note leaves the current buffer untouched.
   const deleteNoteById = async (id: string) => {
     const wasActive = s.status === "note" && s.activeId === id;
+    // The buffer under the config overlay / remembered after :q still has this
+    // id: its queued autosave would recreate the file after the delete, and its
+    // :q target would point at a dead path (the heldNoteId rule move/rename use).
+    const held = heldNoteId() === id;
     const gen = notebookLoad.current;
     try {
-      if (wasActive) await session.cancelAutosave();
+      if (held) await session.cancelAutosave();
       await backend.deleteNote(id);
       if (notebookChangedSince(gen)) return;
       // Filter + stable re-sort ≙ the old listNotes refetch (see insertMeta).
@@ -1615,10 +1590,12 @@ export function App() {
         const next = remaining[0]?.id ?? null;
         if (next) await session.open(next);
         else session.close();
+      } else if (held) {
+        session.forgetNote(id);
       }
       flash("note deleted");
     } catch (e) {
-      if (wasActive) session.resumeAutosave();
+      if (held && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`delete failed: ${e}`, "error");
     }
   };
@@ -1942,9 +1919,14 @@ export function App() {
   const deleteFolder = async (dir: string) => {
     const prefix = dir + "/";
     const wasActiveInside = s.status === "note" && !!s.activeId && s.activeId.startsWith(prefix);
+    // Same held-note rule as deleteNoteById: a note parked under the config
+    // overlay (or remembered after :q) that lives in this folder must drop its
+    // queued save too, or it recreates the file the recursive delete removed.
+    const heldId = heldNoteId();
+    const heldInside = !!heldId && heldId.startsWith(prefix);
     const gen = notebookLoad.current;
     try {
-      if (wasActiveInside) await session.cancelAutosave();
+      if (heldInside) await session.cancelAutosave();
       await backend.deleteFolder(dir);
       if (notebookChangedSince(gen)) return;
       setNotes((ns) => ns.filter((n) => !n.path.startsWith(prefix)).sort(metaOrder));
@@ -1961,10 +1943,12 @@ export function App() {
         const next = remaining[0]?.id ?? null;
         if (next) await session.open(next);
         else session.close();
+      } else if (heldInside && heldId) {
+        session.forgetNote(heldId);
       }
       flash("folder deleted");
     } catch (e) {
-      if (wasActiveInside && !notebookChangedSince(gen)) session.resumeAutosave();
+      if (heldInside && !notebookChangedSince(gen)) session.resumeAutosave();
       flash(`delete failed: ${e}`, "error");
     }
   };
