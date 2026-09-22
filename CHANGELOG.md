@@ -1,3 +1,40 @@
+## [1.8.1](https://github.com/joshxfi/noteside/compare/v1.8.0...v1.8.1) (2026-09-22)
+
+### Bug Fixes
+
+* **autosave:** a throwing serialize thunk toasts "save failed" instead of poisoning flush() ([fe70504](https://github.com/joshxfi/noteside/commit/fe70504af5a64a381b3091778db94657e29e51d3))
+* **boot:** the pre-paint theme script only writes the 11 known vars with validated values ([afd42a3](https://github.com/joshxfi/noteside/commit/afd42a31da4c28836a2ac8ab58fb449bded0b5f6))
+* **delete:** pause the held note's autosave and forget it in the session, so deleting under the config overlay can't resurrect the file ([d5be136](https://github.com/joshxfi/noteside/commit/d5be13657df531c2c35deec652f74874d5c877a6))
+* **docs:** theme count, the undocumented tab-width setting, and the 50k search-speed overclaim ([7df42d5](https://github.com/joshxfi/noteside/commit/7df42d59653a7dc2345ed9ecb9b46611b252a079))
+* **editor:** mount-stable dispatchCommand and extensions — the retire-by-identity handshake matches again and useEditor stops re-applying options per caret move ([5817a59](https://github.com/joshxfi/noteside/commit/5817a597d9bddef68b6b00c884540c013344630e))
+* **folders:** the delete confirmation counts every file and subfolder remove_dir_all will take, not just indexed notes ([526af4c](https://github.com/joshxfi/noteside/commit/526af4c8c9ec227f1ed06491c8e6c8b7487a41db))
+* **notebook:** surface a failed watcher start or asset-scope grant as an error toast instead of a hidden eprintln ([52028c2](https://github.com/joshxfi/noteside/commit/52028c2c345f6b4c966bc25d2fc1500fb806646a))
+* **rust:** route every notebook lock through a poison-tolerant helper so one panic can't wedge every later command ([6d52d88](https://github.com/joshxfi/noteside/commit/6d52d88787bbd7850f1df9a8396da8139d1d4f9d))
+* **scan:** skip filenames the id can't round-trip on Unix and cap note reads at 16 MiB ([888cb66](https://github.com/joshxfi/noteside/commit/888cb66be6768b6a7e67a1e955b719097bab30e5))
+* serialize the notebook-recents store writes and toast their failures; a lazy grammar load notifies every waiting editor ([4ac7c85](https://github.com/joshxfi/noteside/commit/4ac7c85d0e9f5888923e4a19c37a72704160cd07))
+* **session:** reconcile the note held under the config overlay so :q can't reseed stale text and autosave it over an external edit ([5147975](https://github.com/joshxfi/noteside/commit/5147975987b2ca2ae9d2acb9245280eecbd760a9))
+* **settings:** cursor and cursor-blink are accepted-but-inert like live-preview — no longer serialized, shown in Settings, or documented as working ([7596cf3](https://github.com/joshxfi/noteside/commit/7596cf3dfebb32cf7e80fa6253f5a4f11055944e))
+* **sidebar:** a drag survives leaving the list — dragleave hides the affordances but keeps the source until drop/dragend ([e73e7e8](https://github.com/joshxfi/noteside/commit/e73e7e81ffb3db4e2debb6d5ce5ccad23f5c2cd9))
+* **vim:** sync DOM selection when entering insert mode on an emptied textblock ([e23779c](https://github.com/joshxfi/noteside/commit/e23779cf59099c9c98bf0384151c3d5c0ca41275)), closes [#31](https://github.com/joshxfi/noteside/issues/31) [#31](https://github.com/joshxfi/noteside/issues/31)
+* **vim:** Tab and Shift-Tab nest and unnest a list item in normal mode, o/O open a sibling of an empty list item, and a deferred caret reassert no longer overtakes later keys ([f33a507](https://github.com/joshxfi/noteside/commit/f33a507673061718e8938500e11fde6695a31ad2))
+* **watcher:** fence watcher-driven list/folder refreshes on the notebook generation, like every mutating op ([047bbd4](https://github.com/joshxfi/noteside/commit/047bbd4e1b2ad65da3d2b9491ffa391710392744))
+
+### Performance
+
+* **rust:** run the read commands on the async runtime and clone list_notes outside the lock ([5edafb5](https://github.com/joshxfi/noteside/commit/5edafb54f1b87566aad13b1fd42848dccd610051))
+
+### Refactors
+
+* **mock:** derive the frontmatter boundary from markdown.ts's frontmatterEndLine instead of a third copy ([aa16c48](https://github.com/joshxfi/noteside/commit/aa16c481519d15254df23af708ad50cda944e747))
+* move metaOrder/insertMeta/sameMetaList/relTime from app.tsx into note-groups.ts and unit-test them ([49f280e](https://github.com/joshxfi/noteside/commit/49f280e9aca3069126e90ef90276caf3d4e94e14))
+
+### Documentation
+
+* **agents:** landing is a TanStack Router SPA with /changelog and client-side canonical; vim text objects include ap; sidebar virtualizes above 100 rows ([c62bc3f](https://github.com/joshxfi/noteside/commit/c62bc3f52ade4ca07126d0cb3cc14c95ae7859d1))
+* **contributing:** playwright install, running one test, the release-age gate ([92bfd70](https://github.com/joshxfi/noteside/commit/92bfd709a13f165a97dd0b82ae072a22eca0e72e))
+* **og:** retag the landing card with the Markdown-first line, no em dash ([247c1ee](https://github.com/joshxfi/noteside/commit/247c1eef85f35d9f281b056eb90cad07295e01be))
+* unslop the README, landing, and docs copy; drop the Notion comparison ([26c3036](https://github.com/joshxfi/noteside/commit/26c30363d109990b8aad2d970acfb101f279bfec))
+
 ## [1.8.0](https://github.com/joshxfi/noteside/compare/v1.7.1...v1.8.0) (2026-09-06)
 
 ### Features
