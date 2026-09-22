@@ -8,8 +8,6 @@ import { test as base, expect, type Page } from "@playwright/test";
 // isolated. Config is a Partial<Config>; only the fields a test asserts on matter.
 export type BootConfig = {
   vimMode?: boolean;
-  cursor?: "block" | "bar" | "underline";
-  cursorBlink?: boolean;
   /** A theme id, label, or the light/dark aliases (resolveThemeId normalizes). */
   theme?: string;
   [key: string]: unknown;
@@ -17,8 +15,6 @@ export type BootConfig = {
 
 const DEFAULT_CONFIG: BootConfig = {
   vimMode: false,
-  cursor: "block",
-  cursorBlink: true,
   theme: "light",
 };
 

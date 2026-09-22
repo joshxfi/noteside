@@ -24,6 +24,13 @@ pub struct Scan {
     pub folders: Vec<String>,
 }
 
+/// Largest file the scanner will read as a note. A wrong folder pick (a home
+/// directory, a multi-GB file renamed `.md`) must not load everything into
+/// RAM — `panic = "abort"` would turn the allocation failure into an instant
+/// exit with unflushed buffers. Notes are prose; 16 MiB is ~10× the largest
+/// "pathological" note the perf benches model.
+pub const MAX_NOTE_BYTES: u64 = 16 * 1024 * 1024;
+
 /// Walk a notebook folder and read every Markdown file into a record. Hidden
 /// directories (including `.noteside/` and `.git/`) are skipped. The reads fan
 /// out across threads, then the result is sorted by path so by-path lookups can
@@ -31,6 +38,10 @@ pub struct Scan {
 /// `Arc`-wrapped: the index treats them as immutable values, so state mutations
 /// shallow-copy the index instead of cloning note bodies.
 pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
+    scan_notebook_bounded(root, MAX_NOTE_BYTES)
+}
+
+pub(crate) fn scan_notebook_bounded(root: &Path, max_bytes: u64) -> std::io::Result<Scan> {
     let mut paths = Vec::new();
     let mut folders = Vec::new();
     for entry in WalkDir::new(root)
@@ -40,10 +51,14 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
         // like a note (`drafts.md/`) is pruned too: every by-path code path keys
         // on the extension and `safe_dir_path` refuses such folders, so listing
         // one would show a group the app can neither manage nor tell apart from
-        // a note (the watcher mirrors this in `targeted_updates`).
+        // a note (the watcher mirrors this in `targeted_updates`). A name the id
+        // can't round-trip (a `\` on Unix) is pruned with its subtree too: its id
+        // would name a different file than the one on disk.
         .filter_entry(|e| {
             e.depth() == 0
-                || (!is_hidden(e.path()) && !(e.file_type().is_dir() && has_md_extension(e.path())))
+                || (!is_hidden(e.path())
+                    && !has_unrepresentable_name(e.path())
+                    && !(e.file_type().is_dir() && has_md_extension(e.path())))
         })
     {
         let entry = entry.map_err(walk_error)?;
@@ -54,7 +69,18 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
         } else if entry.file_type().is_file()
             && entry.path().extension().and_then(|x| x.to_str()) == Some("md")
         {
-            paths.push(entry.into_path());
+            // Oversized files are skipped, not fatal: one stray multi-GB `.md`
+            // must not make the whole notebook unopenable. (Surfacing the skip
+            // to the UI is a follow-up; the eprintln is for `tauri dev`.)
+            match entry.metadata() {
+                Ok(m) if m.len() > max_bytes => {
+                    eprintln!(
+                        "noteside: skipping oversized note {}",
+                        entry.path().display()
+                    );
+                }
+                _ => paths.push(entry.into_path()),
+            }
         }
     }
     folders.sort_unstable();
@@ -65,7 +91,7 @@ pub fn scan_notebook(root: &Path) -> std::io::Result<Scan> {
     let read_all = |paths: &[PathBuf]| -> std::io::Result<Vec<Arc<NoteRecord>>> {
         paths
             .iter()
-            .map(|p| read_record(root, p).map(Arc::new))
+            .map(|p| read_record_bounded(root, p, max_bytes).map(Arc::new))
             .collect()
     };
     let mut out = if workers <= 1 {
@@ -218,18 +244,65 @@ pub fn safe_dir_path(root: &Path, rel: &str) -> Option<PathBuf> {
     resolved.starts_with(&canonical_root).then_some(abs)
 }
 
+/// Notebook-relative id for `abs`, `/`-separated. Only Windows needs the
+/// separator rewrite: on Unix `\` is a legal filename character, and rewriting
+/// it produced ids (`a/b.md`) that named a different file than the one on disk
+/// — saves forked, deletes left the file behind. Such names are pruned by the
+/// scanner instead (`has_unrepresentable_name`).
 pub fn rel_path(root: &Path, abs: &Path) -> String {
-    abs.strip_prefix(root)
-        .unwrap_or(abs)
-        .to_string_lossy()
-        .replace('\\', "/")
+    let rel = abs.strip_prefix(root).unwrap_or(abs).to_string_lossy();
+    #[cfg(windows)]
+    {
+        rel.replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        rel.into_owned()
+    }
+}
+
+/// True when this entry's own name can't be spelled as a notebook id: on Unix
+/// a `\` in the name (ids are `/`-joined and `\` was the separator rewrite's
+/// victim). Always false on Windows, where `\` cannot appear in a filename.
+pub(crate) fn has_unrepresentable_name(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let _ = path;
+        false
+    }
+    #[cfg(not(windows))]
+    {
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.contains('\\'))
+    }
 }
 
 pub fn read_record(root: &Path, abs: &Path) -> std::io::Result<NoteRecord> {
+    read_record_bounded(root, abs, MAX_NOTE_BYTES)
+}
+
+pub(crate) fn read_record_bounded(
+    root: &Path,
+    abs: &Path,
+    max_bytes: u64,
+) -> std::io::Result<NoteRecord> {
     // One open handle serves the stat (mtime + size hint) and the read — no
     // second path lookup per file.
     let mut f = fs::File::open(abs)?;
     let stat = f.metadata().ok();
+    // Refuse before the allocation: `with_capacity(len)` on a multi-GB file is
+    // the abort we are avoiding. The scanner already skips oversized files at
+    // walk time; this catches one that GREW in between (a race, not a stray
+    // file), and it fails the whole scan on purpose.
+    if let Some(len) = stat.as_ref().map(|m| m.len()) {
+        if len > max_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("note is {len} bytes, over the {max_bytes}-byte limit"),
+            ));
+        }
+    }
     let updated = stat
         .as_ref()
         .and_then(|m| m.modified().ok())
@@ -1040,6 +1113,48 @@ mod tests {
         }
     }
 
+    /// The pin/unpin frontmatter rewrite is mirrored in the mock backend
+    /// (`mock.ts setPinnedBody`). These vectors are the SAME file the Vitest
+    /// suite reads, so a divergence fails on one side or the other.
+    #[test]
+    fn pin_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["pin"].as_array().unwrap() {
+            let input = case["in"].as_str().unwrap();
+            let pinned = case["pinned"].as_bool().unwrap();
+            let expected = case["out"].as_str().unwrap();
+            assert_eq!(
+                set_pinned(input, pinned),
+                expected,
+                "pin parity for {input:?}"
+            );
+        }
+        for s in v["pinRoundTrip"].as_array().unwrap() {
+            let s = s.as_str().unwrap();
+            assert_eq!(
+                set_pinned(&set_pinned(s, true), false),
+                s,
+                "pin round-trip for {s:?}"
+            );
+        }
+    }
+
+    /// The frontmatter boundary rule, mirrored by `markdown.ts
+    /// frontmatterEndLine` plus the offset sum. The vector is the BYTE offset
+    /// where the body starts; 0 means "no frontmatter here".
+    #[test]
+    fn frontmatter_parity_matches_shared_vectors() {
+        let raw = include_str!("../../src/test-vectors/parity.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        for case in v["frontmatter"].as_array().unwrap() {
+            let input = case["in"].as_str().unwrap();
+            let expected = case["bodyStart"].as_u64().unwrap() as usize;
+            let (_, start) = split_frontmatter(input);
+            assert_eq!(start, expected, "frontmatter boundary for {input:?}");
+        }
+    }
+
     #[test]
     fn stem_matches_slug_exact_and_numbered() {
         assert!(stem_matches_slug("hello-world", "hello-world"));
@@ -1119,6 +1234,46 @@ mod tests {
         assert_eq!(recs[0].meta.title, "A");
         assert_eq!(recs[0].body, "# A");
         assert!(recs.iter().all(|r| r.meta.updated > 0));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scan_skips_names_that_cannot_round_trip_as_ids() {
+        let dir = test_dir("backslash");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub\\dir")).unwrap();
+        std::fs::write(dir.join("a\\b.md"), "# forked").unwrap();
+        std::fs::write(dir.join("sub\\dir/inner.md"), "# inner").unwrap();
+        std::fs::write(dir.join("ok.md"), "# ok").unwrap();
+        let scan = scan_notebook(&dir).unwrap();
+        let ids: Vec<&str> = scan.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(ids, vec!["ok.md"]);
+        assert!(
+            scan.folders.is_empty(),
+            "a `\\`-named directory is pruned with its subtree"
+        );
+        assert_eq!(
+            rel_path(&dir, &dir.join("a\\b.md")),
+            "a\\b.md",
+            "no separator rewrite on Unix"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_skips_oversized_notes_and_read_record_refuses_them() {
+        let dir = test_dir("oversized");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("small.md"), "# small").unwrap();
+        std::fs::write(dir.join("big.md"), "x".repeat(64)).unwrap();
+        let scan = scan_notebook_bounded(&dir, 32).unwrap();
+        let ids: Vec<&str> = scan.records.iter().map(|r| r.meta.path.as_str()).collect();
+        assert_eq!(ids, vec!["small.md"]);
+        let err = read_record_bounded(&dir, &dir.join("big.md"), 32).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(read_record_bounded(&dir, &dir.join("small.md"), 32).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

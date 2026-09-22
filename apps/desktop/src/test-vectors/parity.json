@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared JS<->Rust golden vectors. Consumed by src/parity.test.ts (Vitest) and by the #[cfg(test)] module in src-tauri/src/notebook.rs. Keep the two languages in sync: any change here must keep BOTH test suites green.",
+  "_comment": "Shared JS<->Rust golden vectors. Consumed by src/parity.test.ts (Vitest) and by the #[cfg(test)] module in src-tauri/src/notebook.rs. Keep the two languages in sync: any change here must keep BOTH test suites green. `slug` pins slugifyTitle/slugify; `pin`/`pinRoundTrip` pin setPinnedBody/set_pinned; `frontmatter` pins the boundary rule (markdown.ts frontmatterEndLine + the offset sum, vs Rust split_frontmatter) as a BYTE offset where the body starts, 0 meaning no frontmatter.",
   "slug": [
     { "in": "Hello World", "out": "hello-world" },
     { "in": "  Spaces  & punctuation!! ", "out": "spaces-punctuation" },
@@ -10,5 +10,56 @@
     { "in": "Café Notes", "out": "caf-notes" },
     { "in": "naïve—dash", "out": "na-ve-dash" },
     { "in": "日本語", "out": "untitled" }
+  ],
+  "pin": [
+    { "in": "# Note\n\nbody\n", "pinned": true, "out": "---\npinned: true\n---\n# Note\n\nbody\n" },
+    { "in": "# Note\n\nbody\n", "pinned": false, "out": "# Note\n\nbody\n" },
+    {
+      "in": "---\ntitle: T\ntags: [a]\n---\nbody",
+      "pinned": true,
+      "out": "---\npinned: true\ntitle: T\ntags: [a]\n---\nbody"
+    },
+    {
+      "in": "---\ntitle: T\npinned: false\n---\nbody",
+      "pinned": true,
+      "out": "---\ntitle: T\npinned: true\n---\nbody"
+    },
+    {
+      "in": "---\n  pinned: false\n---\nbody",
+      "pinned": true,
+      "out": "---\n  pinned: true\n---\nbody"
+    },
+    {
+      "in": "---\ntitle: T\npinned: true\ntags: [a]\n---\nbody",
+      "pinned": false,
+      "out": "---\ntitle: T\ntags: [a]\n---\nbody"
+    },
+    { "in": "---\npinned: true\n---\nbody", "pinned": false, "out": "body" },
+    {
+      "in": "# Note\r\nbody\r\n",
+      "pinned": true,
+      "out": "---\r\npinned: true\r\n---\r\n# Note\r\nbody\r\n"
+    },
+    {
+      "in": "---\r\ntitle: T\r\n---\r\nbody\r\n",
+      "pinned": true,
+      "out": "---\r\npinned: true\r\ntitle: T\r\n---\r\nbody\r\n"
+    }
+  ],
+  "pinRoundTrip": [
+    "# Note\n\nbody\n",
+    "plain text, no heading",
+    "",
+    "---\ntitle: T\n---\nbody",
+    "---\r\ntitle: T\r\n---\r\nbody\r\n"
+  ],
+  "frontmatter": [
+    { "in": "---\ntitle: x\n---\nbody line", "bodyStart": 17 },
+    { "in": "---\r\ntitle: x\r\n---\r\nbody", "bodyStart": 20 },
+    { "in": "---\ntitle: x\nbody without close", "bodyStart": 0 },
+    { "in": " ---\nx\n---\nbody", "bodyStart": 0 },
+    { "in": "no frontmatter", "bodyStart": 0 },
+    { "in": "---\n---\nbody", "bodyStart": 8 },
+    { "in": "---\ntitle: x\n---   \nbody", "bodyStart": 20 }
   ]
 }

@@ -11,7 +11,7 @@
 // sidebar list variants render rows as direct children in row order, which is
 // what keeps scrollRowIntoView's child-index mapping and the virtualizer's
 // count exact (the divider is a row for the same reason).
-import type { NoteMeta } from "./backend/types";
+import type { FolderContents, NoteMeta } from "./backend/types";
 
 export type SidebarRow =
   | { kind: "note"; note: NoteMeta; dir: string }
@@ -119,4 +119,68 @@ export function stepVisibleNote(
 export function rewritePrefix(path: string, oldDir: string, newDir: string): string {
   if (path === oldDir) return newDir;
   return path.startsWith(oldDir + "/") ? newDir + path.slice(oldDir.length) : path;
+}
+
+/** "3 notes, 12 other files and 2 subfolders" — the delete-folder dialog's
+ *  count line; omits zero parts, "" when everything is zero. */
+export function folderDeleteSummary(c: FolderContents): string {
+  const parts: string[] = [];
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  if (c.notes) parts.push(plural(c.notes, "note", "notes"));
+  if (c.otherFiles) parts.push(plural(c.otherFiles, "other file", "other files"));
+  if (c.dirs) parts.push(plural(c.dirs, "subfolder", "subfolders"));
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+// Sidebar list order (matches the backend: pinned desc, then updated desc) — so
+// create/delete can patch the list locally instead of refetching it over IPC.
+export function metaOrder(a: NoteMeta, b: NoteMeta): number {
+  return Number(b.pinned) - Number(a.pinned) || b.updated - a.updated;
+}
+export function insertMeta(list: NoteMeta[], meta: NoteMeta): NoteMeta[] {
+  // Stable re-sort of the whole list, not just an insert: the old code refetched
+  // listNotes here, which also re-slotted any note whose `updated` bumped since
+  // (autosaves patch metas in place without re-sorting) — keep that behavior.
+  return [...list, meta].sort(metaOrder);
+}
+
+// Watcher events often rescan to an identical list — keep the old array identity
+// so the memoized sidebar doesn't re-render for nothing.
+export function sameMetaList(a: NoteMeta[], b: NoteMeta[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.title !== y.title ||
+      x.updated !== y.updated ||
+      x.pinned !== y.pinned ||
+      x.tags[0] !== y.tags[0]
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** "5m ago" for a sidebar row's meta line. Every step rounds, so the boundaries
+ *  are the ROUNDED ones: 44s is still "just now", 45s is already "1m ago". */
+export function relTime(ms: number, now: number): string {
+  const diff = now - ms;
+  const s = Math.round(diff / 1000);
+  if (s < 45) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.round(d / 7);
+  if (w < 5) return `${w}w ago`;
+  const mo = Math.round(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(d / 365)}y ago`;
 }

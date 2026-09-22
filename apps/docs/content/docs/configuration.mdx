@@ -23,10 +23,6 @@ set line-height  = 1.75
 set tab-width    = 2
 set ui-scale     = 100%
 
-" cursor
-set cursor       = block
-set cursor-blink = on
-
 " updates
 set auto-update  = on
 
@@ -47,15 +43,14 @@ bind Ctrl-j find
 | `tab-width`     | `1`–`8` (spaces `Tab` inserts, and the code-block indent step)                |
 | `ui-scale`      | `90%`–`130%`                                                                  |
 | `sidebar-width` | `200`–`420` (px, or just drag the sidebar's edge; double-click resets)        |
-| `cursor`        | `block` · `bar` · `underline`                                                 |
-| `cursor-blink`  | `on` · `off`                                                                  |
 | `auto-update`   | `on` · `off`                                                                  |
 | `vim`           | `on` · `off`                                                                  |
 
-If your `~/.notesiderc` still has `live-preview` or `relative-numbers` lines from an
-older version, they're read and ignored, with no error and nothing to clean up. The block
-editor has no source/preview split and no gutter, so neither setting does anything;
-they simply stop being written back out.
+If your `~/.notesiderc` still has `live-preview`, `relative-numbers`, `cursor`, or
+`cursor-blink` lines from an older version, they're read and ignored, with no error and
+nothing to clean up. The block editor has no source/preview split and no gutter, and it
+uses the native caret (plus vim's block caret in normal mode), so none of these settings
+does anything; they simply stop being written back out.
 
 ## Appearance
 

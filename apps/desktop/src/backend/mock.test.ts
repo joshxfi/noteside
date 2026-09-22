@@ -263,42 +263,36 @@ describe("mock backend — folders", () => {
   });
 });
 
-// setPinnedBody mirrors Rust notebook::set_pinned — same cases as
-// notebook.rs's set_pinned_* tests, so the two adapters can't drift.
+// setPinnedBody mirrors Rust notebook::set_pinned. The shape-by-shape cases now
+// live in test-vectors/parity.json and are asserted against BOTH languages by
+// parity.test.ts + notebook.rs's pin_parity_matches_shared_vectors — so the two
+// adapters can't drift. What stays here is what the vectors don't cover.
 describe("setPinnedBody (mirror of Rust set_pinned)", () => {
   const roundTrip = (original: string) =>
     expect(setPinnedBody(setPinnedBody(original, true), false)).toBe(original);
 
-  it("opens a frontmatter block for a plain note", () => {
-    expect(setPinnedBody("# Note\n\nbody\n", true)).toBe(
-      "---\npinned: true\n---\n# Note\n\nbody\n",
-    );
-    expect(setPinnedBody("# Note\n\nbody\n", false)).toBe("# Note\n\nbody\n");
-  });
+  // bodyStart is module-private and now delegates the RULE to markdown.ts's
+  // frontmatterEndLine, so these pin the boundary through the one exported
+  // consumer: a block it recognizes is edited in place, one it doesn't gets a
+  // fresh block opened above the untouched text.
+  describe("frontmatter boundary", () => {
+    it("recognizes a CRLF block and edits it in place", () => {
+      expect(setPinnedBody("---\r\ntitle: X\r\n---\r\n# Body\r\n", true)).toBe(
+        "---\r\npinned: true\r\ntitle: X\r\n---\r\n# Body\r\n",
+      );
+    });
 
-  it("inserts into existing frontmatter without touching other keys", () => {
-    expect(setPinnedBody("---\ntitle: T\ntags: [a]\n---\nbody", true)).toBe(
-      "---\npinned: true\ntitle: T\ntags: [a]\n---\nbody",
-    );
-  });
+    it("treats an unclosed block as no frontmatter", () => {
+      expect(setPinnedBody("---\ntitle: X\n# Body\n", true)).toBe(
+        "---\npinned: true\n---\n---\ntitle: X\n# Body\n",
+      );
+    });
 
-  it("rewrites an existing key in place, preserving indentation", () => {
-    expect(setPinnedBody("---\ntitle: T\npinned: false\n---\nbody", true)).toBe(
-      "---\ntitle: T\npinned: true\n---\nbody",
-    );
-    expect(setPinnedBody("---\n  pinned: false\n---\nbody", true)).toBe(
-      "---\n  pinned: true\n---\nbody",
-    );
-  });
-
-  it("unpinning drops the key but keeps the rest of the frontmatter", () => {
-    expect(setPinnedBody("---\ntitle: T\npinned: true\ntags: [a]\n---\nbody", false)).toBe(
-      "---\ntitle: T\ntags: [a]\n---\nbody",
-    );
-  });
-
-  it("unpinning the only key removes the whole block", () => {
-    expect(setPinnedBody("---\npinned: true\n---\nbody", false)).toBe("body");
+    it("treats a `---` behind leading whitespace on line 0 as no frontmatter", () => {
+      expect(setPinnedBody(" ---\nx\n---\nbody", true)).toBe(
+        "---\npinned: true\n---\n ---\nx\n---\nbody",
+      );
+    });
   });
 
   it("round-trips every frontmatter shape back to the original bytes", () => {
@@ -309,15 +303,6 @@ describe("setPinnedBody (mirror of Rust set_pinned)", () => {
     roundTrip("---\ntitle: T\ntags: [a, b]\ncreated: 2026-01-01\n---\nbody");
     roundTrip("# CRLF\r\nbody\r\n");
     roundTrip("---\r\ntitle: T\r\n---\r\nbody\r\n");
-  });
-
-  it("preserves CRLF line endings", () => {
-    expect(setPinnedBody("# Note\r\nbody\r\n", true)).toBe(
-      "---\r\npinned: true\r\n---\r\n# Note\r\nbody\r\n",
-    );
-    expect(setPinnedBody("---\r\ntitle: T\r\n---\r\nbody\r\n", true)).toBe(
-      "---\r\npinned: true\r\ntitle: T\r\n---\r\nbody\r\n",
-    );
   });
 });
 

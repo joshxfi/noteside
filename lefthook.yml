@@ -27,3 +27,14 @@ pre-commit:
       # lefthook does not add node_modules/.bin to PATH.
       run: pnpm exec oxfmt {staged_files}
       stage_fixed: true
+
+# pre-push runs the two gates that fail most often and cost a full CI round trip
+# to discover (a missing `import type`, an unused local). TS 7's native tsc and
+# oxlint finish in seconds. Bypass once: `LEFTHOOK=0 git push`.
+pre-push:
+  parallel: true
+  jobs:
+    - name: typecheck
+      run: pnpm typecheck
+    - name: lint
+      run: pnpm lint

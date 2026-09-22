@@ -58,6 +58,7 @@ pub fn run() {
             commands::create_folder,
             commands::rename_folder,
             commands::delete_folder,
+            commands::folder_contents_of,
             commands::record_open,
             commands::search_files,
             commands::search_content,

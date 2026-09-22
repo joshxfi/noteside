@@ -25,8 +25,9 @@ pub struct NoteDoc {
     pub body: String,
 }
 
-/// A fuzzy file/title match. `positions` index into `path`; `title_positions`
-/// index into `title`.
+/// A fuzzy file/title match. `positions` / `title_positions` index into
+/// `path` / `title` in **UTF-16 code units** (the unit JS slices strings by —
+/// converted at the producer, see the offset-encoding block in `search.rs`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileHit {
@@ -40,7 +41,8 @@ pub struct FileHit {
     pub title_positions: Vec<u32>,
 }
 
-/// A single line-level content match. `ranges` are byte offsets into `line`.
+/// A single line-level content match. `ranges` are `[start, end)` **UTF-16
+/// code unit** offsets into `line` (not bytes — see `search.rs`).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContentHit {
@@ -50,4 +52,27 @@ pub struct ContentHit {
     pub line_number: u32,
     pub line: String,
     pub ranges: Vec<[u32; 2]>,
+}
+
+/// A notebook opened, but one of its supporting capabilities did not come up.
+/// Emitted as `notebook:degraded`; the frontend toasts it — an `eprintln!` is
+/// invisible in a bundled app, and a silently dead watcher means external
+/// edits get overwritten by the next autosave.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Degradation {
+    /// "watcher" | "asset-scope"
+    pub kind: String,
+    pub message: String,
+}
+
+/// What deleting a folder would remove — shown in the confirm dialog so the
+/// number the user approves is the number that disappears (`remove_dir_all`
+/// takes attachments and dotfiles too, not just indexed notes).
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderContents {
+    pub notes: u32,
+    pub other_files: u32,
+    pub dirs: u32,
 }

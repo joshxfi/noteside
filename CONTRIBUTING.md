@@ -37,6 +37,12 @@ pnpm tauri build
 
 ## Before a PR
 
+First time only — `pnpm e2e` needs the browser binaries:
+
+```bash
+pnpm --filter @noteside/desktop exec playwright install chromium webkit
+```
+
 Run the same gates CI runs:
 
 ```bash
@@ -52,7 +58,22 @@ pnpm test:rust
 pnpm e2e
 ```
 
+The full sweep takes a few minutes. To run one thing while you work:
+
+```bash
+pnpm --filter @noteside/desktop exec vitest run src/settings.test.ts          # one unit file
+pnpm --filter @noteside/desktop test:watch                                   # unit watch mode
+pnpm --filter @noteside/desktop exec playwright test e2e/vim.spec.ts --project=chromium
+pnpm --filter @noteside/desktop e2e:ui                                       # Playwright UI
+```
+
 - The codebase is kept `oxfmt`-formatted — run `pnpm format`.
+- `pre-commit` formats staged files; `pre-push` runs typecheck + lint, so the two
+  gates that cost a full CI round trip to discover fail in seconds instead. Skip
+  once with `LEFTHOOK=0 git push`.
+- If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, a dependency
+  was published less than a day ago — wait for it to age or allowlist that one package
+  (see [AGENTS.md](AGENTS.md) §Toolchain). Never lower the gate globally.
 - TypeScript is strict (`verbatimModuleSyntax` — use `import type`).
 - The desktop app intentionally does **not** use `<React.StrictMode>` (its dev
   double-invoke would double-create the Tiptap editor, which is built in an effect).

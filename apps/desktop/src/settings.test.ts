@@ -34,12 +34,15 @@ describe("config serialize/parse round-trip", () => {
       chords: { find: "Ctrl-j", grep: "" },
       extraLines: [],
     };
-    // livePreview/relativeNumbers are accepted-but-inert (block editor): the
-    // serializer no longer emits them, so a round-trip lands on the defaults.
+    // livePreview/relativeNumbers/cursor/cursorBlink are accepted-but-inert
+    // (block editor): the serializer no longer emits them, so a round-trip
+    // lands on the defaults.
     expect(parseConfig(serializeConfig(cfg), CONFIG_DEFAULTS)).toEqual({
       ...cfg,
       livePreview: CONFIG_DEFAULTS.livePreview,
       relativeNumbers: CONFIG_DEFAULTS.relativeNumbers,
+      cursor: CONFIG_DEFAULTS.cursor,
+      cursorBlink: CONFIG_DEFAULTS.cursorBlink,
     });
   });
 
@@ -184,6 +187,13 @@ describe("config serialize/parse round-trip", () => {
       expect(parseConfig("set vim = off", CONFIG_DEFAULTS).vimMode).toBe(false);
       expect(parseConfig("set cursor-blink = false", CONFIG_DEFAULTS).cursorBlink).toBe(false);
     });
+
+    it("accepts the inert cursor keys without emitting them or flagging them", () => {
+      const parsed = parseConfig("set cursor = bar\nset cursor-blink = off", CONFIG_DEFAULTS);
+      expect(parsed.cursor).toBe("bar");
+      expect(unrecognizedDirectives(parsed)).toEqual([]);
+      expect(serializeConfig(parsed)).not.toMatch(/cursor/);
+    });
   });
 
   // ISSUE #23/#24: someone reaching for indent width types vim's spelling.
@@ -209,7 +219,7 @@ describe("config serialize/parse round-trip", () => {
       );
     });
 
-    it("defaults to CodeMirror's own indent unit, so existing users see no change", () => {
+    it("defaults to the long-standing indent step, so existing users see no change", () => {
       expect(CONFIG_DEFAULTS.tabWidth).toBe(2);
     });
   });

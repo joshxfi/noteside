@@ -25,6 +25,21 @@ export interface NotebookRef {
   lastOpened: number; // unix ms; 0 when unknown (e.g. migrated from lastNotebook)
 }
 
+/** A notebook opened, but a supporting capability did not come up (see
+ *  Backend.watchDegraded). `kind` stays open-ended so a newer backend can
+ *  report a reason this build doesn't know about. */
+export interface Degradation {
+  kind: "watcher" | "asset-scope" | string;
+  message: string;
+}
+
+/** What a recursive delete of a folder would remove (see Backend.folderContents). */
+export interface FolderContents {
+  notes: number;
+  otherFiles: number;
+  dirs: number;
+}
+
 export interface FileHit {
   id: string;
   path: string;
@@ -32,8 +47,8 @@ export interface FileHit {
   tags: string[];
   pinned: boolean;
   score: number;
-  positions: number[]; // indices into `path`
-  titlePositions: number[]; // indices into `title`
+  positions: number[]; // UTF-16 code-unit indices into `path`
+  titlePositions: number[]; // UTF-16 code-unit indices into `title`
 }
 
 export interface ContentHit {
@@ -42,7 +57,7 @@ export interface ContentHit {
   title: string;
   lineNumber: number;
   line: string;
-  ranges: [number, number][];
+  ranges: [number, number][]; // [start, end) UTF-16 code-unit offsets into `line`
 }
 
 export interface Backend {
@@ -84,7 +99,11 @@ export interface Backend {
   /** Rename a folder's LAST segment ("work/projects" + "archive" →
    *  "work/archive"); the subtree's note ids all change. Returns the new dir. */
   renameFolder(dir: string, name: string): Promise<string>;
-  /** Delete a folder RECURSIVELY (callers confirm with the note count first). */
+  /** Dry run for deleteFolder: what a recursive delete of `dir` would remove
+   *  (notes, other files incl. hidden, subfolders). The confirm dialog is
+   *  built from this so the approved count is the destroyed count. */
+  folderContents(dir: string): Promise<FolderContents>;
+  /** Delete a folder RECURSIVELY (callers confirm with folderContents first). */
   deleteFolder(dir: string): Promise<void>;
   /** Copy a note to a "<title> copy" sibling (same directory, retitled so the two
    *  don't share a title); returns the new note's meta. */
@@ -110,4 +129,7 @@ export interface Backend {
   setLastNotebook(path: string): Promise<void>;
   /** Subscribe to external notebook changes (watcher); resolves to an unsubscribe fn. */
   watchNotebook(onChange: () => void): Promise<() => void>;
+  /** Subscribe to "opened, but degraded" notices (watcher failed to start, asset
+   *  scope not granted); resolves to an unsubscribe fn. The mock never fires it. */
+  watchDegraded(onDegraded: (d: Degradation) => void): Promise<() => void>;
 }

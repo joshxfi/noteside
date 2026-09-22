@@ -169,7 +169,7 @@ export function SettingsPanel({
     setCfg({ [key]: next.id ?? next.value } as Partial<Config>);
   };
 
-  // Order matches the rendered rows below (idx 0..12) so keyboard nav lines up.
+  // Order matches the rendered rows below (idx 0..10) so keyboard nav lines up.
   const rows: { cycle: (d: number) => void }[] = [
     { cycle: () => onPickTheme() }, // idx 0 — Theme: opens the live-preview picker
     { cycle: (d) => cycleList(EDITOR_FONTS, cfg.editorFont, "editorFont", d) },
@@ -195,16 +195,11 @@ export function SettingsPanel({
           tabWidth: Math.max(TAB_WIDTH_MIN, Math.min(TAB_WIDTH_MAX, cfg.tabWidth + d)),
         }),
     },
-    {
-      cycle: (d) =>
-        cycleList([{ id: "block" }, { id: "bar" }, { id: "underline" }], cfg.cursor, "cursor", d),
-    },
-    { cycle: () => setCfg({ cursorBlink: !cfg.cursorBlink }) },
     { cycle: () => setCfg({ vimMode: !cfg.vimMode }) },
     { cycle: () => setCfg({ escMap: cfg.escMap ? "" : customEsc || "jj" }) },
-    { cycle: () => onShortcuts() }, // idx 10 — opens the keymap editor (cheatsheet)
-    { cycle: () => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck }) }, // idx 11 — Automatic updates
-    { cycle: onAboutAction }, // idx 12 — About: check for updates / open releases
+    { cycle: () => onShortcuts() }, // idx 8 — opens the keymap editor (cheatsheet)
+    { cycle: () => setCfg({ autoUpdateCheck: !cfg.autoUpdateCheck }) }, // idx 9 — Automatic updates
+    { cycle: onAboutAction }, // idx 10 — About: check for updates / open releases
   ];
 
   const currentTheme = themeById(cfg.theme);
@@ -422,34 +417,9 @@ export function SettingsPanel({
             </div>
           </Row>
 
-          <div className="set-sec">Cursor</div>
-          <Row idx={6} focus={focus} setFocus={setFocus} label="Style">
-            {(
-              [
-                ["block", "Block"],
-                ["bar", "Bar"],
-                ["underline", "Underline"],
-              ] as const
-            ).map(([v, l]) => (
-              <Pill key={v} active={cfg.cursor === v} onClick={() => setCfg({ cursor: v })}>
-                {l}
-              </Pill>
-            ))}
-          </Row>
-          <Row idx={7} focus={focus} setFocus={setFocus} label="Blink">
-            <button
-              type="button"
-              tabIndex={-1}
-              className={"set-switch" + (cfg.cursorBlink ? " is-on" : "")}
-              onClick={() => setCfg({ cursorBlink: !cfg.cursorBlink })}
-            >
-              <span className="set-knob" />
-            </button>
-          </Row>
-
           <div className="set-sec">Keys</div>
           <Row
-            idx={8}
+            idx={6}
             focus={focus}
             setFocus={setFocus}
             label="Vim mode"
@@ -465,7 +435,7 @@ export function SettingsPanel({
             </button>
           </Row>
           <Row
-            idx={9}
+            idx={7}
             focus={focus}
             setFocus={setFocus}
             label="Leave insert with"
@@ -500,7 +470,7 @@ export function SettingsPanel({
             go, just like a real <code>jj</code> mapping.
           </p>
           <Row
-            idx={10}
+            idx={8}
             focus={focus}
             setFocus={setFocus}
             label="Keyboard shortcuts"
@@ -513,7 +483,7 @@ export function SettingsPanel({
 
           <div className="set-sec">About</div>
           <Row
-            idx={11}
+            idx={9}
             focus={focus}
             setFocus={setFocus}
             label="Automatic updates"
@@ -528,7 +498,7 @@ export function SettingsPanel({
               <span className="set-knob" />
             </button>
           </Row>
-          <Row idx={12} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
+          <Row idx={10} focus={focus} setFocus={setFocus} label="Noteside" hint={`v${version}`}>
             {aboutControl()}
           </Row>
         </div>

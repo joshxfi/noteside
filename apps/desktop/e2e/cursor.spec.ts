@@ -1,14 +1,10 @@
 import { boot, expect, test } from "./fixtures";
 
-// Caret rendering: non-vim uses the native caret (data-cursor still carries
-// the configured shape for CSS); vim normal/visual draw the one-char block
-// decoration (.av-vim-caret) and hide it again in insert mode.
+// Caret rendering: non-vim (and vim insert) use the browser's native caret —
+// there is no configured shape, the `cursor`/`cursor-blink` keys are inert.
+// Vim normal/visual draw the one-char block decoration (.av-vim-caret) and
+// hide it again in insert mode.
 test.describe("caret", () => {
-  test("the configured cursor shape rides data-cursor", async ({ page }) => {
-    await boot(page, { vimMode: false, cursor: "bar" });
-    await expect(page.locator(".av-editor")).toHaveAttribute("data-cursor", "bar");
-  });
-
   test("vim normal mode draws the block caret; insert hides it", async ({ page }) => {
     await boot(page, { vimMode: true });
     await page.locator(".av-cm .tiptap").click();

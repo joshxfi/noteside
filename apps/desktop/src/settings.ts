@@ -18,7 +18,7 @@ export interface Config {
   editorFont: string;
   fontSize: number;
   lineHeight: number;
-  /** Indent width in spaces — what Tab inserts and what CodeMirror indents by. */
+  /** Indent width in spaces `Tab` inserts, and the code-block indent step. */
   tabWidth: number;
   /** Interface-size multiplier — scales the UI chrome (not the editor). */
   uiScale: number;
@@ -80,7 +80,7 @@ export const CONFIG_DEFAULTS: Config = {
   editorFont: "newsreader",
   fontSize: 19,
   lineHeight: 1.75,
-  tabWidth: 2, // CodeMirror's own default indentUnit — unchanged for existing users
+  tabWidth: 2, // the long-standing indent step — unchanged for existing users
   uiScale: 1,
   sidebarWidth: 250,
   relativeNumbers: false,
@@ -149,13 +149,11 @@ export function serializeConfig(c: Config): string {
   L.push(`set tab-width    = ${c.tabWidth}`);
   L.push(`set ui-scale     = ${Math.round(c.uiScale * 100)}%`);
   L.push("");
-  L.push(C.cursor);
-  L.push(`set cursor       = ${c.cursor}`);
-  L.push(`set cursor-blink = ${c.cursorBlink ? "on" : "off"}`);
-  L.push("");
-  // live-preview and relative-numbers are ACCEPTED-BUT-INERT since the block
-  // editor (no source preview, no gutter): parseConfig still understands every
-  // spelling so old configs never error, but the keys are no longer emitted.
+  // live-preview, relative-numbers, cursor and cursor-blink are ACCEPTED-BUT-
+  // INERT since the block editor (no source preview, no gutter, native caret /
+  // vim block decoration): parseConfig still understands every spelling so old
+  // configs never error, but the keys are no longer emitted. C.cursor stays in
+  // the constants so an old buffer's header is recognized as ours, not kept.
   L.push(C.updates);
   L.push(`set auto-update  = ${c.autoUpdateCheck ? "on" : "off"}`);
   L.push("");

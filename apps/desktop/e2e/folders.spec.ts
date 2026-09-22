@@ -421,6 +421,57 @@ test.describe("folder groups", () => {
       );
     });
 
+    // The bug: dragleave forgot the drag SOURCE, so the ordinary gesture "drag a
+    // row, swing the pointer out over the editor, come back" left every later
+    // dragover bailing before preventDefault() — no ring, and the browser never
+    // fired drop. Leaving must hide the affordances and nothing more.
+    test("leaving the list and coming back keeps the drag alive", async ({ page }) => {
+      await boot(page);
+      const result = await page.evaluate(() => {
+        const nav = document.querySelector(".av-list") as HTMLElement;
+        const src = [...document.querySelectorAll('.av-item[data-dir=""]')].at(-1) as HTMLElement;
+        const target = document.querySelector('.av-grouphead[data-dir="archive"]') as HTMLElement;
+        const dataTransfer = new DataTransfer();
+        src.dispatchEvent(new DragEvent("dragstart", { bubbles: true, dataTransfer }));
+        target.dispatchEvent(
+          new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }),
+        );
+        const ringedBefore = target.classList.contains("is-drop");
+        // Pointer swings out over the editor: dragleave with a point outside the
+        // nav box (relatedTarget is null on a constructed DragEvent, which routes
+        // the handler through the bounding-box fallback — the WebKit path).
+        const r = nav.getBoundingClientRect();
+        nav.dispatchEvent(
+          new DragEvent("dragleave", {
+            bubbles: true,
+            dataTransfer,
+            clientX: r.right + 200,
+            clientY: r.top + 10,
+          }),
+        );
+        const hiddenWhileOut =
+          !target.classList.contains("is-drop") && !nav.classList.contains("is-dragging");
+        // ...and comes back.
+        const over = new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer });
+        target.dispatchEvent(over);
+        const ringedAfter = target.classList.contains("is-drop");
+        const prevented = over.defaultPrevented;
+        target.dispatchEvent(
+          new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }),
+        );
+        src.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer }));
+        return { ringedBefore, hiddenWhileOut, ringedAfter, prevented };
+      });
+      expect(result).toEqual({
+        ringedBefore: true,
+        hiddenWhileOut: true,
+        ringedAfter: true,
+        prevented: true,
+      });
+      await expect(page.locator(".cfm-panel")).toContainText("to archive?");
+      await page.keyboard.press("Escape");
+    });
+
     test("onto its own folder is a no-op (no ring, no dialog)", async ({ page }) => {
       await boot(page);
       // The root drop zone WAS offered, since the note came from a folder.

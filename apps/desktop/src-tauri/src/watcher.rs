@@ -230,7 +230,12 @@ fn targeted_updates(
         {
             return None;
         }
-        if has_hidden_component(rel) || has_note_named_dir_component(rel) {
+        if has_hidden_component(rel)
+            || has_note_named_dir_component(rel)
+            || rel.components().any(
+                |c| matches!(c, Component::Normal(n) if notebook::has_unrepresentable_name(Path::new(n))),
+            )
+        {
             continue; // the scanner never indexes these; nothing to update
         }
         let key = notebook::rel_path(root, abs);
@@ -249,6 +254,9 @@ fn targeted_updates(
                 }
                 match notebook::read_record(root, abs) {
                     Ok(rec) => out.push((key, Some(rec))),
+                    // Includes the over-MAX_NOTE_BYTES refusal: a file that grew
+                    // past the cap routes to the full rescan, whose walk then
+                    // skips it — same outcome as a fresh open of the notebook.
                     Err(_) => return None,
                 }
             }
@@ -287,8 +295,8 @@ fn echo_matches_disk(root: &Path, rel: &str, indexed_mtime: Option<i64>) -> bool
 /// the reported paths when the batch is unambiguous, rebuilding it whole otherwise —
 /// and notify the frontend via the `notebook:changed` event. Our own writes are
 /// skipped only when every relevant path is an own-write echo.
-pub fn start_watcher(
-    app: AppHandle,
+pub fn start_watcher<R: tauri::Runtime>(
+    app: AppHandle<R>,
     notebook: Arc<Mutex<NotebookState>>,
     root: PathBuf,
     generation: u64,

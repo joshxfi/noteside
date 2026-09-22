@@ -3,7 +3,16 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import type { Config } from "../settings";
-import type { Backend, ContentHit, FileHit, NoteDoc, NoteMeta, NotebookRef } from "./types";
+import type {
+  Backend,
+  ContentHit,
+  Degradation,
+  FileHit,
+  FolderContents,
+  NoteDoc,
+  NoteMeta,
+  NotebookRef,
+} from "./types";
 
 let storeP: Promise<Store> | null = null;
 const store = () => (storeP ??= load("noteside.json", { autoSave: true, defaults: {} }));
@@ -24,6 +33,18 @@ async function readNotebooks(s: Store): Promise<NotebookRef[]> {
   return last ? [{ path: last, name: notebookName(last), lastOpened: 0 }] : [];
 }
 
+// The recents list is a read-modify-write on ONE store key. Two overlapping
+// notebook switches (or a failed-open cleanup racing a remember) interleaved
+// their read→write cycles and dropped an entry — every write goes through this
+// tail so each one reads what the previous one wrote (app.tsx's configWriteTail
+// is the same pattern for the config key).
+let notebooksTail: Promise<void> = Promise.resolve();
+function queueNotebooksWrite(run: () => Promise<void>): Promise<void> {
+  const next = notebooksTail.then(run, run);
+  notebooksTail = next.catch(() => {});
+  return next;
+}
+
 /** Real backend: talks to the Rust notebook over Tauri IPC; settings via the store plugin. */
 export const tauriBackend: Backend = {
   live: true,
@@ -37,23 +58,25 @@ export const tauriBackend: Backend = {
   async listNotebooks() {
     return await readNotebooks(await store());
   },
-  async rememberNotebook(path) {
-    const s = await store();
-    const list = await readNotebooks(s);
-    const next = [
-      { path, name: notebookName(path), lastOpened: Date.now() },
-      ...list.filter((n) => n.path !== path),
-    ].slice(0, RECENTS_CAP);
-    await s.set("notebooks", next);
-  },
-  async removeRecentNotebook(path) {
-    const s = await store();
-    const list = await readNotebooks(s);
-    await s.set(
-      "notebooks",
-      list.filter((n) => n.path !== path),
-    );
-  },
+  rememberNotebook: (path) =>
+    queueNotebooksWrite(async () => {
+      const s = await store();
+      const list = await readNotebooks(s);
+      const next = [
+        { path, name: notebookName(path), lastOpened: Date.now() },
+        ...list.filter((n) => n.path !== path),
+      ].slice(0, RECENTS_CAP);
+      await s.set("notebooks", next);
+    }),
+  removeRecentNotebook: (path) =>
+    queueNotebooksWrite(async () => {
+      const s = await store();
+      const list = await readNotebooks(s);
+      await s.set(
+        "notebooks",
+        list.filter((n) => n.path !== path),
+      );
+    }),
   listNotes: () => invoke<NoteMeta[]>("list_notes"),
   readNote: (path) => invoke<NoteDoc>("read_note", { path }),
   previewNote: (path) => invoke<NoteDoc>("preview_note", { path }),
@@ -65,6 +88,7 @@ export const tauriBackend: Backend = {
   moveNote: (path, dir) => invoke<NoteMeta>("move_note", { path, dir }),
   createFolder: (dir) => invoke<string>("create_folder", { dir }),
   renameFolder: (dir, name) => invoke<string>("rename_folder", { dir, name }),
+  folderContents: (dir) => invoke<FolderContents>("folder_contents_of", { dir }),
   deleteFolder: (dir) => invoke<void>("delete_folder", { dir }),
   duplicateNote: (path) => invoke<NoteMeta>("duplicate_note", { path }),
   retitleNote: (path, title) => invoke<NoteMeta>("retitle_note", { path, title }),
@@ -88,5 +112,8 @@ export const tauriBackend: Backend = {
   },
   async watchNotebook(onChange) {
     return await listen("notebook:changed", () => onChange());
+  },
+  async watchDegraded(onDegraded) {
+    return await listen<Degradation>("notebook:degraded", (e) => onDegraded(e.payload));
   },
 };

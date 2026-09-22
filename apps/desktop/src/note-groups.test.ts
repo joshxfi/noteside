@@ -3,8 +3,13 @@ import type { NoteMeta } from "./backend/types";
 import {
   allDirs,
   buildSidebarRows,
+  folderDeleteSummary,
+  insertMeta,
+  metaOrder,
   noteDir,
+  relTime,
   rewritePrefix,
+  sameMetaList,
   stepVisibleNote,
   visibleNoteIds,
 } from "./note-groups";
@@ -21,10 +26,96 @@ function meta(path: string, opts: { updated?: number; pinned?: boolean } = {}): 
   };
 }
 
-/** The backend sort (pinned desc, updated desc) the rows derivation assumes. */
+/** The backend sort (pinned desc, updated desc) the rows derivation assumes —
+ *  the same comparator App feeds every local list patch. */
 function sorted(notes: NoteMeta[]): NoteMeta[] {
-  return [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated - a.updated);
+  return [...notes].sort(metaOrder);
 }
+
+describe("metaOrder / insertMeta", () => {
+  it("floats pinned above unpinned regardless of updated", () => {
+    const stale = meta("pinned.md", { updated: 1, pinned: true });
+    const fresh = meta("loose.md", { updated: 999 });
+    expect(sorted([fresh, stale]).map((n) => n.id)).toEqual(["pinned.md", "loose.md"]);
+  });
+
+  it("orders newer updated first within the same pin state", () => {
+    const old = meta("old.md", { updated: 10 });
+    const now = meta("new.md", { updated: 20 });
+    expect(sorted([old, now]).map((n) => n.id)).toEqual(["new.md", "old.md"]);
+    const pOld = meta("p-old.md", { updated: 10, pinned: true });
+    const pNew = meta("p-new.md", { updated: 20, pinned: true });
+    expect(sorted([pOld, pNew]).map((n) => n.id)).toEqual(["p-new.md", "p-old.md"]);
+  });
+
+  it("insertMeta returns a new array, sorted, leaving the input untouched", () => {
+    const list = [meta("a.md", { updated: 20 }), meta("b.md", { updated: 5 })];
+    const out = insertMeta(list, meta("c.md", { updated: 10 }));
+    expect(out).not.toBe(list);
+    expect(list.map((n) => n.id)).toEqual(["a.md", "b.md"]); // input unmutated
+    expect(out.map((n) => n.id)).toEqual(["a.md", "c.md", "b.md"]);
+  });
+
+  it("insertMeta re-slots a note whose updated bumped since the last sort", () => {
+    // An autosave patches a meta in place without re-sorting, so the list handed
+    // in can be out of order — the whole-list re-sort is what fixes that.
+    const list = [meta("a.md", { updated: 20 }), meta("stale.md", { updated: 99 })];
+    const out = insertMeta(list, meta("new.md", { updated: 30 }));
+    expect(out.map((n) => n.id)).toEqual(["stale.md", "new.md", "a.md"]);
+  });
+});
+
+describe("sameMetaList", () => {
+  const base = () => [meta("a.md", { updated: 5 }), meta("b.md", { updated: 1 })];
+
+  it("is true for equal lists and false for a different length", () => {
+    expect(sameMetaList(base(), base())).toBe(true);
+    expect(sameMetaList(base(), base().slice(0, 1))).toBe(false);
+  });
+
+  it("is false when a rendered field changed", () => {
+    const changed = (mutate: (m: NoteMeta) => void) => {
+      const b = base();
+      mutate(b[0]);
+      return sameMetaList(base(), b);
+    };
+    expect(changed((m) => (m.id = "z.md"))).toBe(false);
+    expect(changed((m) => (m.title = "other"))).toBe(false);
+    expect(changed((m) => (m.updated = 6))).toBe(false);
+    expect(changed((m) => (m.pinned = true))).toBe(false);
+    expect(changed((m) => (m.tags = ["x"]))).toBe(false);
+  });
+
+  it("ignores a change past tags[0] — the sidebar renders only the first tag", () => {
+    const a = base();
+    const b = base();
+    a[0].tags = ["same", "one"];
+    b[0].tags = ["same", "two"];
+    expect(sameMetaList(a, b)).toBe(true);
+  });
+});
+
+describe("relTime", () => {
+  const now = 1_000_000_000_000;
+  const ago = (ms: number) => relTime(now - ms, now);
+  const SEC = 1000;
+  const MIN = 60 * SEC;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+
+  it("reports each unit at its rounded boundary", () => {
+    expect(ago(10 * SEC)).toBe("just now");
+    expect(ago(44 * SEC)).toBe("just now");
+    expect(ago(45 * SEC)).toBe("1m ago"); // rounds up to a minute
+    expect(ago(90 * SEC)).toBe("2m ago");
+    expect(ago(59.4 * MIN)).toBe("59m ago");
+    expect(ago(2 * HOUR)).toBe("2h ago");
+    expect(ago(3 * DAY)).toBe("3d ago");
+    expect(ago(14 * DAY)).toBe("2w ago");
+    expect(ago(60 * DAY)).toBe("2mo ago");
+    expect(ago(400 * DAY)).toBe("1y ago");
+  });
+});
 
 describe("noteDir / allDirs", () => {
   it("derives dirs, including intermediates of nested note paths", () => {
@@ -153,5 +244,18 @@ describe("rewritePrefix", () => {
     expect(rewritePrefix("work/sub/a.md", "work", "archive")).toBe("archive/sub/a.md");
     expect(rewritePrefix("worked/a.md", "work", "archive")).toBe("worked/a.md"); // prefix trap
     expect(rewritePrefix("other.md", "work", "archive")).toBe("other.md");
+  });
+});
+
+describe("folderDeleteSummary", () => {
+  it("names only the non-zero parts", () => {
+    expect(folderDeleteSummary({ notes: 3, otherFiles: 0, dirs: 0 })).toBe("3 notes");
+    expect(folderDeleteSummary({ notes: 1, otherFiles: 12, dirs: 2 })).toBe(
+      "1 note, 12 other files and 2 subfolders",
+    );
+  });
+
+  it("is empty for an empty folder, so the dialog can say so", () => {
+    expect(folderDeleteSummary({ notes: 0, otherFiles: 0, dirs: 0 })).toBe("");
   });
 });
