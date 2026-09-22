@@ -14,7 +14,7 @@
     "@react-router/node": "^8.3.1",
     "fumadocs-core": "16.15.4",
     "fumadocs-mdx": "15.4.0",
-    "fumadocs-ui": "16.15.4",
+    "fumadocs-ui": "16.15.11",
     "isbot": "^5.2.2",
     "lucide-react": "^1.39.0",
     "react": "^19.2.8",
