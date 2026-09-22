@@ -34,7 +34,7 @@ jobs:
       # run on this branch already proved. The sha key always misses; the
       # restore-keys prefix is what actually restores (and the run then saves).
       - name: Restore Turbo cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -81,7 +81,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # Cache the browser binaries; the lockfile hash busts it on a Playwright bump.
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
