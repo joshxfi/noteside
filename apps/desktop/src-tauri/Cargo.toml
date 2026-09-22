@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dev-dependencies]
-criterion = "0.7"
+criterion = "0.8"
 # `tauri::test::mock_app` — lets the commands tests build a real AppState inside
 # a managed app so they can take `State<'_, AppState>`. Dev-only: the release
 # binary never gets the `test` feature.
