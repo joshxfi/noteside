@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0 # semantic-release needs full history + tags
           persist-credentials: true # so @semantic-release/git can push
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24 # runner node for the bump script (exec prepareCmd)
 
@@ -93,7 +93,7 @@ jobs:
       # pnpm/action-setup reads the pnpm version from packageManager in package.json
       - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
