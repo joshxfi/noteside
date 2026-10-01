@@ -14,7 +14,7 @@ import { Mathematics } from "@tiptap/extension-mathematics";
 import { Chords, type ChordsOptions } from "./chords";
 import { HtmlBlock } from "./html-passthrough";
 import { tableExtensions } from "./table";
-import { boundOrderedList, boundTaskList } from "./tokenizer-bounds";
+import { boundOrderedList, boundTaskList, orderedListFallback } from "./tokenizer-bounds";
 import { Callout } from "./callout";
 import { NsImage } from "./image";
 import { NsCodeBlock } from "./code-block";
@@ -43,9 +43,11 @@ export interface ExtensionOpts {
 
 /** A fresh marked instance (the `marked` option's type is the global's). A
  *  MarkdownManager built directly — tests, benches — must pass one too, or it
- *  shares the global parser with every other manager in the process. */
+ *  shares the global parser with every other manager in the process. It also
+ *  carries the blockquote-continuation list fix (tokenizer-bounds.ts). */
 export function privateMarked(): typeof marked {
-  return new Marked() as unknown as typeof marked;
+  const instance = new Marked(orderedListFallback(BoundOrderedList.config.markdownTokenizer!));
+  return instance as unknown as typeof marked;
 }
 
 // The stock list tokenizers re-split the whole remaining document at every

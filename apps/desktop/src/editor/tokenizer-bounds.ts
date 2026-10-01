@@ -19,6 +19,7 @@
 // scanners trips the fuzz rather than silently diverging.
 import type { MarkdownTokenizer } from "@tiptap/core";
 import { ORDERED_LIST_MARKER_PATTERN } from "@tiptap/extension-list";
+import { Tokenizer, type MarkedExtension, type Tokens } from "marked";
 
 // Mirrors of the stock item patterns (extension-list's ORDERED_LIST_ITEM_REGEX
 // is built from the exported marker pattern; the task pattern is inline there).
@@ -124,6 +125,33 @@ export function boundTable(stock: MarkdownTokenizer): MarkdownTokenizer {
       const b = src.indexOf("\n\n");
       const cut = b < 0 ? src : src.slice(0, lineEnd(src, b + 2));
       return stock.tokenize(cut, tokens, lexer);
+    },
+  };
+}
+
+/** marked's blockquote tokenizer re-parses a trailing list itself when more
+ *  `>` lines follow a lazy continuation — `this.list(raw + rest)!.raw` — with
+ *  marked's NATIVE list rule, which knows only numeric markers. Tiptap's
+ *  ordered list also claims letter and roman markers (`a.`, `iv.`), so a note
+ *  like `> [!NOTE]\na. item\n> more\na. item` made that call return undefined
+ *  and the whole parse threw (the note could not open). This override hands
+ *  such a list to the Tiptap tokenizer that produced it. Anywhere else the
+ *  native rule wins or Tiptap's extension already made the same call at the
+ *  same position, so other output is unchanged (`tokenizer-bounds.test.ts`). */
+export function orderedListFallback(ordered: MarkdownTokenizer): MarkedExtension {
+  return {
+    tokenizer: {
+      list(src) {
+        if (!ORDERED_ITEM.test(src.slice(0, lineEnd(src, 0)))) return false;
+        const native = Tokenizer.prototype.list.call(this, src);
+        if (native) return native;
+        const lexer = this.lexer;
+        const token = ordered.tokenize(src, [], {
+          inlineTokens: (s) => lexer.inlineTokens(s),
+          blockTokens: (s) => lexer.blockTokens(s),
+        });
+        return (token as Tokens.List | undefined) ?? false;
+      },
     },
   };
 }
