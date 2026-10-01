@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 
 use notify::RecommendedWatcher;
-use notify_debouncer_full::{Debouncer, FileIdMap};
+use notify_debouncer_full::{Debouncer, NoCache};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::error::{AppError, Result};
@@ -38,7 +38,7 @@ fn notebook_lock(state: &AppState) -> std::sync::MutexGuard<'_, NotebookState> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-type WatcherHandle = Debouncer<RecommendedWatcher, FileIdMap>;
+type WatcherHandle = Debouncer<RecommendedWatcher, NoCache>;
 
 /// Same recovery for the watcher slot: a poisoned watcher mutex would wedge
 /// every notebook open, and the worst case here is re-installing a debouncer.
