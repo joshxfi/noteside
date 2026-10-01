@@ -45,7 +45,7 @@
     "katex": "^0.18.9",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.49.0",
-    "marked": "^17.0.6",
+    "marked": "^18.0.14",
     "prosemirror-search": "^1.1.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
