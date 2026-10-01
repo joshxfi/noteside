@@ -157,6 +157,24 @@ function tabKey(getTabWidth: () => number) {
   });
 }
 
+// Tiptap's extensionManager.nodeViews/markViews are GETTERS that mint fresh
+// factory functions on every read. The view is created with one set, then
+// @tiptap/react's EditorContent calls editor.createNodeViews(), which reads the
+// getters again and setProps()es the new set — ProseMirror compares node views
+// by function identity, so every mount redrew the WHOLE document a second time
+// (~150ms on a 5,000-block note, measured). The getters' inputs (extensions,
+// schema, storage) are fixed once the editor is constructed, so reading them
+// once at beforeCreate — before the view exists — and pinning the result is
+// output-identical, minus the redraw.
+const StableViews = Extension.create({
+  name: "nsStableViews",
+  onBeforeCreate() {
+    const manager = this.editor.extensionManager;
+    Object.defineProperty(manager, "nodeViews", { value: manager.nodeViews });
+    Object.defineProperty(manager, "markViews", { value: manager.markViews });
+  },
+});
+
 /** Vim: an insert session is one undo step — typing pauses inside it don't
  *  split the group (the layer seals a group on Esc and around every
  *  normal-mode command); 30s is the safety valve for a walked-away session. */
@@ -170,6 +188,7 @@ export function buildExtensions(opts: ExtensionOpts) {
       ...(opts.vim ? { undoRedo: { newGroupDelay: VIM_UNDO_GROUP_DELAY_MS } } : {}),
     }),
     NsCodeBlock,
+    StableViews,
     ActiveBlock,
     Find,
     SlashMenu.configure({ allow: opts.allowSlashMenu ?? (() => true) }),
