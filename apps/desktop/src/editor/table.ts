@@ -12,11 +12,14 @@ import {
   renderTableToMarkdown,
 } from "@tiptap/extension-table";
 import type { MarkdownRendererHelpers } from "@tiptap/core";
+import { boundTable } from "./tokenizer-bounds";
 
 const escapeCellPipes = (s: string): string =>
   s.replace(/\\\||\|/g, (m) => (m === "|" ? "\\|" : m));
 
 const NsTable = Table.extend({
+  // Linear-time wrapper over the stock tokenizer (tokenizer-bounds.ts).
+  markdownTokenizer: boundTable(Table.config.markdownTokenizer!),
   renderMarkdown(node, h) {
     const escaped: MarkdownRendererHelpers = {
       ...h,

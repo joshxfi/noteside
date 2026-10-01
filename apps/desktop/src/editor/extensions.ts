@@ -8,11 +8,13 @@
 import { Extension } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Marked, type marked } from "marked";
+import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { Chords, type ChordsOptions } from "./chords";
 import { HtmlBlock } from "./html-passthrough";
 import { tableExtensions } from "./table";
+import { boundOrderedList, boundTaskList } from "./tokenizer-bounds";
 import { Callout } from "./callout";
 import { NsImage } from "./image";
 import { NsCodeBlock } from "./code-block";
@@ -39,6 +41,22 @@ export interface ExtensionOpts {
   vim?: VimOptions | null;
 }
 
+/** A fresh marked instance (the `marked` option's type is the global's). A
+ *  MarkdownManager built directly — tests, benches — must pass one too, or it
+ *  shares the global parser with every other manager in the process. */
+export function privateMarked(): typeof marked {
+  return new Marked() as unknown as typeof marked;
+}
+
+// The stock list tokenizers re-split the whole remaining document at every
+// block boundary (quadratic opens); see tokenizer-bounds.ts.
+const BoundOrderedList = OrderedList.extend({
+  markdownTokenizer: boundOrderedList(OrderedList.config.markdownTokenizer!),
+});
+const BoundTaskList = TaskList.extend({
+  markdownTokenizer: boundTaskList(TaskList.config.markdownTokenizer!),
+});
+
 /** The schema-bearing extension set — the exact configuration the round-trip
  *  tests exercise (round-trip.test.ts builds its MarkdownManager from THIS, so
  *  a config drift between app and test is impossible). Editor-behavior
@@ -64,13 +82,22 @@ export function markdownExtensions(opts?: {
       },
       ...(opts?.codeBlock === false ? { codeBlock: false as const } : {}),
       ...(opts?.undoRedo ? { undoRedo: opts.undoRedo } : {}),
+      // Re-added below with a linear-time tokenizer (tokenizer-bounds.ts).
+      orderedList: false,
     }),
+    BoundOrderedList,
     Markdown.configure({
+      // A private parser per editor. Left unset, every MarkdownManager uses
+      // marked's GLOBAL singleton and `use()`s its tokenizers into it — which
+      // APPENDS: each note open stacked another copy of every custom tokenizer
+      // onto the one parser, so parsing slowed with every note opened in the
+      // session. markdownExtensions() runs once per editor mount.
+      marked: privateMarked(),
       indentation: { style: "space", size: 2 },
       markedOptions: { gfm: true },
     }),
     ...tableExtensions(),
-    TaskList,
+    BoundTaskList,
     TaskItem.configure({ nested: true }),
     Mathematics.configure({ katexOptions: { throwOnError: false } }),
     NsImage.configure({ resolveSrc: opts?.resolveImageSrc ?? ((src) => src) }),
