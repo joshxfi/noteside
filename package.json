@@ -27,10 +27,10 @@
     "og:build": "bash apps/desktop/scripts/og-build.sh"
   },
   "devDependencies": {
-    "lefthook": "^2.1.12",
-    "oxfmt": "0.66.0",
-    "oxlint": "^1.81.0",
-    "turbo": "^2.10.12",
+    "lefthook": "^2.1.15",
+    "oxfmt": "0.71.0",
+    "oxlint": "^1.86.0",
+    "turbo": "^2.11.5",
     "typescript": "^7.0.2"
   },
   "engines": {

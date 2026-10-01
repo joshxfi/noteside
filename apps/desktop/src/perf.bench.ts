@@ -1,5 +1,5 @@
 // JS-side hot-path baselines (run: `pnpm --filter @noteside/desktop bench`).
-import { bench, describe } from "vitest";
+import { test } from "vitest";
 import { getSchema } from "@tiptap/core";
 import { StarterKit } from "@tiptap/starter-kit";
 import { EditorState } from "@tiptap/pm/state";
@@ -37,10 +37,10 @@ function buildMarkdownDoc(lines: number): string[] {
 // cost on a large, block-heavy note.
 for (const n of [1000, 10000]) {
   const doc = buildMarkdownDoc(n);
-  describe(`scanTopBlocks N=${n} lines`, () => {
-    bench("block segmentation", () => {
+  test(`scanTopBlocks N=${n} lines`, async ({ bench }) => {
+    await bench("block segmentation", () => {
       scanTopBlocks(doc);
-    });
+    }).run();
   });
 }
 
@@ -52,13 +52,13 @@ const manager = new MarkdownManager({ extensions: [StarterKit, Markdown] });
 for (const n of [1000, 10000]) {
   const md = buildMarkdownDoc(n).join("\n");
   const parsed = manager.parse(md);
-  describe(`markdown io N=${n} lines`, () => {
-    bench("manager.parse (open-time)", () => {
+  test(`markdown io N=${n} lines`, async ({ bench }) => {
+    await bench("manager.parse (open-time)", () => {
       manager.parse(md);
-    });
-    bench("manager.serialize (autosave-time)", () => {
+    }).run();
+    await bench("manager.serialize (autosave-time)", () => {
       manager.serialize(parsed);
-    });
+    }).run();
   });
 }
 
@@ -75,12 +75,14 @@ for (const n of [1000, 10000]) {
   // Type one character in the middle of the doc.
   const mid = Math.floor(doc.content.size / 2);
   const typed = state.tr.insertText("x", mid, mid);
-  describe(`word count N=${n} blocks`, () => {
-    bench("delta (one typed character)", () => {
-      transactionWordDelta(typed);
-    });
-    bench("full rescan (the old per-keystroke path)", () => {
-      docWordCount(typed.doc);
-    });
+  test(`word count N=${n} blocks`, async ({ bench }) => {
+    await bench.compare(
+      bench("delta (one typed character)", () => {
+        transactionWordDelta(typed);
+      }),
+      bench("full rescan (the old per-keystroke path)", () => {
+        docWordCount(typed.doc);
+      }),
+    );
   });
 }
