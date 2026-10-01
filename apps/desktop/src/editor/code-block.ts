@@ -5,13 +5,16 @@
 // Languages load LAZILY: each allowlisted highlight.js grammar is its own
 // dynamic import, so vite emits it as a separate chunk (the successor of the
 // CM-era codeLanguages contract — offline-safe, off the editor chunk). When a
-// grammar lands, every code block is nudged with a same-attrs setNodeMarkup —
-// a doc-changed transaction the lowlight plugin recomputes decorations for,
-// but one that is content-neutral: doc.eq(saved) still holds, so it can never
-// dirty the buffer, and addToHistory:false keeps undo clean.
+// grammar lands, the editor gets ONE meta-only transaction asking the
+// highlight plugin to rebuild (code-highlight.ts) — no doc change at all, so
+// it can never dirty the buffer or touch history. (It used to nudge every
+// block with a same-attrs setNodeMarkup, once per code-block NodeView waiting
+// on the grammar: N refreshes of N steps each, ~0.7s on a note with 170 code
+// blocks, measured.)
 import type { Editor } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { createLowlight } from "lowlight";
+import { codeHighlightKey, codeHighlightPlugin } from "./code-highlight";
 
 export const lowlight = createLowlight();
 
@@ -112,20 +115,39 @@ function ensureLanguage(lang: string | null | undefined, onReady: () => void): v
   });
 }
 
-/** Content-neutral nudge so the lowlight plugin recomputes decorations. */
-function refreshCodeBlocks(editor: Editor, typeName: string): void {
-  if (editor.isDestroyed) return;
-  const { state, view } = editor;
-  const tr = state.tr;
-  state.doc.descendants((node, pos) => {
-    if (node.type.name === typeName) tr.setNodeMarkup(pos, undefined, { ...node.attrs });
+// Editors with a refresh already queued: every NodeView waiting on the same
+// grammar asks, and they coalesce into one rebuild per editor.
+const refreshQueued = new WeakSet<Editor>();
+
+/** Ask the highlight plugin to rebuild this editor's code highlighting. */
+function refreshCodeBlocks(editor: Editor): void {
+  if (refreshQueued.has(editor)) return;
+  refreshQueued.add(editor);
+  queueMicrotask(() => {
+    refreshQueued.delete(editor);
+    if (editor.isDestroyed) return;
+    const tr = editor.state.tr.setMeta(codeHighlightKey, "refresh");
+    editor.view.dispatch(tr.setMeta("addToHistory", false));
   });
-  if (!tr.steps.length) return;
-  tr.setMeta("addToHistory", false);
-  view.dispatch(tr);
 }
 
 export const NsCodeBlock = CodeBlockLowlight.extend({
+  // Swap the stock lowlight plugin (a full-document rebuild on edits, two doc
+  // walks on every transaction) for the incremental one in code-highlight.ts.
+  // Each mount builds a fresh PluginKey("lowlight"), which ProseMirror names
+  // lowlight$, lowlight$1, … — so match the prefix, not the first name.
+  addProseMirrorPlugins() {
+    return [
+      ...(this.parent?.() ?? []).filter(
+        (p) => !/^lowlight\$\d*$/.test((p as unknown as { key: string }).key),
+      ),
+      codeHighlightPlugin({
+        typeName: this.name,
+        lowlight: this.options.lowlight,
+        defaultLanguage: this.options.defaultLanguage,
+      }),
+    ];
+  },
   addNodeView() {
     const typeName = this.name;
     return ({ node, editor }) => {
@@ -169,7 +191,7 @@ export const NsCodeBlock = CodeBlockLowlight.extend({
       const apply = (n: typeof node) => {
         const language = (n.attrs.language as string | null) ?? "";
         lang.textContent = language;
-        ensureLanguage(language, () => refreshCodeBlocks(editor, typeName));
+        ensureLanguage(language, () => refreshCodeBlocks(editor));
       };
       apply(node);
 
