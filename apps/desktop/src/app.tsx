@@ -721,7 +721,14 @@ function VirtualNoteList({
 
   return (
     <nav className="av-list" ref={scrollRef} aria-label="Notes" {...dnd}>
-      <div style={{ height: virt.getTotalSize(), position: "relative", width: "100%" }}>
+      {/* flexShrink 0: .av-list is a column flexbox and these rows are
+          absolutely positioned (zero content height), so a shrinkable sizer
+          collapsed to the viewport — the scroll extent then ended at the last
+          RENDERED row, and every far scrollToIndex chased it ~600px a frame
+          for a second or more. */}
+      <div
+        style={{ height: virt.getTotalSize(), position: "relative", width: "100%", flexShrink: 0 }}
+      >
         {virt.getVirtualItems().map((item) =>
           renderRow(rows[item.index], handlers, {
             index: item.index,
