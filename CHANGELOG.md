@@ -1,3 +1,20 @@
+## [1.8.2](https://github.com/joshxfi/noteside/compare/v1.8.1...v1.8.2) (2026-10-01)
+
+### Bug Fixes
+
+* **editor:** open notes whose blockquote continues into a lettered list ([804beb4](https://github.com/joshxfi/noteside/commit/804beb4548770e89965fd467a2bdf676beeffb1c))
+
+### Performance
+
+* **editor:** highlight code blocks incrementally and coalesce grammar refreshes ([ba5b1d5](https://github.com/joshxfi/noteside/commit/ba5b1d554ef732358dd07abcfcf503b5b0ca9e8a))
+* **editor:** parse long notes in linear time and stop tokenizers piling up across opens ([2bffbfb](https://github.com/joshxfi/noteside/commit/2bffbfb32d042b88baa454c80c1d113d47f63965))
+* **editor:** stop redrawing the whole note on editor mount and unmount ([169869e](https://github.com/joshxfi/noteside/commit/169869eca390fae240338a582fb8e2d9267c13b4))
+* **sidebar:** keep the virtualized list's scroll extent so far jumps land in one frame ([aa67573](https://github.com/joshxfi/noteside/commit/aa67573ec7041529705732fc5bac5f6d3854410a))
+
+### Documentation
+
+* **agents:** record the editor and sidebar performance invariants ([0eb914a](https://github.com/joshxfi/noteside/commit/0eb914a7413f1ff55315f24031ffbb794a0ac51d))
+
 ## [1.8.1](https://github.com/joshxfi/noteside/compare/v1.8.0...v1.8.1) (2026-09-22)
 
 ### Bug Fixes
