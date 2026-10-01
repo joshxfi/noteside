@@ -14,7 +14,7 @@
 //   else (chords, tabWidth) reconfigures live through refs.
 // - Typing must never re-render React beyond this component's own status bar:
 //   shouldRerenderOnTransaction is false and all node views are plain DOM.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor as TiptapEditor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -398,6 +398,20 @@ function RichEditor(props: EditorProps) {
       editorRef.current = null;
     },
   });
+  // Destroy the editor as this component unmounts, BEFORE <EditorContent>'s
+  // componentWillUnmount (React runs a deleted subtree's cleanups
+  // parent-first). That hook calls view.setProps({ nodeViews: {} }) on a live
+  // editor to detach React node views we don't use, which REDRAWS the whole
+  // document and re-syncs the selection into it: ~2s in WebKit when leaving a
+  // 5,000-block note, measured. On a destroyed editor it's skipped, and
+  // useEditor's own deferred destroy finds it already destroyed.
+  useLayoutEffect(
+    () => () => {
+      const ed = editorRef.current;
+      if (ed && !ed.isDestroyed) ed.destroy();
+    },
+    [],
+  );
   // useEditor builds the instance in its own effect (immediatelyRender: false)
   // and re-renders once it exists; mirror it for the event-time readers
   // (dispatch, vim hooks, the refocus effect below — declared after this).
