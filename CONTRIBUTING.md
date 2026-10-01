@@ -5,7 +5,7 @@ fits together.
 
 ## Prerequisites
 
-- **Node 24** and **pnpm 11** — run `corepack enable` (the repo pins both).
+- **Node 24** and **pnpm 12** — run `corepack enable` (the repo pins both).
 - **Rust** (stable) + the [Tauri 2 system dependencies](https://v2.tauri.app/start/prerequisites/),
   to run or build the desktop app.
 

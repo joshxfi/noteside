@@ -2,7 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
 
-# pnpm 11 gates dependency build scripts; esbuild (still pulled in transitively
+# pnpm gates dependency build scripts; esbuild (still pulled in transitively
 # — Vite 8 itself bundles with Rolldown/Oxc) needs its install script to set up
 # its platform binary, and lefthook's postinstall wires up the git-hooks binary
 # used by the `prepare` script (see root package.json).
@@ -12,7 +12,7 @@ allowBuilds:
 
 # Supply-chain hardening: refuse dependency versions published less than this
 # many minutes ago — mitigates compromised-then-yanked npm packages. 1440 (1 day)
-# is pnpm 11's default, kept deliberately as a baseline (not disabled). To install
+# is pnpm's default, kept deliberately as a baseline (not disabled). To install
 # a freshly published version on purpose (hotfix / same-day bump), add THAT package
 # to minimumReleaseAgeExclude below — never lower the gate globally.
 minimumReleaseAge: 1440
