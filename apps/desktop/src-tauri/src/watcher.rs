@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::event::{EventKind, ModifyKind};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{
-    new_debouncer, DebounceEventResult, DebouncedEvent, Debouncer, FileIdMap,
+    new_debouncer_opt, DebounceEventResult, DebouncedEvent, Debouncer, NoCache,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -300,9 +300,12 @@ pub fn start_watcher<R: tauri::Runtime>(
     notebook: Arc<Mutex<NotebookState>>,
     root: PathBuf,
     generation: u64,
-) -> notify::Result<Debouncer<RecommendedWatcher, FileIdMap>> {
+) -> notify::Result<Debouncer<RecommendedWatcher, NoCache>> {
     let watched_root = root.clone();
-    let mut debouncer = new_debouncer(
+    // NoCache: no file-id map. The default cache walks + stats the whole tree
+    // inside `watch()` (every notebook open) only to pair rename halves, and
+    // renames take the full-rescan path here anyway.
+    let mut debouncer = new_debouncer_opt::<_, RecommendedWatcher, _>(
         Duration::from_millis(400),
         None,
         move |result: DebounceEventResult| {
@@ -382,8 +385,10 @@ pub fn start_watcher<R: tauri::Runtime>(
                 let _ = app.emit("notebook:changed", ());
             }
         },
+        NoCache,
+        notify::Config::default(),
     )?;
-    debouncer.watcher().watch(&root, RecursiveMode::Recursive)?;
+    debouncer.watch(&root, RecursiveMode::Recursive)?;
     Ok(debouncer)
 }
 

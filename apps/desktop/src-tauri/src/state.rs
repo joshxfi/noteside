@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::RecommendedWatcher;
-use notify_debouncer_full::{Debouncer, FileIdMap};
+use notify_debouncer_full::{Debouncer, NoCache};
 
 use crate::frecency::FrecencyEntry;
 use crate::models::NoteMeta;
@@ -353,7 +353,7 @@ impl NotebookState {
 pub struct AppState {
     pub notebook: Arc<Mutex<NotebookState>>,
     /// Kept alive so the watcher thread keeps running; replaced on notebook switch.
-    pub watcher: Mutex<Option<Debouncer<RecommendedWatcher, FileIdMap>>>,
+    pub watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
 }
 
 impl Default for AppState {
