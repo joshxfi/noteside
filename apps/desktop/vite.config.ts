@@ -28,7 +28,7 @@ export default defineConfig({
         // then imports that chunk statically — the whole editor eager at first
         // paint, the exact invariant scripts/check-editor-lazy.mjs pins. (The
         // old function-form manualChunks silently did just that under Rolldown.)
-        advancedChunks: {
+        codeSplitting: {
           groups: [
             // Vite's preload helper is imported by every chunk that has a
             // dynamic import(); left alone it can be hoisted INTO the lazy
