@@ -13,7 +13,7 @@
   "dependencies": {
     "@react-router/node": "^8.4.0",
     "fumadocs-core": "16.15.17",
-    "fumadocs-mdx": "15.4.5",
+    "fumadocs-mdx": "15.4.10",
     "fumadocs-ui": "16.15.17",
     "isbot": "^5.2.2",
     "lucide-react": "^1.49.0",
